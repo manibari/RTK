@@ -1,9 +1,11 @@
 import type { IGraphRepository } from "../types/repository.js";
-import type { CharacterNode, RelationshipEdge, CharacterGraph } from "../types/graph.js";
+import type { CharacterNode, RelationshipEdge, CharacterGraph, PlaceNode, Movement, MapData } from "../types/graph.js";
 
 export class InMemoryGraphRepository implements IGraphRepository {
   private characters = new Map<string, CharacterNode>();
   private relationships = new Map<string, RelationshipEdge>(); // key: "sourceId->targetId"
+  private places = new Map<string, PlaceNode>();
+  private movements: Movement[] = [];
 
   private edgeKey(sourceId: string, targetId: string): string {
     return `${sourceId}->${targetId}`;
@@ -16,6 +18,8 @@ export class InMemoryGraphRepository implements IGraphRepository {
   async disconnect(): Promise<void> {
     this.characters.clear();
     this.relationships.clear();
+    this.places.clear();
+    this.movements = [];
   }
 
   async createCharacter(character: CharacterNode): Promise<void> {
@@ -42,6 +46,54 @@ export class InMemoryGraphRepository implements IGraphRepository {
     return [...this.relationships.values()].filter(
       (r) => r.sourceId === characterId || r.targetId === characterId,
     );
+  }
+
+  // Place operations
+  async createPlace(place: PlaceNode): Promise<void> {
+    this.places.set(place.id, { ...place });
+  }
+
+  async getPlace(id: string): Promise<PlaceNode | null> {
+    return this.places.get(id) ?? null;
+  }
+
+  async getAllPlaces(): Promise<PlaceNode[]> {
+    return [...this.places.values()];
+  }
+
+  async updatePlace(id: string, updates: Partial<Omit<PlaceNode, "id">>): Promise<void> {
+    const place = this.places.get(id);
+    if (place) {
+      this.places.set(id, { ...place, ...updates });
+    }
+  }
+
+  // Movement operations
+  async addMovement(movement: Movement): Promise<void> {
+    this.movements.push({ ...movement });
+  }
+
+  async getActiveMovements(tick: number): Promise<Movement[]> {
+    return this.movements.filter(
+      (m) => m.departureTick <= tick && m.arrivalTick >= tick,
+    );
+  }
+
+  // Map queries
+  async getMapData(tick: number): Promise<MapData> {
+    const allCities = await this.getAllPlaces();
+    const allChars = await this.getAllCharacters();
+    const activeMovements = await this.getActiveMovements(tick);
+
+    const charsWithCity = allChars
+      .filter((c) => c.cityId)
+      .map((c) => ({ ...c, cityId: c.cityId! }));
+
+    return {
+      cities: allCities,
+      characters: charsWithCity,
+      movements: activeMovements,
+    };
   }
 
   async getCharacterGraph(centerId: string, depth: number): Promise<CharacterGraph> {

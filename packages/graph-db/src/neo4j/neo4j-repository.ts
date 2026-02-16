@@ -1,6 +1,6 @@
 import type { Driver } from "neo4j-driver";
 import type { IGraphRepository } from "../types/repository.js";
-import type { CharacterNode, RelationshipEdge, CharacterGraph } from "../types/graph.js";
+import type { CharacterNode, RelationshipEdge, CharacterGraph, PlaceNode, Movement, MapData } from "../types/graph.js";
 import { createDriver, type Neo4jConfig } from "./connection.js";
 
 export class Neo4jGraphRepository implements IGraphRepository {
@@ -35,8 +35,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
     try {
       await session.run(
         `MERGE (c:Character {id: $id})
-         SET c.name = $name, c.traits = $traits`,
-        { id: character.id, name: character.name, traits: character.traits },
+         SET c.name = $name, c.traits = $traits, c.cityId = $cityId`,
+        { id: character.id, name: character.name, traits: character.traits, cityId: character.cityId ?? null },
       );
     } finally {
       await session.close();
@@ -54,7 +54,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
       if (!record) return null;
 
       const node = record.get("c").properties;
-      return { id: node.id, name: node.name, traits: node.traits };
+      return { id: node.id, name: node.name, traits: node.traits, cityId: node.cityId ?? undefined };
     } finally {
       await session.close();
     }
@@ -66,7 +66,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const result = await session.run(`MATCH (c:Character) RETURN c`);
       return result.records.map((r) => {
         const node = r.get("c").properties;
-        return { id: node.id, name: node.name, traits: node.traits };
+        return { id: node.id, name: node.name, traits: node.traits, cityId: node.cityId ?? undefined };
       });
     } finally {
       await session.close();
@@ -132,6 +132,84 @@ export class Neo4jGraphRepository implements IGraphRepository {
     } finally {
       await session.close();
     }
+  }
+
+  // Place operations — Neo4j Cypher implementations
+  async createPlace(place: PlaceNode): Promise<void> {
+    const session = this.getDriver().session();
+    try {
+      await session.run(
+        `MERGE (p:Place {id: $id})
+         SET p.name = $name, p.lat = $lat, p.lng = $lng,
+             p.status = $status, p.tier = $tier, p.controllerId = $controllerId`,
+        { id: place.id, name: place.name, lat: place.lat, lng: place.lng,
+          status: place.status, tier: place.tier, controllerId: place.controllerId ?? null },
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getPlace(id: string): Promise<PlaceNode | null> {
+    const session = this.getDriver().session();
+    try {
+      const result = await session.run(`MATCH (p:Place {id: $id}) RETURN p`, { id });
+      const record = result.records[0];
+      if (!record) return null;
+      const props = record.get("p").properties;
+      return { id: props.id, name: props.name, lat: props.lat, lng: props.lng,
+        status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined };
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getAllPlaces(): Promise<PlaceNode[]> {
+    const session = this.getDriver().session();
+    try {
+      const result = await session.run(`MATCH (p:Place) RETURN p`);
+      return result.records.map((r) => {
+        const props = r.get("p").properties;
+        return { id: props.id, name: props.name, lat: props.lat, lng: props.lng,
+          status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined };
+      });
+    } finally {
+      await session.close();
+    }
+  }
+
+  async updatePlace(id: string, updates: Partial<Omit<PlaceNode, "id">>): Promise<void> {
+    const session = this.getDriver().session();
+    try {
+      const setClauses = Object.entries(updates)
+        .map(([key, _]) => `p.${key} = $${key}`)
+        .join(", ");
+      if (!setClauses) return;
+      await session.run(`MATCH (p:Place {id: $id}) SET ${setClauses}`, { id, ...updates });
+    } finally {
+      await session.close();
+    }
+  }
+
+  // Movement operations — stored in-memory for Neo4j impl (ephemeral per session)
+  private movements: Movement[] = [];
+
+  async addMovement(movement: Movement): Promise<void> {
+    this.movements.push({ ...movement });
+  }
+
+  async getActiveMovements(tick: number): Promise<Movement[]> {
+    return this.movements.filter((m) => m.departureTick <= tick && m.arrivalTick >= tick);
+  }
+
+  async getMapData(tick: number): Promise<MapData> {
+    const cities = await this.getAllPlaces();
+    const allChars = await this.getAllCharacters();
+    const activeMovements = await this.getActiveMovements(tick);
+    const charsWithCity = allChars
+      .filter((c) => c.cityId)
+      .map((c) => ({ ...c, cityId: c.cityId! }));
+    return { cities, characters: charsWithCity, movements: activeMovements };
   }
 
   async getCharacterGraph(centerId: string, depth: number): Promise<CharacterGraph> {

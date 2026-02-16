@@ -17,7 +17,7 @@ async function main() {
   const simulation = new SimulationService(repo, eventStore);
   await simulation.init();
 
-  console.log(`Seeded ${(await repo.getAllCharacters()).length} characters`);
+  console.log(`Seeded ${(await repo.getAllCharacters()).length} characters, ${(await repo.getAllPlaces()).length} cities`);
   console.log(`Simulation engine ready at tick ${simulation.currentTick}`);
 
   const server = createHTTPServer({

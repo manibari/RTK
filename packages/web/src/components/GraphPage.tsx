@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { trpc } from "../lib/trpc";
 import { RadialGraph } from "./RadialGraph";
 import { Sidebar } from "./Sidebar";
@@ -50,21 +50,36 @@ export interface TimelinePoint {
   intimacy: number;
 }
 
-export function GraphPage() {
+interface GraphPageProps {
+  currentTick: number;
+  viewTick: number;
+  onTickChange: (tick: number) => void;
+  playing: boolean;
+  onPlayToggle: () => void;
+  advancing: boolean;
+  onAdvanceDay: () => Promise<{ tick: number; dailySummary: string } | undefined>;
+  onTickUpdate: (tick: number) => void;
+}
+
+export function GraphPage({
+  currentTick,
+  viewTick,
+  onTickChange,
+  playing,
+  onPlayToggle,
+  advancing,
+  onAdvanceDay,
+  onTickUpdate,
+}: GraphPageProps) {
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [allCharacters, setAllCharacters] = useState<CharacterNode[]>([]);
   const [centerId, setCenterId] = useState("liu_bei");
   const [selectedEdge, setSelectedEdge] = useState<SelectedEdge | null>(null);
   const [pairEvents, setPairEvents] = useState<PairEvent[]>([]);
   const [timeline, setTimeline] = useState<TimelinePoint[]>([]);
-  const [currentTick, setCurrentTick] = useState(0);
-  const [viewTick, setViewTick] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [advancing, setAdvancing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dailySummary, setDailySummary] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const characterMap = new Map(allCharacters.map((c) => [c.id, c]));
 
@@ -72,15 +87,12 @@ export function GraphPage() {
     setLoading(true);
     setError(null);
     try {
-      const [graph, chars, tickData] = await Promise.all([
+      const [graph, chars] = await Promise.all([
         trpc.character.getGraph.query({ centerId: id, depth: 2 }),
         trpc.character.getAll.query(),
-        trpc.simulation.getCurrentTick.query(),
       ]);
       setGraphData(graph as GraphData);
       setAllCharacters(chars as CharacterNode[]);
-      setCurrentTick(tickData.tick);
-      setViewTick(tickData.tick);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to fetch data");
     } finally {
@@ -92,7 +104,7 @@ export function GraphPage() {
     fetchGraph(centerId);
   }, [centerId, fetchGraph]);
 
-  // Fetch snapshot when viewTick changes (only if not at current tick)
+  // Fetch snapshot when viewTick changes
   useEffect(() => {
     if (currentTick === 0) return;
     trpc.simulation.getGraphAtTick
@@ -123,32 +135,13 @@ export function GraphPage() {
     }).catch(() => {});
   }, [selectedEdge, currentTick]);
 
-  // Auto-play
-  useEffect(() => {
-    if (playing) {
-      playRef.current = setInterval(() => {
-        setViewTick((prev) => {
-          if (prev >= currentTick) {
-            setPlaying(false);
-            return prev;
-          }
-          return prev + 1;
-        });
-      }, 500);
-    }
-    return () => {
-      if (playRef.current) clearInterval(playRef.current);
-    };
-  }, [playing, currentTick]);
-
   const handleAdvanceDay = async () => {
-    setAdvancing(true);
     setError(null);
     try {
-      const result = await trpc.simulation.advanceDay.mutate();
-      setCurrentTick(result.tick);
-      setViewTick(result.tick);
-      setDailySummary(result.dailySummary);
+      const result = await onAdvanceDay();
+      if (result) {
+        setDailySummary(result.dailySummary);
+      }
       // Refetch graph
       const graph = await trpc.character.getGraph.query({ centerId, depth: 2 });
       setGraphData(graph as GraphData);
@@ -166,7 +159,6 @@ export function GraphPage() {
         ]);
         setPairEvents(events as PairEvent[]);
         setTimeline(tl as TimelinePoint[]);
-        // Update selected edge intimacy
         const updatedEdge = (graph as GraphData).relationships.find(
           (r) =>
             (r.sourceId === selectedEdge.sourceId && r.targetId === selectedEdge.targetId) ||
@@ -183,18 +175,6 @@ export function GraphPage() {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to advance day");
-    } finally {
-      setAdvancing(false);
-    }
-  };
-
-  const handlePlayToggle = () => {
-    if (playing) {
-      setPlaying(false);
-    } else {
-      // If at end, restart from 0
-      if (viewTick >= currentTick) setViewTick(0);
-      setPlaying(true);
     }
   };
 
@@ -236,9 +216,9 @@ export function GraphPage() {
         <Timeline
           currentTick={currentTick}
           viewTick={viewTick}
-          onTickChange={setViewTick}
+          onTickChange={onTickChange}
           playing={playing}
-          onPlayToggle={handlePlayToggle}
+          onPlayToggle={onPlayToggle}
         />
 
         {error && <div style={styles.error}>{error}</div>}
@@ -266,10 +246,7 @@ export function GraphPage() {
 const styles: Record<string, React.CSSProperties> = {
   layout: {
     display: "flex",
-    height: "100vh",
-    backgroundColor: "#0f172a",
-    color: "#e2e8f0",
-    fontFamily: "system-ui, sans-serif",
+    height: "100%",
   },
   main: {
     flex: 1,

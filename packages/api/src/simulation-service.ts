@@ -1,5 +1,5 @@
 import { Engine } from "@rtk/simulation";
-import type { IGraphRepository, RelationshipEdge, CharacterGraph } from "@rtk/graph-db";
+import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode } from "@rtk/graph-db";
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
 import { NarrativeService } from "./narrative/narrative-service.js";
 
@@ -77,6 +77,9 @@ export class SimulationService {
     for (const rel of updatedRels) {
       await this.repo.setRelationship(rel);
     }
+
+    // Generate random movements (20% chance per character)
+    await this.generateMovements();
 
     // Fetch events with IDs
     const tickEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
@@ -190,6 +193,36 @@ export class SimulationService {
 
   getPairEvents(actorId: string, targetId: string): StoredEvent[] {
     return this.eventStore.getByPair(actorId, targetId);
+  }
+
+  private async generateMovements(): Promise<void> {
+    const characters = await this.repo.getAllCharacters();
+    const cities = await this.repo.getAllPlaces();
+    if (cities.length < 2) return;
+
+    const activeCityIds = cities.filter((c) => c.status !== "dead").map((c) => c.id);
+    if (activeCityIds.length < 2) return;
+
+    for (const char of characters) {
+      if (!char.cityId || Math.random() > 0.2) continue;
+
+      const destinations = activeCityIds.filter((id) => id !== char.cityId);
+      if (destinations.length === 0) continue;
+
+      const destId = destinations[Math.floor(Math.random() * destinations.length)];
+      const travelTime = 1 + Math.floor(Math.random() * 3); // 1-3 ticks
+
+      await this.repo.addMovement({
+        characterId: char.id,
+        originCityId: char.cityId,
+        destinationCityId: destId,
+        departureTick: this.currentTick,
+        arrivalTick: this.currentTick + travelTime,
+      });
+
+      // Update character's city upon arrival (immediate for simplicity)
+      await this.repo.createCharacter({ ...char, cityId: destId });
+    }
   }
 }
 

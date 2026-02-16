@@ -4,7 +4,10 @@ export type {
   RelationshipEdge,
   EventNode,
   PlaceNode,
+  CityStatus,
+  Movement,
   CharacterGraph,
+  MapData,
 } from "./types/graph.js";
 export { Neo4jGraphRepository } from "./neo4j/neo4j-repository.js";
 export type { Neo4jConfig } from "./neo4j/connection.js";

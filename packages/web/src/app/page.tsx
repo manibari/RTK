@@ -1,5 +1,5 @@
-import { GraphPage } from "../components/GraphPage";
+import { AppShell } from "../components/AppShell";
 
 export default function Home() {
-  return <GraphPage />;
+  return <AppShell />;
 }

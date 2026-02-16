@@ -1,17 +1,32 @@
 import type { IGraphRepository } from "./types/repository.js";
-import type { CharacterNode, RelationshipEdge } from "./types/graph.js";
+import type { CharacterNode, RelationshipEdge, PlaceNode } from "./types/graph.js";
 
 const characters: CharacterNode[] = [
-  { id: "liu_bei", name: "劉備", traits: ["benevolent", "ambitious", "charismatic"] },
-  { id: "guan_yu", name: "關羽", traits: ["loyal", "brave", "proud"] },
-  { id: "zhang_fei", name: "張飛", traits: ["brave", "impulsive", "loyal"] },
-  { id: "zhuge_liang", name: "諸葛亮", traits: ["wise", "cautious", "strategic"] },
-  { id: "cao_cao", name: "曹操", traits: ["ambitious", "cunning", "charismatic"] },
-  { id: "sun_quan", name: "孫權", traits: ["cautious", "diplomatic", "ambitious"] },
-  { id: "zhao_yun", name: "趙雲", traits: ["loyal", "brave", "humble"] },
-  { id: "lu_bu", name: "呂布", traits: ["brave", "treacherous", "impulsive"] },
-  { id: "diao_chan", name: "貂蟬", traits: ["charismatic", "cunning", "diplomatic"] },
-  { id: "zhou_yu", name: "周瑜", traits: ["strategic", "proud", "ambitious"] },
+  { id: "liu_bei", name: "劉備", traits: ["benevolent", "ambitious", "charismatic"], cityId: "taipei" },
+  { id: "guan_yu", name: "關羽", traits: ["loyal", "brave", "proud"], cityId: "taipei" },
+  { id: "zhang_fei", name: "張飛", traits: ["brave", "impulsive", "loyal"], cityId: "taoyuan" },
+  { id: "zhuge_liang", name: "諸葛亮", traits: ["wise", "cautious", "strategic"], cityId: "hsinchu" },
+  { id: "cao_cao", name: "曹操", traits: ["ambitious", "cunning", "charismatic"], cityId: "taichung" },
+  { id: "sun_quan", name: "孫權", traits: ["cautious", "diplomatic", "ambitious"], cityId: "tainan" },
+  { id: "zhao_yun", name: "趙雲", traits: ["loyal", "brave", "humble"], cityId: "taipei" },
+  { id: "lu_bu", name: "呂布", traits: ["brave", "treacherous", "impulsive"], cityId: "kaohsiung" },
+  { id: "diao_chan", name: "貂蟬", traits: ["charismatic", "cunning", "diplomatic"], cityId: "kaohsiung" },
+  { id: "zhou_yu", name: "周瑜", traits: ["strategic", "proud", "ambitious"], cityId: "tainan" },
+];
+
+const cities: PlaceNode[] = [
+  // Major cities
+  { id: "taipei", name: "許都（台北）", lat: 25.033, lng: 121.565, status: "allied", tier: "major", controllerId: "liu_bei" },
+  { id: "taichung", name: "鄴城（台中）", lat: 24.147, lng: 120.674, status: "hostile", tier: "major", controllerId: "cao_cao" },
+  { id: "tainan", name: "建業（台南）", lat: 22.999, lng: 120.227, status: "neutral", tier: "major", controllerId: "sun_quan" },
+  { id: "kaohsiung", name: "下邳（高雄）", lat: 22.627, lng: 120.301, status: "hostile", tier: "major", controllerId: "lu_bu" },
+  // Minor cities
+  { id: "taoyuan", name: "新野（桃園）", lat: 24.994, lng: 121.301, status: "allied", tier: "minor", controllerId: "liu_bei" },
+  { id: "hsinchu", name: "隆中（新竹）", lat: 24.804, lng: 120.972, status: "allied", tier: "minor", controllerId: "liu_bei" },
+  { id: "chiayi", name: "長沙（嘉義）", lat: 23.480, lng: 120.449, status: "neutral", tier: "minor" },
+  { id: "hualien", name: "南蠻（花蓮）", lat: 23.992, lng: 121.601, status: "dead", tier: "minor" },
+  { id: "keelung", name: "北海（基隆）", lat: 25.128, lng: 121.740, status: "allied", tier: "minor", controllerId: "liu_bei" },
+  { id: "pingtung", name: "交州（屏東）", lat: 22.682, lng: 120.484, status: "neutral", tier: "minor" },
 ];
 
 const relationships: RelationshipEdge[] = [
@@ -45,6 +60,9 @@ const relationships: RelationshipEdge[] = [
 ];
 
 export async function seedData(repo: IGraphRepository): Promise<void> {
+  for (const city of cities) {
+    await repo.createPlace(city);
+  }
   for (const character of characters) {
     await repo.createCharacter(character);
   }
@@ -53,4 +71,4 @@ export async function seedData(repo: IGraphRepository): Promise<void> {
   }
 }
 
-export { characters, relationships };
+export { characters, relationships, cities };
