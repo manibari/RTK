@@ -5,6 +5,7 @@ import { trpc } from "../lib/trpc";
 import { GraphPage } from "./GraphPage";
 import { MapPage } from "./MapPage";
 import { GameLog } from "./GameLog";
+import { ToastStack, createToastId, type ToastMessage } from "./ToastStack";
 
 type ViewTab = "graph" | "map" | "log";
 
@@ -40,6 +41,7 @@ export function AppShell() {
   const [allBattles, setAllBattles] = useState<BattleResult[]>([]);
   const [allDiplomacy, setAllDiplomacy] = useState<DiplomacyEvent[]>([]);
   const [summaries, setSummaries] = useState<Map<number, string>>(new Map());
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch initial state
@@ -93,9 +95,19 @@ export function AppShell() {
       // Accumulate log entries
       if (result.battleResults?.length > 0) {
         setAllBattles((prev) => [...prev, ...result.battleResults]);
+        for (const b of result.battleResults) {
+          const text = b.captured
+            ? `${b.attackerName} 攻陷 ${b.cityName}`
+            : `${b.attackerName} 未能攻下 ${b.cityName}`;
+          addToast(text, b.captured ? "#ef4444" : "#64748b");
+        }
       }
       if (result.diplomacyEvents?.length > 0) {
         setAllDiplomacy((prev) => [...prev, ...result.diplomacyEvents]);
+        for (const d of result.diplomacyEvents) {
+          const color = d.type === "alliance_formed" ? "#22c55e" : "#f59e0b";
+          addToast(d.description, color);
+        }
       }
       if (result.dailySummary) {
         setSummaries((prev) => new Map(prev).set(result.tick, result.dailySummary));
@@ -106,6 +118,26 @@ export function AppShell() {
       setAdvancing(false);
     }
   }, [gameStatus]);
+
+  const addToast = useCallback((text: string, color: string) => {
+    setToasts((prev) => [...prev, { id: createToastId(), text, color }]);
+  }, []);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const handleReset = useCallback(async () => {
+    await trpc.simulation.reset.mutate();
+    setCurrentTick(0);
+    setViewTick(0);
+    setGameStatus("ongoing");
+    setAllBattles([]);
+    setAllDiplomacy([]);
+    setSummaries(new Map());
+    setToasts([]);
+    addToast("遊戲已重置", "#22c55e");
+  }, [addToast]);
 
   const statusBanner = gameStatus === "victory"
     ? { text: "勝利！你統一了天下！", color: "#22c55e" }
@@ -119,6 +151,7 @@ export function AppShell() {
       {statusBanner && (
         <div style={{ ...styles.banner, backgroundColor: statusBanner.color }}>
           {statusBanner.text}
+          <button style={styles.resetBtn} onClick={handleReset}>重新開始</button>
         </div>
       )}
 
@@ -178,6 +211,8 @@ export function AppShell() {
           />
         )}
       </div>
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -198,6 +233,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     color: "#0f172a",
     flexShrink: 0,
+  },
+  resetBtn: {
+    marginLeft: 16,
+    padding: "6px 16px",
+    borderRadius: 6,
+    border: "2px solid #0f172a",
+    backgroundColor: "transparent",
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: "pointer",
   },
   tabBar: {
     display: "flex",

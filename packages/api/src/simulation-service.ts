@@ -86,6 +86,31 @@ export class SimulationService {
     this.eventStore = eventStore;
   }
 
+  async reset(): Promise<void> {
+    // Clear event store
+    this.eventStore.clear();
+
+    // Reset repo by disconnecting and reconnecting
+    await this.repo.disconnect();
+    await this.repo.connect();
+
+    // Re-seed data
+    const { seedData } = await import("@rtk/graph-db");
+    await seedData(this.repo);
+
+    // Reset internal state
+    this.engine = new Engine();
+    this.initialRelationships = [];
+    this.dailySummaries.clear();
+    this.commandQueue = [];
+    this.alliances.clear();
+    this.gameState = { status: "ongoing", tick: 0 };
+    this.commandedThisTick.clear();
+
+    // Re-initialize
+    await this.init();
+  }
+
   async init(): Promise<void> {
     const characters = await this.repo.getAllCharacters();
     this.engine.loadCharacters(characters);

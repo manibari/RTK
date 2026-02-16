@@ -80,4 +80,10 @@ export const simulationRouter = router({
   getAlliances: publicProcedure.query(({ ctx }) => {
     return ctx.simulation.getAlliances();
   }),
+
+  // Reset
+  reset: publicProcedure.mutation(async ({ ctx }) => {
+    await ctx.simulation.reset();
+    return { tick: 0, status: "ongoing" };
+  }),
 });

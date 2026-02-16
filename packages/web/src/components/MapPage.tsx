@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { trpc } from "../lib/trpc";
 import { Timeline } from "./Timeline";
+import { CharacterDetail } from "./CharacterDetail";
 
 const StrategicMap = dynamic(
   () => import("./StrategicMap").then((m) => ({ default: m.StrategicMap })),
@@ -87,6 +88,7 @@ export function MapPage({
   const [factions, setFactions] = useState<FactionInfo[]>([]);
   const [battleLog, setBattleLog] = useState<BattleResult[]>([]);
   const [commandCount, setCommandCount] = useState(0);
+  const [detailCharId, setDetailCharId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchMapData = useCallback(async (tick: number) => {
@@ -122,6 +124,17 @@ export function MapPage({
     setSelectedCity(city);
     setSelectedChar(null);
   }, [mapData]);
+
+  // Build controllerId -> faction color map
+  const factionColors = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const f of factions) {
+      for (const memberId of f.members) {
+        map.set(memberId, f.color);
+      }
+    }
+    return map;
+  }, [factions]);
 
   const charsInCity = useMemo(() => {
     if (!selectedCity || !mapData) return [];
@@ -198,6 +211,7 @@ export function MapPage({
           <StrategicMap
             data={mapData}
             viewTick={viewTick}
+            factionColors={factionColors}
             onCityClick={handleCityClick}
           />
         )}
@@ -257,7 +271,15 @@ export function MapPage({
                     }}
                     onClick={() => setSelectedChar(selectedChar === c.id ? null : c.id)}
                   >
-                    <span style={styles.charName}>{c.name}</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={styles.charName}>{c.name}</span>
+                      <button
+                        style={styles.detailBtn}
+                        onClick={(e) => { e.stopPropagation(); setDetailCharId(c.id); }}
+                      >
+                        詳情
+                      </button>
+                    </div>
                     <span style={styles.charTraits}>{c.traits.join("、")}</span>
                     {selectedChar === c.id && (
                       <span style={styles.selectedTag}>已選取</span>
@@ -320,6 +342,18 @@ export function MapPage({
           </>
         )}
       </aside>
+
+      {/* Character detail modal */}
+      {detailCharId && (
+        <CharacterDetail
+          characterId={detailCharId}
+          factionName={factions.find((f) => f.members.includes(detailCharId))?.leaderName}
+          factionColor={factionColors.get(detailCharId)}
+          cityName={mapData?.cities.find((c) => c.id === mapData?.characters.find((ch) => ch.id === detailCharId)?.cityId)?.name}
+          onClose={() => setDetailCharId(null)}
+          onCharacterClick={(id) => setDetailCharId(id)}
+        />
+      )}
     </div>
   );
 }
@@ -368,6 +402,7 @@ const styles: Record<string, React.CSSProperties> = {
   charName: { fontSize: 14, fontWeight: 600, display: "block" },
   charTraits: { fontSize: 12, color: "#94a3b8", display: "block", marginTop: 2 },
   selectedTag: { fontSize: 10, color: "#f59e0b", fontWeight: 700, marginTop: 4, display: "block" },
+  detailBtn: { fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid #334155", backgroundColor: "transparent", color: "#94a3b8", cursor: "pointer" },
   cmdSection: { marginTop: 12, padding: "10px 12px", backgroundColor: "#0f172a", borderRadius: 8, borderLeft: "3px solid #f59e0b" },
   cmdLabel: { fontSize: 12, color: "#f59e0b", margin: "0 0 8px" },
   cmdButtons: { display: "flex", gap: 8 },

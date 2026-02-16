@@ -101,6 +101,10 @@ export class SqliteEventStore implements IEventStore {
       .map(rowToEvent);
   }
 
+  clear(): void {
+    this.db.exec(`DELETE FROM events`);
+  }
+
   close(): void {
     this.db.close();
   }

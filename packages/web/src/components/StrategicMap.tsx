@@ -38,20 +38,21 @@ interface MapData {
 interface StrategicMapProps {
   data: MapData | null;
   viewTick: number;
+  factionColors?: Map<string, string>; // controllerId -> faction color
   onCityClick?: (cityId: string) => void;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  allied: "#3b82f6",   // blue
-  hostile: "#ef4444",   // red
-  neutral: "#ffffff",   // white
-  dead: "#1e1e1e",      // near-black
+const FALLBACK_COLORS: Record<string, string> = {
+  allied: "#3b82f6",
+  hostile: "#ef4444",
+  neutral: "#ffffff",
+  dead: "#1e1e1e",
 };
 
 const TAIWAN_CENTER: [number, number] = [23.7, 120.96];
 const TAIWAN_ZOOM = 8;
 
-export function StrategicMap({ data, viewTick, onCityClick }: StrategicMapProps) {
+export function StrategicMap({ data, viewTick, factionColors, onCityClick }: StrategicMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layersRef = useRef<L.LayerGroup | null>(null);
@@ -92,7 +93,9 @@ export function StrategicMap({ data, viewTick, onCityClick }: StrategicMapProps)
 
     // Draw cities
     for (const city of data.cities) {
-      const color = STATUS_COLORS[city.status] ?? STATUS_COLORS.neutral;
+      const color = city.status === "dead"
+        ? FALLBACK_COLORS.dead
+        : (city.controllerId && factionColors?.get(city.controllerId)) ?? FALLBACK_COLORS[city.status] ?? FALLBACK_COLORS.neutral;
       const radius = city.tier === "major" ? 12 : 7;
 
       cityCoords.set(city.id, [city.lat, city.lng]);

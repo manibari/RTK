@@ -19,5 +19,6 @@ export interface IEventStore {
   getByPair(actorId: string, targetId: string, fromTick?: number, toTick?: number): StoredEvent[];
   getByTickRange(fromTick: number, toTick: number): StoredEvent[];
   getAll(): StoredEvent[];
+  clear(): void;
   close(): void;
 }
