@@ -15,6 +15,7 @@ export interface AdvanceDayResult {
   dailySummary: string;
   battleResults: BattleResult[];
   diplomacyEvents: DiplomacyEvent[];
+  recruitmentResults: RecruitmentResult[];
   gameStatus: GameStatus;
 }
 
@@ -35,9 +36,10 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack";
+  type: "move" | "attack" | "recruit";
   characterId: string;
   targetCityId: string;
+  targetCharacterId?: string; // for recruit
 }
 
 export interface BattleResult {
@@ -50,6 +52,18 @@ export interface BattleResult {
   defenderName: string | null;
   winner: "attacker" | "defender";
   captured: boolean;
+  attackPower: number;
+  defensePower: number;
+}
+
+export interface RecruitmentResult {
+  tick: number;
+  recruiterId: string;
+  recruiterName: string;
+  targetId: string;
+  targetName: string;
+  success: boolean;
+  newFaction?: string;
 }
 
 export interface FactionInfo {
@@ -61,13 +75,17 @@ export interface FactionInfo {
   color: string;
 }
 
-// Faction definitions
-const FACTIONS: { id: string; leaderId: string; members: string[]; color: string }[] = [
-  { id: "shu", leaderId: "liu_bei", members: ["liu_bei", "guan_yu", "zhang_fei", "zhuge_liang", "zhao_yun"], color: "#3b82f6" },
-  { id: "wei", leaderId: "cao_cao", members: ["cao_cao"], color: "#ef4444" },
-  { id: "wu", leaderId: "sun_quan", members: ["sun_quan", "zhou_yu"], color: "#22c55e" },
-  { id: "lu_bu", leaderId: "lu_bu", members: ["lu_bu", "diao_chan"], color: "#a855f7" },
-];
+// Faction definitions (mutable - recruitment can change members)
+function createDefaultFactions(): { id: string; leaderId: string; members: string[]; color: string }[] {
+  return [
+    { id: "shu", leaderId: "liu_bei", members: ["liu_bei", "guan_yu", "zhang_fei", "zhuge_liang", "zhao_yun"], color: "#3b82f6" },
+    { id: "wei", leaderId: "cao_cao", members: ["cao_cao"], color: "#ef4444" },
+    { id: "wu", leaderId: "sun_quan", members: ["sun_quan", "zhou_yu"], color: "#22c55e" },
+    { id: "lu_bu", leaderId: "lu_bu", members: ["lu_bu", "diao_chan"], color: "#a855f7" },
+  ];
+}
+
+let FACTIONS = createDefaultFactions();
 
 export class SimulationService {
   private engine: Engine;
@@ -106,6 +124,7 @@ export class SimulationService {
     this.alliances.clear();
     this.gameState = { status: "ongoing", tick: 0 };
     this.commandedThisTick.clear();
+    FACTIONS = createDefaultFactions();
 
     // Re-initialize
     await this.init();
@@ -198,6 +217,7 @@ export class SimulationService {
         dailySummary: "",
         battleResults: [],
         diplomacyEvents: [],
+        recruitmentResults: [],
         gameStatus: this.gameState.status,
       };
     }
@@ -227,6 +247,9 @@ export class SimulationService {
       await this.repo.setRelationship(rel);
     }
 
+    // City economy: produce gold
+    await this.produceGold();
+
     // Execute player commands
     await this.executeCommands();
 
@@ -236,8 +259,11 @@ export class SimulationService {
     // Generate random movements for remaining idle characters (10%)
     await this.generateMovements();
 
-    // Resolve arrivals and battles
+    // Resolve arrivals and battles (enhanced: garrison combat)
     const battleResults = await this.resolveArrivals();
+
+    // Recruitment: captured characters can be recruited
+    const recruitmentResults = await this.processRecruitments(battleResults);
 
     // Evaluate diplomacy
     const diplomacyEvents = await this.evaluateDiplomacy();
@@ -265,10 +291,10 @@ export class SimulationService {
 
       // Re-read events with narratives
       const updatedEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
-      return { tick: this.currentTick, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, gameStatus };
+      return { tick: this.currentTick, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, gameStatus };
     }
 
-    return { tick: this.currentTick, events: tickEvents, dailySummary, battleResults, diplomacyEvents, gameStatus };
+    return { tick: this.currentTick, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, gameStatus };
   }
 
   getDailySummary(tick: number): string {
@@ -365,7 +391,7 @@ export class SimulationService {
     const characters = await this.repo.getAllCharacters();
     const cities = await this.repo.getAllPlaces();
 
-    const decisions = evaluateNPCDecisions(FACTIONS, characters, cities, "shu");
+    const decisions = evaluateNPCDecisions(FACTIONS, characters, cities, "shu", this.alliances);
 
     for (const decision of decisions) {
       if (decision.action === "stay" || !decision.targetCityId) continue;
@@ -444,54 +470,180 @@ export class SimulationService {
     }
   }
 
+  private async produceGold(): Promise<void> {
+    const cities = await this.repo.getAllPlaces();
+    for (const city of cities) {
+      if (city.status === "dead" || !city.controllerId) continue;
+      const income = city.tier === "major" ? 100 : 50;
+      await this.repo.updatePlace(city.id, { gold: city.gold + income });
+    }
+  }
+
   private async resolveArrivals(): Promise<BattleResult[]> {
     const results: BattleResult[] = [];
     const movements = await this.repo.getActiveMovements(this.currentTick);
-
-    // Find movements that arrive this tick
     const arrivals = movements.filter((m) => m.arrivalTick === this.currentTick);
 
-    for (const arrival of arrivals) {
-      const city = await this.repo.getPlace(arrival.destinationCityId);
+    // Group arrivals by destination city
+    const arrivalsByCity = new Map<string, typeof arrivals>();
+    for (const a of arrivals) {
+      const list = arrivalsByCity.get(a.destinationCityId) ?? [];
+      list.push(a);
+      arrivalsByCity.set(a.destinationCityId, list);
+    }
+
+    for (const [cityId, cityArrivals] of arrivalsByCity) {
+      const city = await this.repo.getPlace(cityId);
       if (!city) continue;
 
-      const arriverFaction = this.getFactionOf(arrival.characterId);
-      const controllerFaction = city.controllerId ? this.getFactionOf(city.controllerId) : null;
-
-      // No battle if same faction, uncontrolled, or allied
-      if (!city.controllerId || arriverFaction === controllerFaction) continue;
-      if (arriverFaction && controllerFaction && this.areAllied(arriverFaction, controllerFaction)) continue;
-
-      const attacker = await this.repo.getCharacter(arrival.characterId);
-      const defender = city.controllerId ? await this.repo.getCharacter(city.controllerId) : null;
-      if (!attacker) continue;
-
-      // Battle resolution: compare trait counts + random factor
-      const attackPower = attacker.traits.length + Math.random() * 3;
-      const defensePower = defender ? defender.traits.length + Math.random() * 3 : Math.random() * 2;
-
-      const attackerWins = attackPower > defensePower;
-
-      if (attackerWins) {
-        // Attacker captures city
-        const newStatus = this.factionToStatus(arriverFaction);
-        await this.repo.updatePlace(city.id, {
-          controllerId: attacker.id,
-          status: newStatus,
-        });
+      // Group arriving characters by faction
+      const attackersByFaction = new Map<string, string[]>();
+      for (const a of cityArrivals) {
+        const faction = this.getFactionOf(a.characterId);
+        if (!faction) continue;
+        const controllerFaction = city.controllerId ? this.getFactionOf(city.controllerId) : null;
+        // Skip if same faction or allied
+        if (faction === controllerFaction) continue;
+        if (controllerFaction && this.areAllied(faction, controllerFaction)) continue;
+        const list = attackersByFaction.get(faction) ?? [];
+        list.push(a.characterId);
+        attackersByFaction.set(faction, list);
       }
 
-      results.push({
-        tick: this.currentTick,
-        cityId: city.id,
-        cityName: city.name,
-        attackerId: attacker.id,
-        attackerName: attacker.name,
-        defenderId: defender?.id ?? null,
-        defenderName: defender?.name ?? null,
-        winner: attackerWins ? "attacker" : "defender",
-        captured: attackerWins,
+      if (attackersByFaction.size === 0) continue;
+
+      // Get all defenders in the city
+      const allChars = await this.repo.getAllCharacters();
+      const defenders = allChars.filter(
+        (c) => c.cityId === cityId && city.controllerId && this.getFactionOf(c.id) === this.getFactionOf(city.controllerId),
+      );
+
+      // Defense power: sum of defender traits + garrison bonus + city tier bonus
+      const tierBonus = city.tier === "major" ? 3 : 1;
+      let defensePower = city.garrison + tierBonus + Math.random() * 2;
+      for (const d of defenders) {
+        defensePower += d.traits.length * 2 + Math.random() * 2;
+      }
+
+      // Each attacking faction battles independently
+      for (const [attackFaction, attackerIds] of attackersByFaction) {
+        let attackPower = Math.random() * 2;
+        const attackChars: CharacterNode[] = [];
+        for (const id of attackerIds) {
+          const c = await this.repo.getCharacter(id);
+          if (c) {
+            attackPower += c.traits.length * 2 + Math.random() * 2;
+            attackChars.push(c);
+          }
+        }
+
+        const attackerWins = attackPower > defensePower;
+        const leadAttacker = attackChars[0];
+        if (!leadAttacker) continue;
+
+        if (attackerWins) {
+          const newStatus = this.factionToStatus(attackFaction);
+          await this.repo.updatePlace(city.id, {
+            controllerId: leadAttacker.id,
+            status: newStatus,
+            garrison: Math.max(0, city.garrison - 1), // Garrison damaged in battle
+          });
+        } else {
+          // Failed attack: garrison takes minor damage
+          if (city.garrison > 0) {
+            await this.repo.updatePlace(city.id, { garrison: city.garrison - 1 });
+          }
+        }
+
+        const leadDefender = defenders[0] ?? (city.controllerId ? await this.repo.getCharacter(city.controllerId) : null);
+
+        results.push({
+          tick: this.currentTick,
+          cityId: city.id,
+          cityName: city.name,
+          attackerId: leadAttacker.id,
+          attackerName: leadAttacker.name,
+          defenderId: leadDefender?.id ?? null,
+          defenderName: leadDefender?.name ?? null,
+          winner: attackerWins ? "attacker" : "defender",
+          captured: attackerWins,
+          attackPower: Math.round(attackPower * 10) / 10,
+          defensePower: Math.round(defensePower * 10) / 10,
+        });
+
+        // If captured, defenders can no longer defend against next attacker
+        if (attackerWins) break;
+      }
+    }
+
+    return results;
+  }
+
+  private async processRecruitments(battleResults: BattleResult[]): Promise<RecruitmentResult[]> {
+    const results: RecruitmentResult[] = [];
+    const allChars = await this.repo.getAllCharacters();
+
+    for (const battle of battleResults) {
+      if (!battle.captured) continue;
+
+      const attacker = await this.repo.getCharacter(battle.attackerId);
+      if (!attacker) continue;
+      const attackerFaction = this.getFactionOf(battle.attackerId);
+      if (!attackerFaction) continue;
+
+      // Find enemy characters still in the captured city
+      const capturedChars = allChars.filter((c) => {
+        if (c.cityId !== battle.cityId) return false;
+        const cFaction = this.getFactionOf(c.id);
+        return cFaction && cFaction !== attackerFaction;
       });
+
+      for (const captured of capturedChars) {
+        // Cannot recruit faction leaders
+        const capturedFaction = FACTIONS.find((f) => f.members.includes(captured.id));
+        if (capturedFaction?.leaderId === captured.id) continue;
+
+        // Check intimacy between attacker and captured
+        const rels = this.engine.getRelationships();
+        const rel = rels.find(
+          (r) =>
+            (r.sourceId === attacker.id && r.targetId === captured.id) ||
+            (r.sourceId === captured.id && r.targetId === attacker.id),
+        );
+        const intimacy = rel?.intimacy ?? 30;
+
+        // Base recruitment chance: 15% + intimacy/300
+        let chance = 0.15 + intimacy / 300;
+
+        // Trait modifiers
+        if (captured.traits.includes("loyal")) chance -= 0.2;
+        if (captured.traits.includes("treacherous")) chance += 0.2;
+        if (attacker.traits.includes("charismatic")) chance += 0.1;
+
+        chance = Math.max(0.05, Math.min(0.8, chance));
+        const success = Math.random() < chance;
+
+        if (success) {
+          // Move character to attacker's faction
+          if (capturedFaction) {
+            capturedFaction.members = capturedFaction.members.filter((m) => m !== captured.id);
+          }
+          const newFaction = FACTIONS.find((f) => f.id === attackerFaction);
+          if (newFaction) {
+            newFaction.members.push(captured.id);
+          }
+        }
+
+        results.push({
+          tick: this.currentTick,
+          recruiterId: attacker.id,
+          recruiterName: attacker.name,
+          targetId: captured.id,
+          targetName: captured.name,
+          success,
+          newFaction: success ? attackerFaction : undefined,
+        });
+      }
     }
 
     return results;

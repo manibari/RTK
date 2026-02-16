@@ -8,6 +8,7 @@ import { GameLog } from "./GameLog";
 import { ToastStack, createToastId, type ToastMessage } from "./ToastStack";
 
 type ViewTab = "graph" | "map" | "log";
+type SimSpeed = 1 | 2 | 5;
 
 interface BattleResult {
   tick: number;
@@ -29,7 +30,19 @@ interface DiplomacyEvent {
   description: string;
 }
 
+interface RecruitmentResult {
+  tick: number;
+  recruiterId: string;
+  recruiterName: string;
+  targetId: string;
+  targetName: string;
+  success: boolean;
+  newFaction?: string;
+}
+
 type GameStatus = "ongoing" | "victory" | "defeat";
+
+const SPEED_DELAYS: Record<SimSpeed, number> = { 1: 1500, 2: 750, 5: 300 };
 
 export function AppShell() {
   const [activeTab, setActiveTab] = useState<ViewTab>("graph");
@@ -42,7 +55,11 @@ export function AppShell() {
   const [allDiplomacy, setAllDiplomacy] = useState<DiplomacyEvent[]>([]);
   const [summaries, setSummaries] = useState<Map<number, string>>(new Map());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [autoSim, setAutoSim] = useState(false);
+  const [simSpeed, setSimSpeed] = useState<SimSpeed>(1);
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSimRef = useRef(false);
+  const advancingRef = useRef(false);
 
   // Fetch initial state
   useEffect(() => {
@@ -56,7 +73,7 @@ export function AppShell() {
     }).catch(() => {});
   }, []);
 
-  // Auto-play
+  // Auto-play (timeline replay)
   useEffect(() => {
     if (playing) {
       playRef.current = setInterval(() => {
@@ -83,14 +100,25 @@ export function AppShell() {
     }
   }, [playing, viewTick, currentTick]);
 
+  const addToast = useCallback((text: string, color: string) => {
+    setToasts((prev) => [...prev, { id: createToastId(), text, color }]);
+  }, []);
+
   const handleAdvanceDay = useCallback(async () => {
     if (gameStatus !== "ongoing") return undefined;
     setAdvancing(true);
+    advancingRef.current = true;
     try {
       const result = await trpc.simulation.advanceDay.mutate();
       setCurrentTick(result.tick);
       setViewTick(result.tick);
       setGameStatus(result.gameStatus as GameStatus);
+
+      // Stop auto-sim on game over
+      if (result.gameStatus !== "ongoing") {
+        setAutoSim(false);
+        autoSimRef.current = false;
+      }
 
       // Accumulate log entries
       if (result.battleResults?.length > 0) {
@@ -109,6 +137,13 @@ export function AppShell() {
           addToast(d.description, color);
         }
       }
+      if (result.recruitmentResults?.length > 0) {
+        for (const r of result.recruitmentResults as RecruitmentResult[]) {
+          if (r.success) {
+            addToast(`${r.recruiterName} 招降了 ${r.targetName}`, "#a855f7");
+          }
+        }
+      }
       if (result.dailySummary) {
         setSummaries((prev) => new Map(prev).set(result.tick, result.dailySummary));
       }
@@ -116,11 +151,34 @@ export function AppShell() {
       return result;
     } finally {
       setAdvancing(false);
+      advancingRef.current = false;
     }
-  }, [gameStatus]);
+  }, [gameStatus, addToast]);
 
-  const addToast = useCallback((text: string, color: string) => {
-    setToasts((prev) => [...prev, { id: createToastId(), text, color }]);
+  // Auto-simulate loop
+  useEffect(() => {
+    autoSimRef.current = autoSim;
+    if (!autoSim) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+    const loop = async () => {
+      if (!autoSimRef.current || advancingRef.current) return;
+      await handleAdvanceDay();
+      if (autoSimRef.current) {
+        timer = setTimeout(loop, SPEED_DELAYS[simSpeed]);
+      }
+    };
+    timer = setTimeout(loop, SPEED_DELAYS[simSpeed]);
+
+    return () => clearTimeout(timer);
+  }, [autoSim, simSpeed, handleAdvanceDay]);
+
+  const toggleAutoSim = useCallback(() => {
+    setAutoSim((prev) => {
+      const next = !prev;
+      autoSimRef.current = next;
+      return next;
+    });
   }, []);
 
   const dismissToast = useCallback((id: number) => {
@@ -128,6 +186,8 @@ export function AppShell() {
   }, []);
 
   const handleReset = useCallback(async () => {
+    setAutoSim(false);
+    autoSimRef.current = false;
     await trpc.simulation.reset.mutate();
     setCurrentTick(0);
     setViewTick(0);
@@ -155,28 +215,54 @@ export function AppShell() {
         </div>
       )}
 
-      {/* Tab bar */}
+      {/* Tab bar + auto-sim controls */}
       <nav style={styles.tabBar}>
-        <button
-          style={activeTab === "graph" ? styles.tabActive : styles.tab}
-          onClick={() => setActiveTab("graph")}
-        >
-          關係圖
-        </button>
-        <button
-          style={activeTab === "map" ? styles.tabActive : styles.tab}
-          onClick={() => setActiveTab("map")}
-        >
-          戰略地圖
-        </button>
-        <button
-          style={activeTab === "log" ? styles.tabActive : styles.tab}
-          onClick={() => setActiveTab("log")}
-        >
-          日誌 {allBattles.length + allDiplomacy.length > 0 && (
-            <span style={styles.logBadge}>{allBattles.length + allDiplomacy.length}</span>
-          )}
-        </button>
+        <div style={styles.tabGroup}>
+          <button
+            style={activeTab === "graph" ? styles.tabActive : styles.tab}
+            onClick={() => setActiveTab("graph")}
+          >
+            關係圖
+          </button>
+          <button
+            style={activeTab === "map" ? styles.tabActive : styles.tab}
+            onClick={() => setActiveTab("map")}
+          >
+            戰略地圖
+          </button>
+          <button
+            style={activeTab === "log" ? styles.tabActive : styles.tab}
+            onClick={() => setActiveTab("log")}
+          >
+            日誌 {allBattles.length + allDiplomacy.length > 0 && (
+              <span style={styles.logBadge}>{allBattles.length + allDiplomacy.length}</span>
+            )}
+          </button>
+        </div>
+
+        {/* Auto-simulate controls */}
+        <div style={styles.autoSimBar}>
+          <button
+            style={{
+              ...styles.autoSimBtn,
+              backgroundColor: autoSim ? "#ef4444" : "#22c55e",
+            }}
+            onClick={toggleAutoSim}
+            disabled={gameStatus !== "ongoing"}
+          >
+            {autoSim ? "停止模擬" : "自動模擬"}
+          </button>
+          <select
+            style={styles.speedSelect}
+            value={simSpeed}
+            onChange={(e) => setSimSpeed(Number(e.target.value) as SimSpeed)}
+          >
+            <option value={1}>1x</option>
+            <option value={2}>2x</option>
+            <option value={5}>5x</option>
+          </select>
+          {autoSim && <span style={styles.simIndicator}>模擬中...</span>}
+        </div>
       </nav>
 
       {/* Content */}
@@ -188,7 +274,7 @@ export function AppShell() {
             onTickChange={setViewTick}
             playing={playing}
             onPlayToggle={handlePlayToggle}
-            advancing={advancing || gameStatus !== "ongoing"}
+            advancing={advancing || autoSim || gameStatus !== "ongoing"}
             onAdvanceDay={handleAdvanceDay}
             onTickUpdate={(tick) => { setCurrentTick(tick); setViewTick(tick); }}
           />
@@ -199,7 +285,7 @@ export function AppShell() {
             onTickChange={setViewTick}
             playing={playing}
             onPlayToggle={handlePlayToggle}
-            advancing={advancing || gameStatus !== "ongoing"}
+            advancing={advancing || autoSim || gameStatus !== "ongoing"}
             onAdvanceDay={handleAdvanceDay}
           />
         ) : (
@@ -247,10 +333,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tabBar: {
     display: "flex",
-    gap: 0,
+    justifyContent: "space-between",
+    alignItems: "center",
     borderBottom: "1px solid #334155",
     backgroundColor: "#0f172a",
     flexShrink: 0,
+  },
+  tabGroup: {
+    display: "flex",
+    gap: 0,
   },
   tab: {
     padding: "10px 24px",
@@ -280,6 +371,35 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "1px 6px",
     borderRadius: 8,
     fontWeight: 700,
+  },
+  autoSimBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    paddingRight: 16,
+  },
+  autoSimBtn: {
+    padding: "6px 14px",
+    borderRadius: 6,
+    border: "none",
+    color: "#0f172a",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  speedSelect: {
+    padding: "4px 8px",
+    borderRadius: 4,
+    border: "1px solid #334155",
+    backgroundColor: "#1e293b",
+    color: "#e2e8f0",
+    fontSize: 13,
+  },
+  simIndicator: {
+    fontSize: 12,
+    color: "#22c55e",
+    fontWeight: 600,
+    animation: "pulse 1.5s ease-in-out infinite",
   },
   content: {
     flex: 1,

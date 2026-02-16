@@ -29,6 +29,8 @@ export interface PlaceNode {
   status: CityStatus;
   tier: "major" | "minor";
   controllerId?: string;
+  gold: number;
+  garrison: number;
 }
 
 export interface Movement {

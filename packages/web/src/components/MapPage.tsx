@@ -19,6 +19,8 @@ interface PlaceNode {
   status: "allied" | "hostile" | "neutral" | "dead";
   tier: "major" | "minor";
   controllerId?: string;
+  gold: number;
+  garrison: number;
 }
 
 interface CharacterOnMap {
@@ -236,6 +238,14 @@ export function MapPage({
               <div style={styles.infoRow}>
                 <span style={styles.infoLabel}>控制者</span>
                 <span>{controllerName(selectedCity.controllerId)}</span>
+              </div>
+              <div style={styles.infoRow}>
+                <span style={styles.infoLabel}>金幣</span>
+                <span style={{ color: "#f59e0b", fontWeight: 600 }}>{selectedCity.gold ?? 0}</span>
+              </div>
+              <div style={styles.infoRow}>
+                <span style={styles.infoLabel}>守備</span>
+                <span style={{ color: "#3b82f6", fontWeight: 600 }}>{selectedCity.garrison ?? 0}</span>
               </div>
             </div>
 

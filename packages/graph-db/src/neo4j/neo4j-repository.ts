@@ -158,7 +158,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
       if (!record) return null;
       const props = record.get("p").properties;
       return { id: props.id, name: props.name, lat: props.lat, lng: props.lng,
-        status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined };
+        status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined,
+        gold: props.gold ?? 0, garrison: props.garrison ?? 0 };
     } finally {
       await session.close();
     }
@@ -171,7 +172,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
       return result.records.map((r) => {
         const props = r.get("p").properties;
         return { id: props.id, name: props.name, lat: props.lat, lng: props.lng,
-          status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined };
+          status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined,
+          gold: props.gold ?? 0, garrison: props.garrison ?? 0 };
       });
     } finally {
       await session.close();

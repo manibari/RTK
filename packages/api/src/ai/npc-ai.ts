@@ -6,7 +6,7 @@ interface FactionDef {
   members: string[];
 }
 
-interface AIDecision {
+export interface AIDecision {
   characterId: string;
   action: "move" | "attack" | "stay";
   targetCityId?: string;
@@ -16,16 +16,24 @@ interface AIDecision {
 /**
  * NPC AI: evaluates strategic decisions for non-player factions.
  * Player faction (shu) is skipped — controlled by the player.
+ * Alliance-aware: won't attack allied factions.
  */
 export function evaluateNPCDecisions(
   factions: FactionDef[],
   characters: CharacterNode[],
   cities: PlaceNode[],
   playerFactionId: string,
+  alliances: Set<string> = new Set(),
 ): AIDecision[] {
   const decisions: AIDecision[] = [];
   const charMap = new Map(characters.map((c) => [c.id, c]));
   const cityMap = new Map(cities.map((c) => [c.id, c]));
+
+  // Build a lookup: characterId -> factionId
+  const charToFaction = new Map<string, string>();
+  for (const f of factions) {
+    for (const m of f.members) charToFaction.set(m, f.id);
+  }
 
   // Count defenders per city
   const defendersPerCity = new Map<string, string[]>();
@@ -36,21 +44,30 @@ export function evaluateNPCDecisions(
     defendersPerCity.set(char.cityId, list);
   }
 
+  const isAllied = (fA: string, fB: string): boolean => {
+    const key = [fA, fB].sort().join(":");
+    return alliances.has(key);
+  };
+
   for (const faction of factions) {
     if (faction.id === playerFactionId) continue;
 
     const factionCities = cities.filter(
       (c) => c.controllerId && faction.members.includes(c.controllerId),
     );
-    const enemyCities = cities.filter(
-      (c) => c.status !== "dead" && c.controllerId && !faction.members.includes(c.controllerId),
-    );
+    // Filter enemy cities: exclude allies and dead cities
+    const enemyCities = cities.filter((c) => {
+      if (c.status === "dead" || !c.controllerId) return false;
+      if (faction.members.includes(c.controllerId)) return false;
+      const controllerFaction = charToFaction.get(c.controllerId);
+      if (controllerFaction && isAllied(faction.id, controllerFaction)) return false;
+      return true;
+    });
 
     for (const memberId of faction.members) {
       const char = charMap.get(memberId);
       if (!char?.cityId) continue;
 
-      // Skip if already decided by a previous iteration
       if (decisions.some((d) => d.characterId === memberId)) continue;
 
       const decision = decideForCharacter(

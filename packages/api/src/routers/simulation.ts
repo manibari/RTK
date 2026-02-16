@@ -49,9 +49,10 @@ export const simulationRouter = router({
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
-      type: z.enum(["move", "attack"]),
+      type: z.enum(["move", "attack", "recruit"]),
       characterId: z.string(),
       targetCityId: z.string(),
+      targetCharacterId: z.string().optional(),
     }))
     .mutation(({ ctx, input }) => {
       ctx.simulation.queueCommand(input);

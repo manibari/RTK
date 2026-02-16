@@ -15,18 +15,18 @@ const characters: CharacterNode[] = [
 ];
 
 const cities: PlaceNode[] = [
-  // Major cities
-  { id: "taipei", name: "許都（台北）", lat: 25.033, lng: 121.565, status: "allied", tier: "major", controllerId: "liu_bei" },
-  { id: "taichung", name: "鄴城（台中）", lat: 24.147, lng: 120.674, status: "hostile", tier: "major", controllerId: "cao_cao" },
-  { id: "tainan", name: "建業（台南）", lat: 22.999, lng: 120.227, status: "neutral", tier: "major", controllerId: "sun_quan" },
-  { id: "kaohsiung", name: "下邳（高雄）", lat: 22.627, lng: 120.301, status: "hostile", tier: "major", controllerId: "lu_bu" },
-  // Minor cities
-  { id: "taoyuan", name: "新野（桃園）", lat: 24.994, lng: 121.301, status: "allied", tier: "minor", controllerId: "liu_bei" },
-  { id: "hsinchu", name: "隆中（新竹）", lat: 24.804, lng: 120.972, status: "allied", tier: "minor", controllerId: "liu_bei" },
-  { id: "chiayi", name: "長沙（嘉義）", lat: 23.480, lng: 120.449, status: "neutral", tier: "minor" },
-  { id: "hualien", name: "南蠻（花蓮）", lat: 23.992, lng: 121.601, status: "dead", tier: "minor" },
-  { id: "keelung", name: "北海（基隆）", lat: 25.128, lng: 121.740, status: "allied", tier: "minor", controllerId: "liu_bei" },
-  { id: "pingtung", name: "交州（屏東）", lat: 22.682, lng: 120.484, status: "neutral", tier: "minor" },
+  // Major cities (gold: 0, garrison: 2)
+  { id: "taipei", name: "許都（台北）", lat: 25.033, lng: 121.565, status: "allied", tier: "major", controllerId: "liu_bei", gold: 0, garrison: 2 },
+  { id: "taichung", name: "鄴城（台中）", lat: 24.147, lng: 120.674, status: "hostile", tier: "major", controllerId: "cao_cao", gold: 0, garrison: 2 },
+  { id: "tainan", name: "建業（台南）", lat: 22.999, lng: 120.227, status: "neutral", tier: "major", controllerId: "sun_quan", gold: 0, garrison: 2 },
+  { id: "kaohsiung", name: "下邳（高雄）", lat: 22.627, lng: 120.301, status: "hostile", tier: "major", controllerId: "lu_bu", gold: 0, garrison: 2 },
+  // Minor cities (gold: 0, garrison: 1)
+  { id: "taoyuan", name: "新野（桃園）", lat: 24.994, lng: 121.301, status: "allied", tier: "minor", controllerId: "liu_bei", gold: 0, garrison: 1 },
+  { id: "hsinchu", name: "隆中（新竹）", lat: 24.804, lng: 120.972, status: "allied", tier: "minor", controllerId: "liu_bei", gold: 0, garrison: 1 },
+  { id: "chiayi", name: "長沙（嘉義）", lat: 23.480, lng: 120.449, status: "neutral", tier: "minor", gold: 0, garrison: 0 },
+  { id: "hualien", name: "南蠻（花蓮）", lat: 23.992, lng: 121.601, status: "dead", tier: "minor", gold: 0, garrison: 0 },
+  { id: "keelung", name: "北海（基隆）", lat: 25.128, lng: 121.740, status: "allied", tier: "minor", controllerId: "liu_bei", gold: 0, garrison: 1 },
+  { id: "pingtung", name: "交州（屏東）", lat: 22.682, lng: 120.484, status: "neutral", tier: "minor", gold: 0, garrison: 0 },
 ];
 
 const relationships: RelationshipEdge[] = [
