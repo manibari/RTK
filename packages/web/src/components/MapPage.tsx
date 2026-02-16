@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { trpc } from "../lib/trpc";
 import { Timeline } from "./Timeline";
 
-// Dynamically import StrategicMap to avoid SSR issues with Leaflet
 const StrategicMap = dynamic(
   () => import("./StrategicMap").then((m) => ({ default: m.StrategicMap })),
   { ssr: false },
@@ -42,6 +41,27 @@ interface MapData {
   movements: Movement[];
 }
 
+interface FactionInfo {
+  id: string;
+  leaderId: string;
+  leaderName: string;
+  members: string[];
+  cities: string[];
+  color: string;
+}
+
+interface BattleResult {
+  tick: number;
+  cityId: string;
+  cityName: string;
+  attackerId: string;
+  attackerName: string;
+  defenderId: string | null;
+  defenderName: string | null;
+  winner: "attacker" | "defender";
+  captured: boolean;
+}
+
 interface MapPageProps {
   currentTick: number;
   viewTick: number;
@@ -49,7 +69,7 @@ interface MapPageProps {
   playing: boolean;
   onPlayToggle: () => void;
   advancing: boolean;
-  onAdvanceDay: () => void;
+  onAdvanceDay: () => Promise<{ battleResults?: BattleResult[] } | undefined>;
 }
 
 export function MapPage({
@@ -63,12 +83,20 @@ export function MapPage({
 }: MapPageProps) {
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [selectedCity, setSelectedCity] = useState<PlaceNode | null>(null);
+  const [selectedChar, setSelectedChar] = useState<string | null>(null);
+  const [factions, setFactions] = useState<FactionInfo[]>([]);
+  const [battleLog, setBattleLog] = useState<BattleResult[]>([]);
+  const [commandCount, setCommandCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const fetchMapData = useCallback(async (tick: number) => {
     try {
-      const data = await trpc.map.getMapData.query({ tick });
+      const [data, facs] = await Promise.all([
+        trpc.map.getMapData.query({ tick }),
+        trpc.simulation.getFactions.query(),
+      ]);
       setMapData(data as MapData);
+      setFactions(facs as FactionInfo[]);
     } catch {
       // silently fail
     } finally {
@@ -80,16 +108,55 @@ export function MapPage({
     fetchMapData(viewTick);
   }, [viewTick, fetchMapData]);
 
+  // Refresh selected city when mapData changes
+  useEffect(() => {
+    if (selectedCity && mapData) {
+      const updated = mapData.cities.find((c) => c.id === selectedCity.id);
+      if (updated) setSelectedCity(updated);
+    }
+  }, [mapData]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleCityClick = useCallback((cityId: string) => {
     if (!mapData) return;
     const city = mapData.cities.find((c) => c.id === cityId) ?? null;
     setSelectedCity(city);
+    setSelectedChar(null);
   }, [mapData]);
 
   const charsInCity = useMemo(() => {
     if (!selectedCity || !mapData) return [];
     return mapData.characters.filter((c) => c.cityId === selectedCity.id);
   }, [selectedCity, mapData]);
+
+  const handleCommand = async (type: "move" | "attack") => {
+    if (!selectedChar || !selectedCity) return;
+    try {
+      await trpc.simulation.queueCommand.mutate({
+        type,
+        characterId: selectedChar,
+        targetCityId: selectedCity.id,
+      });
+      setCommandCount((c) => c + 1);
+    } catch {
+      // silently fail
+    }
+  };
+
+  const handleAdvance = async () => {
+    const result = await onAdvanceDay();
+    if (result?.battleResults && result.battleResults.length > 0) {
+      setBattleLog((prev) => [...prev, ...result.battleResults!]);
+    }
+    setCommandCount(0);
+    // Refetch map data
+    fetchMapData(viewTick + 1);
+  };
+
+  const controllerName = (controllerId?: string) => {
+    if (!controllerId || !mapData) return "無";
+    const char = mapData.characters.find((c) => c.id === controllerId);
+    return char?.name ?? controllerId;
+  };
 
   return (
     <div style={styles.layout}>
@@ -98,10 +165,13 @@ export function MapPage({
           <div style={styles.headerLeft}>
             <h1 style={styles.title}>RTK - Strategic Map</h1>
             <span style={styles.tick}>Day {viewTick}{viewTick !== currentTick ? ` (live: ${currentTick})` : ""}</span>
+            {commandCount > 0 && (
+              <span style={styles.cmdBadge}>{commandCount} 指令待執行</span>
+            )}
           </div>
           <div style={styles.controls}>
             <button
-              onClick={onAdvanceDay}
+              onClick={handleAdvance}
               disabled={advancing}
               style={{
                 ...styles.button,
@@ -133,7 +203,7 @@ export function MapPage({
         )}
       </div>
 
-      {/* City detail sidebar */}
+      {/* Sidebar */}
       <aside style={styles.sidebar}>
         {selectedCity ? (
           <>
@@ -149,13 +219,26 @@ export function MapPage({
                 <span style={styles.infoLabel}>等級</span>
                 <span>{selectedCity.tier === "major" ? "主城" : "支城"}</span>
               </div>
-              {selectedCity.controllerId && (
-                <div style={styles.infoRow}>
-                  <span style={styles.infoLabel}>控制者</span>
-                  <span>{selectedCity.controllerId}</span>
-                </div>
-              )}
+              <div style={styles.infoRow}>
+                <span style={styles.infoLabel}>控制者</span>
+                <span>{controllerName(selectedCity.controllerId)}</span>
+              </div>
             </div>
+
+            {/* Command buttons */}
+            {selectedChar && (
+              <div style={styles.cmdSection}>
+                <p style={styles.cmdLabel}>指令目標：{selectedCity.name}</p>
+                <div style={styles.cmdButtons}>
+                  <button style={styles.cmdMove} onClick={() => handleCommand("move")}>
+                    移動至此
+                  </button>
+                  <button style={styles.cmdAttack} onClick={() => handleCommand("attack")}>
+                    攻擊此城
+                  </button>
+                </div>
+              </div>
+            )}
 
             <h3 style={styles.sideSubtitle}>
               駐軍 ({charsInCity.length})
@@ -165,16 +248,76 @@ export function MapPage({
             ) : (
               <div style={styles.charList}>
                 {charsInCity.map((c) => (
-                  <div key={c.id} style={styles.charItem}>
+                  <div
+                    key={c.id}
+                    style={{
+                      ...styles.charItem,
+                      border: selectedChar === c.id ? "1px solid #f59e0b" : "1px solid transparent",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setSelectedChar(selectedChar === c.id ? null : c.id)}
+                  >
                     <span style={styles.charName}>{c.name}</span>
                     <span style={styles.charTraits}>{c.traits.join("、")}</span>
+                    {selectedChar === c.id && (
+                      <span style={styles.selectedTag}>已選取</span>
+                    )}
                   </div>
                 ))}
               </div>
             )}
+
+            {/* Faction summary */}
+            <h3 style={styles.sideSubtitle}>勢力概況</h3>
+            <div style={styles.factionList}>
+              {factions.map((f) => (
+                <div key={f.id} style={styles.factionItem}>
+                  <span style={{ ...styles.factionDot, backgroundColor: f.color }} />
+                  <span style={styles.factionName}>{f.leaderName}</span>
+                  <span style={styles.factionStats}>
+                    {f.cities.length}城 {f.members.length}將
+                  </span>
+                </div>
+              ))}
+            </div>
           </>
         ) : (
-          <p style={styles.hint}>點擊城市查看詳情</p>
+          <>
+            <p style={styles.hint}>點擊城市查看詳情</p>
+
+            {/* Battle log */}
+            {battleLog.length > 0 && (
+              <>
+                <h3 style={{ ...styles.sideSubtitle, marginTop: 24 }}>戰報</h3>
+                <div style={styles.battleList}>
+                  {[...battleLog].reverse().map((b, i) => (
+                    <div key={i} style={styles.battleItem}>
+                      <span style={styles.battleDay}>Day {b.tick}</span>
+                      <p style={styles.battleText}>
+                        {b.attackerName} {b.captured ? "攻陷" : "未能攻下"}{" "}
+                        <strong>{b.cityName}</strong>
+                        {b.defenderName && ` (守將：${b.defenderName})`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Faction summary */}
+            <h3 style={{ ...styles.sideSubtitle, marginTop: 24 }}>勢力概況</h3>
+            <div style={styles.factionList}>
+              {factions.map((f) => (
+                <div key={f.id} style={styles.factionItem}>
+                  <span style={{ ...styles.factionDot, backgroundColor: f.color }} />
+                  <span style={styles.factionName}>{f.leaderName}</span>
+                  <span style={styles.factionStats}>
+                    {f.cities.length}城 {f.members.length}將
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </aside>
     </div>
@@ -202,126 +345,41 @@ function statusLabel(status: string): string {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  layout: {
-    display: "flex",
-    height: "100%",
-  },
-  main: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    padding: 20,
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  headerLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    margin: 0,
-  },
-  tick: {
-    fontSize: 14,
-    color: "#f59e0b",
-    backgroundColor: "#1e293b",
-    padding: "4px 10px",
-    borderRadius: 6,
-    fontWeight: 600,
-  },
-  controls: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  },
-  button: {
-    padding: "8px 16px",
-    borderRadius: 6,
-    border: "none",
-    backgroundColor: "#f59e0b",
-    color: "#0f172a",
-    fontSize: 14,
-    fontWeight: 700,
-  },
-  loading: {
-    flex: 1,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 18,
-    color: "#64748b",
-  },
-  sidebar: {
-    width: 280,
-    padding: 20,
-    backgroundColor: "#1e293b",
-    borderLeft: "1px solid #334155",
-    color: "#e2e8f0",
-    overflowY: "auto",
-  },
-  sideTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginTop: 0,
-    marginBottom: 16,
-  },
-  sideSubtitle: {
-    fontSize: 14,
-    fontWeight: 600,
-    marginTop: 16,
-    marginBottom: 8,
-    paddingTop: 12,
-    borderTop: "1px solid #334155",
-  },
-  cityInfo: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-  },
-  infoRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    fontSize: 14,
-  },
-  infoLabel: {
-    color: "#94a3b8",
-  },
-  hint: {
-    color: "#64748b",
-    fontStyle: "italic",
-  },
-  emptyText: {
-    fontSize: 13,
-    color: "#64748b",
-    fontStyle: "italic",
-  },
-  charList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-  },
-  charItem: {
-    padding: "6px 10px",
-    backgroundColor: "#0f172a",
-    borderRadius: 6,
-  },
-  charName: {
-    fontSize: 14,
-    fontWeight: 600,
-    display: "block",
-  },
-  charTraits: {
-    fontSize: 12,
-    color: "#94a3b8",
-    display: "block",
-    marginTop: 2,
-  },
+  layout: { display: "flex", height: "100%" },
+  main: { flex: 1, display: "flex", flexDirection: "column", padding: 20 },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 },
+  headerLeft: { display: "flex", alignItems: "center", gap: 12 },
+  title: { fontSize: 22, fontWeight: "bold", margin: 0 },
+  tick: { fontSize: 14, color: "#f59e0b", backgroundColor: "#1e293b", padding: "4px 10px", borderRadius: 6, fontWeight: 600 },
+  cmdBadge: { fontSize: 12, color: "#0f172a", backgroundColor: "#f59e0b", padding: "2px 8px", borderRadius: 10, fontWeight: 700 },
+  controls: { display: "flex", alignItems: "center", gap: 8 },
+  button: { padding: "8px 16px", borderRadius: 6, border: "none", backgroundColor: "#f59e0b", color: "#0f172a", fontSize: 14, fontWeight: 700 },
+  loading: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#64748b" },
+  sidebar: { width: 280, padding: 20, backgroundColor: "#1e293b", borderLeft: "1px solid #334155", color: "#e2e8f0", overflowY: "auto" },
+  sideTitle: { fontSize: 18, fontWeight: "bold", marginTop: 0, marginBottom: 16 },
+  sideSubtitle: { fontSize: 14, fontWeight: 600, marginTop: 16, marginBottom: 8, paddingTop: 12, borderTop: "1px solid #334155" },
+  cityInfo: { display: "flex", flexDirection: "column", gap: 8 },
+  infoRow: { display: "flex", justifyContent: "space-between", fontSize: 14 },
+  infoLabel: { color: "#94a3b8" },
+  hint: { color: "#64748b", fontStyle: "italic" },
+  emptyText: { fontSize: 13, color: "#64748b", fontStyle: "italic" },
+  charList: { display: "flex", flexDirection: "column", gap: 6 },
+  charItem: { padding: "6px 10px", backgroundColor: "#0f172a", borderRadius: 6 },
+  charName: { fontSize: 14, fontWeight: 600, display: "block" },
+  charTraits: { fontSize: 12, color: "#94a3b8", display: "block", marginTop: 2 },
+  selectedTag: { fontSize: 10, color: "#f59e0b", fontWeight: 700, marginTop: 4, display: "block" },
+  cmdSection: { marginTop: 12, padding: "10px 12px", backgroundColor: "#0f172a", borderRadius: 8, borderLeft: "3px solid #f59e0b" },
+  cmdLabel: { fontSize: 12, color: "#f59e0b", margin: "0 0 8px" },
+  cmdButtons: { display: "flex", gap: 8 },
+  cmdMove: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  cmdAttack: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  factionList: { display: "flex", flexDirection: "column", gap: 6 },
+  factionItem: { display: "flex", alignItems: "center", gap: 8, fontSize: 13 },
+  factionDot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0 },
+  factionName: { fontWeight: 600 },
+  factionStats: { color: "#94a3b8", marginLeft: "auto" },
+  battleList: { display: "flex", flexDirection: "column", gap: 6 },
+  battleItem: { padding: "6px 10px", backgroundColor: "#0f172a", borderRadius: 6, borderLeft: "3px solid #ef4444" },
+  battleDay: { fontSize: 11, color: "#f59e0b", fontWeight: 600 },
+  battleText: { fontSize: 13, color: "#cbd5e1", margin: "4px 0 0", lineHeight: 1.4 },
 };

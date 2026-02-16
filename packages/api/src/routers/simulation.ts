@@ -45,4 +45,30 @@ export const simulationRouter = router({
   getCurrentTick: publicProcedure.query(({ ctx }) => {
     return { tick: ctx.simulation.currentTick };
   }),
+
+  // Player commands
+  queueCommand: publicProcedure
+    .input(z.object({
+      type: z.enum(["move", "attack"]),
+      characterId: z.string(),
+      targetCityId: z.string(),
+    }))
+    .mutation(({ ctx, input }) => {
+      ctx.simulation.queueCommand(input);
+      return { queued: true, command: input };
+    }),
+
+  getCommandQueue: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getCommandQueue();
+  }),
+
+  clearCommandQueue: publicProcedure.mutation(({ ctx }) => {
+    ctx.simulation.clearCommandQueue();
+    return { cleared: true };
+  }),
+
+  // Factions
+  getFactions: publicProcedure.query(async ({ ctx }) => {
+    return ctx.simulation.getFactions();
+  }),
 });

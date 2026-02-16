@@ -12,7 +12,43 @@ export interface AdvanceDayResult {
   tick: number;
   events: StoredEvent[];
   dailySummary: string;
+  battleResults: BattleResult[];
 }
+
+export interface PlayerCommand {
+  type: "move" | "attack";
+  characterId: string;
+  targetCityId: string;
+}
+
+export interface BattleResult {
+  tick: number;
+  cityId: string;
+  cityName: string;
+  attackerId: string;
+  attackerName: string;
+  defenderId: string | null;
+  defenderName: string | null;
+  winner: "attacker" | "defender";
+  captured: boolean;
+}
+
+export interface FactionInfo {
+  id: string;
+  leaderId: string;
+  leaderName: string;
+  members: string[];
+  cities: string[];
+  color: string;
+}
+
+// Faction definitions
+const FACTIONS: { id: string; leaderId: string; members: string[]; color: string }[] = [
+  { id: "shu", leaderId: "liu_bei", members: ["liu_bei", "guan_yu", "zhang_fei", "zhuge_liang", "zhao_yun"], color: "#3b82f6" },
+  { id: "wei", leaderId: "cao_cao", members: ["cao_cao"], color: "#ef4444" },
+  { id: "wu", leaderId: "sun_quan", members: ["sun_quan", "zhou_yu"], color: "#22c55e" },
+  { id: "lu_bu", leaderId: "lu_bu", members: ["lu_bu", "diao_chan"], color: "#a855f7" },
+];
 
 export class SimulationService {
   private engine: Engine;
@@ -21,6 +57,7 @@ export class SimulationService {
   private narrative: NarrativeService | null = null;
   private initialRelationships: RelationshipEdge[] = [];
   private dailySummaries = new Map<number, string>();
+  private commandQueue: PlayerCommand[] = [];
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -52,6 +89,52 @@ export class SimulationService {
     return this.engine.world.tick;
   }
 
+  // Player command API
+  queueCommand(cmd: PlayerCommand): void {
+    this.commandQueue.push(cmd);
+  }
+
+  getCommandQueue(): PlayerCommand[] {
+    return [...this.commandQueue];
+  }
+
+  clearCommandQueue(): void {
+    this.commandQueue = [];
+  }
+
+  // Faction queries
+  async getFactions(): Promise<FactionInfo[]> {
+    const characters = await this.repo.getAllCharacters();
+    const cities = await this.repo.getAllPlaces();
+    const charMap = new Map(characters.map((c) => [c.id, c]));
+
+    return FACTIONS.map((f) => {
+      const leader = charMap.get(f.leaderId);
+      const controlledCities = cities
+        .filter((city) => {
+          if (!city.controllerId) return false;
+          return f.members.includes(city.controllerId);
+        })
+        .map((c) => c.id);
+
+      return {
+        id: f.id,
+        leaderId: f.leaderId,
+        leaderName: leader?.name ?? f.leaderId,
+        members: f.members,
+        cities: controlledCities,
+        color: f.color,
+      };
+    });
+  }
+
+  getFactionOf(characterId: string): string | null {
+    for (const f of FACTIONS) {
+      if (f.members.includes(characterId)) return f.id;
+    }
+    return null;
+  }
+
   async advanceDay(): Promise<AdvanceDayResult> {
     const simEvents = this.engine.advanceDay();
 
@@ -78,8 +161,14 @@ export class SimulationService {
       await this.repo.setRelationship(rel);
     }
 
-    // Generate random movements (20% chance per character)
+    // Execute player commands
+    await this.executeCommands();
+
+    // Generate random movements (20% chance per character, skip commanded ones)
     await this.generateMovements();
+
+    // Resolve arrivals and battles
+    const battleResults = await this.resolveArrivals();
 
     // Fetch events with IDs
     const tickEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
@@ -101,10 +190,10 @@ export class SimulationService {
 
       // Re-read events with narratives
       const updatedEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
-      return { tick: this.currentTick, events: updatedEvents, dailySummary };
+      return { tick: this.currentTick, events: updatedEvents, dailySummary, battleResults };
     }
 
-    return { tick: this.currentTick, events: tickEvents, dailySummary };
+    return { tick: this.currentTick, events: tickEvents, dailySummary, battleResults };
   }
 
   getDailySummary(tick: number): string {
@@ -195,6 +284,33 @@ export class SimulationService {
     return this.eventStore.getByPair(actorId, targetId);
   }
 
+  private commandedThisTick = new Set<string>();
+
+  private async executeCommands(): Promise<void> {
+    this.commandedThisTick.clear();
+    const commands = [...this.commandQueue];
+    this.commandQueue = [];
+
+    for (const cmd of commands) {
+      const char = await this.repo.getCharacter(cmd.characterId);
+      if (!char || !char.cityId) continue;
+      if (char.cityId === cmd.targetCityId) continue;
+
+      this.commandedThisTick.add(cmd.characterId);
+      const travelTime = cmd.type === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+
+      await this.repo.addMovement({
+        characterId: cmd.characterId,
+        originCityId: char.cityId,
+        destinationCityId: cmd.targetCityId,
+        departureTick: this.currentTick,
+        arrivalTick: this.currentTick + travelTime,
+      });
+
+      await this.repo.createCharacter({ ...char, cityId: cmd.targetCityId });
+    }
+  }
+
   private async generateMovements(): Promise<void> {
     const characters = await this.repo.getAllCharacters();
     const cities = await this.repo.getAllPlaces();
@@ -204,13 +320,14 @@ export class SimulationService {
     if (activeCityIds.length < 2) return;
 
     for (const char of characters) {
-      if (!char.cityId || Math.random() > 0.2) continue;
+      if (!char.cityId || Math.random() > 0.15) continue;
+      if (this.commandedThisTick.has(char.id)) continue;
 
       const destinations = activeCityIds.filter((id) => id !== char.cityId);
       if (destinations.length === 0) continue;
 
       const destId = destinations[Math.floor(Math.random() * destinations.length)];
-      const travelTime = 1 + Math.floor(Math.random() * 3); // 1-3 ticks
+      const travelTime = 1 + Math.floor(Math.random() * 3);
 
       await this.repo.addMovement({
         characterId: char.id,
@@ -220,9 +337,66 @@ export class SimulationService {
         arrivalTick: this.currentTick + travelTime,
       });
 
-      // Update character's city upon arrival (immediate for simplicity)
       await this.repo.createCharacter({ ...char, cityId: destId });
     }
+  }
+
+  private async resolveArrivals(): Promise<BattleResult[]> {
+    const results: BattleResult[] = [];
+    const movements = await this.repo.getActiveMovements(this.currentTick);
+
+    // Find movements that arrive this tick
+    const arrivals = movements.filter((m) => m.arrivalTick === this.currentTick);
+
+    for (const arrival of arrivals) {
+      const city = await this.repo.getPlace(arrival.destinationCityId);
+      if (!city) continue;
+
+      const arriverFaction = this.getFactionOf(arrival.characterId);
+      const controllerFaction = city.controllerId ? this.getFactionOf(city.controllerId) : null;
+
+      // No battle if same faction or uncontrolled
+      if (!city.controllerId || arriverFaction === controllerFaction) continue;
+
+      const attacker = await this.repo.getCharacter(arrival.characterId);
+      const defender = city.controllerId ? await this.repo.getCharacter(city.controllerId) : null;
+      if (!attacker) continue;
+
+      // Battle resolution: compare trait counts + random factor
+      const attackPower = attacker.traits.length + Math.random() * 3;
+      const defensePower = defender ? defender.traits.length + Math.random() * 3 : Math.random() * 2;
+
+      const attackerWins = attackPower > defensePower;
+
+      if (attackerWins) {
+        // Attacker captures city
+        const newStatus = this.factionToStatus(arriverFaction);
+        await this.repo.updatePlace(city.id, {
+          controllerId: attacker.id,
+          status: newStatus,
+        });
+      }
+
+      results.push({
+        tick: this.currentTick,
+        cityId: city.id,
+        cityName: city.name,
+        attackerId: attacker.id,
+        attackerName: attacker.name,
+        defenderId: defender?.id ?? null,
+        defenderName: defender?.name ?? null,
+        winner: attackerWins ? "attacker" : "defender",
+        captured: attackerWins,
+      });
+    }
+
+    return results;
+  }
+
+  private factionToStatus(factionId: string | null): "allied" | "hostile" | "neutral" {
+    if (factionId === "shu") return "allied";
+    if (factionId === "wei" || factionId === "lu_bu") return "hostile";
+    return "neutral";
   }
 }
 
