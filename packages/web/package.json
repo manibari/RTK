@@ -1,0 +1,30 @@
+{
+  "name": "@rtk/web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "start": "next start",
+    "type-check": "tsc --noEmit",
+    "lint": "next lint",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@rtk/api": "workspace:*",
+    "@trpc/client": "^11.10.0",
+    "@trpc/server": "^11.10.0",
+    "cytoscape": "^3.33.1",
+    "next": "^15",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@types/cytoscape": "^3.31.0",
+    "@types/node": "25.2.3",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "vitest": "^3"
+  }
+}

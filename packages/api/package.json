@@ -1,0 +1,29 @@
+{
+  "name": "@rtk/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/server.ts",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@rtk/graph-db": "workspace:*",
+    "@rtk/simulation": "workspace:*",
+    "@trpc/server": "^11.10.0",
+    "better-sqlite3": "^12.6.2",
+    "cors": "^2.8.6",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "tsx": "^4.21.0",
+    "vitest": "^3"
+  }
+}
