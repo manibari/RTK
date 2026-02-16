@@ -143,6 +143,19 @@ export function MapPage({
     return mapData.characters.filter((c) => c.cityId === selectedCity.id);
   }, [selectedCity, mapData]);
 
+  const handleReinforce = async (cityId: string) => {
+    try {
+      await trpc.simulation.queueCommand.mutate({
+        type: "reinforce",
+        characterId: "liu_bei", // unused for reinforce but required by schema
+        targetCityId: cityId,
+      });
+      setCommandCount((c) => c + 1);
+    } catch {
+      // silently fail
+    }
+  };
+
   const handleCommand = async (type: "move" | "attack") => {
     if (!selectedChar || !selectedCity) return;
     try {
@@ -261,6 +274,16 @@ export function MapPage({
                     攻擊此城
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Reinforce button */}
+            {selectedCity.status === "allied" && (selectedCity.gold ?? 0) >= 100 && (
+              <div style={styles.cmdSection}>
+                <p style={styles.cmdLabel}>強化守備（消耗 100 金幣）</p>
+                <button style={styles.reinforceBtn} onClick={() => handleReinforce(selectedCity.id)}>
+                  強化守備 +1
+                </button>
               </div>
             )}
 
@@ -418,6 +441,7 @@ const styles: Record<string, React.CSSProperties> = {
   cmdButtons: { display: "flex", gap: 8 },
   cmdMove: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   cmdAttack: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  reinforceBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   factionList: { display: "flex", flexDirection: "column", gap: 6 },
   factionItem: { display: "flex", alignItems: "center", gap: 8, fontSize: 13 },
   factionDot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0 },

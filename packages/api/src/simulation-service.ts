@@ -36,7 +36,7 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit";
+  type: "move" | "attack" | "recruit" | "reinforce";
   characterId: string;
   targetCityId: string;
   targetCharacterId?: string; // for recruit
@@ -256,6 +256,9 @@ export class SimulationService {
     // NPC AI decisions
     await this.runNPCDecisions();
 
+    // NPC factions spend gold to reinforce weak cities
+    await this.npcReinforce();
+
     // Generate random movements for remaining idle characters (10%)
     await this.generateMovements();
 
@@ -421,6 +424,17 @@ export class SimulationService {
     this.commandQueue = [];
 
     for (const cmd of commands) {
+      // Reinforce: spend gold to increase garrison
+      if (cmd.type === "reinforce") {
+        const city = await this.repo.getPlace(cmd.targetCityId);
+        if (!city || city.gold < 100) continue;
+        await this.repo.updatePlace(city.id, {
+          gold: city.gold - 100,
+          garrison: city.garrison + 1,
+        });
+        continue;
+      }
+
       const char = await this.repo.getCharacter(cmd.characterId);
       if (!char || !char.cityId) continue;
       if (char.cityId === cmd.targetCityId) continue;
@@ -467,6 +481,26 @@ export class SimulationService {
       });
 
       await this.repo.createCharacter({ ...char, cityId: destId });
+    }
+  }
+
+  private async npcReinforce(): Promise<void> {
+    const cities = await this.repo.getAllPlaces();
+    for (const faction of FACTIONS) {
+      if (faction.id === "shu") continue; // Player controls shu spending
+      const factionCities = cities.filter(
+        (c) => c.controllerId && faction.members.includes(c.controllerId),
+      );
+      // Find weakest garrison city with enough gold
+      const weakest = factionCities
+        .filter((c) => c.gold >= 100)
+        .sort((a, b) => a.garrison - b.garrison)[0];
+      if (weakest) {
+        await this.repo.updatePlace(weakest.id, {
+          gold: weakest.gold - 100,
+          garrison: weakest.garrison + 1,
+        });
+      }
     }
   }
 
@@ -703,6 +737,65 @@ export class SimulationService {
 
   areAllied(factionA: string, factionB: string): boolean {
     return this.alliances.has(this.allianceKey(factionA, factionB));
+  }
+
+  async proposeAlliance(factionId: string): Promise<{ success: boolean; reason: string }> {
+    const playerFaction = "shu";
+    if (factionId === playerFaction) return { success: false, reason: "Cannot ally with yourself" };
+    const key = this.allianceKey(playerFaction, factionId);
+    if (this.alliances.has(key)) return { success: false, reason: "Already allied" };
+
+    // Check leader intimacy
+    const playerLeader = FACTIONS.find((f) => f.id === playerFaction)?.leaderId;
+    const targetLeader = FACTIONS.find((f) => f.id === factionId)?.leaderId;
+    if (!playerLeader || !targetLeader) return { success: false, reason: "Faction not found" };
+
+    const rels = this.engine.getRelationships();
+    const rel = rels.find(
+      (r) =>
+        (r.sourceId === playerLeader && r.targetId === targetLeader) ||
+        (r.sourceId === targetLeader && r.targetId === playerLeader),
+    );
+    const intimacy = rel?.intimacy ?? 0;
+
+    if (intimacy < 40) return { success: false, reason: `親密度不足（${intimacy}/40）` };
+
+    this.alliances.add(key);
+    return { success: true, reason: `與 ${targetLeader} 結盟成功` };
+  }
+
+  breakAlliance(factionId: string): { success: boolean; reason: string } {
+    const playerFaction = "shu";
+    const key = this.allianceKey(playerFaction, factionId);
+    if (!this.alliances.has(key)) return { success: false, reason: "No alliance exists" };
+    this.alliances.delete(key);
+    return { success: true, reason: "Alliance broken" };
+  }
+
+  async getFactionStats(): Promise<{ id: string; name: string; color: string; gold: number; cities: number; characters: number; power: number; }[]> {
+    const characters = await this.repo.getAllCharacters();
+    const cities = await this.repo.getAllPlaces();
+    const charMap = new Map(characters.map((c) => [c.id, c]));
+
+    return FACTIONS.map((f) => {
+      const leader = charMap.get(f.leaderId);
+      const factionCities = cities.filter((c) => c.controllerId && f.members.includes(c.controllerId));
+      const totalGold = factionCities.reduce((sum, c) => sum + c.gold, 0);
+      const totalPower = f.members.reduce((sum, mId) => {
+        const ch = charMap.get(mId);
+        return sum + (ch ? ch.traits.length * 2 : 0);
+      }, 0) + factionCities.reduce((sum, c) => sum + c.garrison, 0);
+
+      return {
+        id: f.id,
+        name: leader?.name ?? f.leaderId,
+        color: f.color,
+        gold: totalGold,
+        cities: factionCities.length,
+        characters: f.members.length,
+        power: totalPower,
+      };
+    });
   }
 
   private async checkGameOver(): Promise<GameStatus> {

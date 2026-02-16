@@ -7,6 +7,8 @@ interface BattleResult {
   defenderName: string | null;
   winner: "attacker" | "defender";
   captured: boolean;
+  attackPower?: number;
+  defensePower?: number;
 }
 
 interface DiplomacyEvent {
@@ -36,9 +38,10 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
   const entries: GameLogEntry[] = [];
 
   for (const b of battles) {
+    const powerStr = b.attackPower != null ? ` [攻:${b.attackPower} vs 守:${b.defensePower}]` : "";
     const result = b.captured
-      ? `${b.attackerName} 攻陷 ${b.cityName}${b.defenderName ? `（守將：${b.defenderName}）` : ""}`
-      : `${b.attackerName} 未能攻下 ${b.cityName}${b.defenderName ? `（${b.defenderName} 防守成功）` : ""}`;
+      ? `${b.attackerName} 攻陷 ${b.cityName}${b.defenderName ? `（守將：${b.defenderName}）` : ""}${powerStr}`
+      : `${b.attackerName} 未能攻下 ${b.cityName}${b.defenderName ? `（${b.defenderName} 防守成功）` : ""}${powerStr}`;
     entries.push({ tick: b.tick, type: "battle", text: result, color: b.captured ? "#ef4444" : "#94a3b8" });
   }
 

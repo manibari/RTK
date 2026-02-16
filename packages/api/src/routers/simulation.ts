@@ -49,7 +49,7 @@ export const simulationRouter = router({
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
-      type: z.enum(["move", "attack", "recruit"]),
+      type: z.enum(["move", "attack", "recruit", "reinforce"]),
       characterId: z.string(),
       targetCityId: z.string(),
       targetCharacterId: z.string().optional(),
@@ -80,6 +80,22 @@ export const simulationRouter = router({
 
   getAlliances: publicProcedure.query(({ ctx }) => {
     return ctx.simulation.getAlliances();
+  }),
+
+  proposeAlliance: publicProcedure
+    .input(z.object({ factionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.simulation.proposeAlliance(input.factionId);
+    }),
+
+  breakAlliance: publicProcedure
+    .input(z.object({ factionId: z.string() }))
+    .mutation(({ ctx, input }) => {
+      return ctx.simulation.breakAlliance(input.factionId);
+    }),
+
+  getFactionStats: publicProcedure.query(async ({ ctx }) => {
+    return ctx.simulation.getFactionStats();
   }),
 
   // Reset

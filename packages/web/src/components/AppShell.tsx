@@ -5,9 +5,10 @@ import { trpc } from "../lib/trpc";
 import { GraphPage } from "./GraphPage";
 import { MapPage } from "./MapPage";
 import { GameLog } from "./GameLog";
+import { StatsPanel } from "./StatsPanel";
 import { ToastStack, createToastId, type ToastMessage } from "./ToastStack";
 
-type ViewTab = "graph" | "map" | "log";
+type ViewTab = "graph" | "map" | "log" | "stats";
 type SimSpeed = 1 | 2 | 5;
 
 interface BattleResult {
@@ -20,6 +21,8 @@ interface BattleResult {
   defenderName: string | null;
   winner: "attacker" | "defender";
   captured: boolean;
+  attackPower?: number;
+  defensePower?: number;
 }
 
 interface DiplomacyEvent {
@@ -124,9 +127,10 @@ export function AppShell() {
       if (result.battleResults?.length > 0) {
         setAllBattles((prev) => [...prev, ...result.battleResults]);
         for (const b of result.battleResults) {
+          const powerStr = b.attackPower != null ? ` [${b.attackPower} vs ${b.defensePower}]` : "";
           const text = b.captured
-            ? `${b.attackerName} 攻陷 ${b.cityName}`
-            : `${b.attackerName} 未能攻下 ${b.cityName}`;
+            ? `${b.attackerName} 攻陷 ${b.cityName}${powerStr}`
+            : `${b.attackerName} 未能攻下 ${b.cityName}${powerStr}`;
           addToast(text, b.captured ? "#ef4444" : "#64748b");
         }
       }
@@ -238,6 +242,12 @@ export function AppShell() {
               <span style={styles.logBadge}>{allBattles.length + allDiplomacy.length}</span>
             )}
           </button>
+          <button
+            style={activeTab === "stats" ? styles.tabActive : styles.tab}
+            onClick={() => setActiveTab("stats")}
+          >
+            勢力
+          </button>
         </div>
 
         {/* Auto-simulate controls */}
@@ -288,13 +298,15 @@ export function AppShell() {
             advancing={advancing || autoSim || gameStatus !== "ongoing"}
             onAdvanceDay={handleAdvanceDay}
           />
-        ) : (
+        ) : activeTab === "log" ? (
           <GameLog
             battles={allBattles}
             diplomacy={allDiplomacy}
             summaries={summaries}
             currentTick={currentTick}
           />
+        ) : (
+          <StatsPanel currentTick={currentTick} />
         )}
       </div>
 
