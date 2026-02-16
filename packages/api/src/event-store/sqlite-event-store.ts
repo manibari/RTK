@@ -22,7 +22,8 @@ export class SqliteEventStore implements IEventStore {
         intimacy_change INTEGER NOT NULL,
         old_intimacy INTEGER NOT NULL,
         new_intimacy INTEGER NOT NULL,
-        relation TEXT NOT NULL
+        relation TEXT NOT NULL,
+        narrative TEXT NOT NULL DEFAULT ''
       )
     `);
     this.db.exec(`CREATE INDEX IF NOT EXISTS idx_events_tick ON events(tick)`);
@@ -32,8 +33,8 @@ export class SqliteEventStore implements IEventStore {
 
   append(events: Omit<StoredEvent, "id">[]): void {
     const stmt = this.db.prepare(`
-      INSERT INTO events (tick, timestamp, actor_id, target_id, event_code, intimacy_change, old_intimacy, new_intimacy, relation)
-      VALUES (@tick, @timestamp, @actorId, @targetId, @eventCode, @intimacyChange, @oldIntimacy, @newIntimacy, @relation)
+      INSERT INTO events (tick, timestamp, actor_id, target_id, event_code, intimacy_change, old_intimacy, new_intimacy, relation, narrative)
+      VALUES (@tick, @timestamp, @actorId, @targetId, @eventCode, @intimacyChange, @oldIntimacy, @newIntimacy, @relation, @narrative)
     `);
 
     const insertMany = this.db.transaction((evts: Omit<StoredEvent, "id">[]) => {
@@ -41,6 +42,14 @@ export class SqliteEventStore implements IEventStore {
     });
 
     insertMany(events);
+  }
+
+  updateNarratives(updates: { id: number; narrative: string }[]): void {
+    const stmt = this.db.prepare(`UPDATE events SET narrative = ? WHERE id = ?`);
+    const updateMany = this.db.transaction((items: { id: number; narrative: string }[]) => {
+      for (const item of items) stmt.run(item.narrative, item.id);
+    });
+    updateMany(updates);
   }
 
   getByCharacter(characterId: string, fromTick?: number, toTick?: number): StoredEvent[] {
@@ -110,5 +119,6 @@ function rowToEvent(row: unknown): StoredEvent {
     oldIntimacy: r.old_intimacy as number,
     newIntimacy: r.new_intimacy as number,
     relation: r.relation as string,
+    narrative: (r.narrative as string) ?? "",
   };
 }

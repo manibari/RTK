@@ -22,6 +22,8 @@ interface SidebarProps {
   pairEvents: PairEvent[];
   timeline: TimelinePoint[];
   viewTick: number;
+  dailySummary: string;
+  currentTick: number;
 }
 
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
@@ -30,11 +32,23 @@ const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   neutral: { label: "中立", color: "#9ca3af" },
 };
 
-export function Sidebar({ selectedEdge, characters, pairEvents, timeline, viewTick }: SidebarProps) {
+export function Sidebar({ selectedEdge, characters, pairEvents, timeline, viewTick, dailySummary, currentTick }: SidebarProps) {
+  // No edge selected — show daily summary
   if (!selectedEdge) {
     return (
       <aside style={styles.container}>
-        <p style={styles.hint}>點擊連線查看關係詳情</p>
+        {currentTick > 0 && dailySummary ? (
+          <>
+            <h2 style={styles.title}>今日總結</h2>
+            <div style={styles.summaryBox}>
+              <span style={styles.summaryDay}>Day {currentTick}</span>
+              <p style={styles.summaryText}>{dailySummary}</p>
+            </div>
+            <p style={{ ...styles.hint, marginTop: 16 }}>點擊連線查看關係詳情</p>
+          </>
+        ) : (
+          <p style={styles.hint}>點擊連線查看關係詳情</p>
+        )}
       </aside>
     );
   }
@@ -77,21 +91,7 @@ export function Sidebar({ selectedEdge, characters, pairEvents, timeline, viewTi
         <TrendChart data={timeline} viewTick={viewTick} />
       </div>
 
-      {source && (
-        <div style={styles.section}>
-          <h3 style={styles.subtitle}>{source.name}</h3>
-          <p style={styles.traits}>{source.traits.join(", ")}</p>
-        </div>
-      )}
-
-      {target && (
-        <div style={styles.section}>
-          <h3 style={styles.subtitle}>{target.name}</h3>
-          <p style={styles.traits}>{target.traits.join(", ")}</p>
-        </div>
-      )}
-
-      {/* Event History */}
+      {/* Event History with Narratives */}
       <div style={styles.eventSection}>
         <h3 style={styles.subtitle}>
           事件紀錄 ({pairEvents.length})
@@ -101,8 +101,6 @@ export function Sidebar({ selectedEdge, characters, pairEvents, timeline, viewTi
         ) : (
           <div style={styles.eventList}>
             {[...pairEvents].reverse().map((evt) => {
-              const actorName = characters.get(evt.actorId)?.name ?? evt.actorId;
-              const targetName = characters.get(evt.targetId)?.name ?? evt.targetId;
               const isPositive = evt.intimacyChange > 0;
               return (
                 <div key={evt.id} style={styles.eventItem}>
@@ -117,10 +115,8 @@ export function Sidebar({ selectedEdge, characters, pairEvents, timeline, viewTi
                       {isPositive ? "+" : ""}{evt.intimacyChange}
                     </span>
                   </div>
-                  <p style={styles.eventText}>
-                    {actorName} 與 {targetName}{" "}
-                    {isPositive ? "正面互動" : "負面互動"}，
-                    好感度 {evt.oldIntimacy} → {evt.newIntimacy}
+                  <p style={styles.eventNarrative}>
+                    {evt.narrative || `好感度 ${evt.oldIntimacy} → ${evt.newIntimacy}`}
                   </p>
                 </div>
               );
@@ -152,6 +148,23 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: "bold",
     marginBottom: 16,
     marginTop: 0,
+  },
+  summaryBox: {
+    padding: "12px 14px",
+    backgroundColor: "#0f172a",
+    borderRadius: 8,
+    borderLeft: "3px solid #f59e0b",
+  },
+  summaryDay: {
+    fontSize: 11,
+    color: "#f59e0b",
+    fontWeight: 600,
+  },
+  summaryText: {
+    fontSize: 14,
+    lineHeight: 1.6,
+    margin: "8px 0 0",
+    color: "#cbd5e1",
   },
   pair: {
     display: "flex",
@@ -203,11 +216,6 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 4,
     marginTop: 0,
   },
-  traits: {
-    fontSize: 13,
-    color: "#94a3b8",
-    margin: 0,
-  },
   eventSection: {
     marginTop: 4,
     paddingTop: 12,
@@ -244,10 +252,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 700,
   },
-  eventText: {
-    fontSize: 12,
-    color: "#94a3b8",
+  eventNarrative: {
+    fontSize: 13,
+    color: "#cbd5e1",
     margin: 0,
-    lineHeight: 1.4,
+    lineHeight: 1.5,
   },
 };

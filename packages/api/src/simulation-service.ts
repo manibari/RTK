@@ -1,17 +1,26 @@
-import { Engine, type SimulationEvent } from "@rtk/simulation";
+import { Engine } from "@rtk/simulation";
 import type { IGraphRepository, RelationshipEdge, CharacterGraph } from "@rtk/graph-db";
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
+import { NarrativeService } from "./narrative/narrative-service.js";
 
 export interface TimelinePoint {
   tick: number;
   intimacy: number;
 }
 
+export interface AdvanceDayResult {
+  tick: number;
+  events: StoredEvent[];
+  dailySummary: string;
+}
+
 export class SimulationService {
   private engine: Engine;
   private repo: IGraphRepository;
   private eventStore: IEventStore;
+  private narrative: NarrativeService | null = null;
   private initialRelationships: RelationshipEdge[] = [];
+  private dailySummaries = new Map<number, string>();
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -22,6 +31,9 @@ export class SimulationService {
   async init(): Promise<void> {
     const characters = await this.repo.getAllCharacters();
     this.engine.loadCharacters(characters);
+
+    const characterMap = new Map(characters.map((c) => [c.id, c]));
+    this.narrative = new NarrativeService(characterMap);
 
     const seenPairs = new Set<string>();
     for (const c of characters) {
@@ -40,7 +52,7 @@ export class SimulationService {
     return this.engine.world.tick;
   }
 
-  async advanceDay(): Promise<StoredEvent[]> {
+  async advanceDay(): Promise<AdvanceDayResult> {
     const simEvents = this.engine.advanceDay();
 
     const storedEvents: Omit<StoredEvent, "id">[] = simEvents.map((e) => ({
@@ -53,36 +65,57 @@ export class SimulationService {
       oldIntimacy: e.resultDelta.oldIntimacy,
       newIntimacy: e.resultDelta.newIntimacy,
       relation: e.resultDelta.relation,
+      narrative: "",
     }));
 
     if (storedEvents.length > 0) {
       this.eventStore.append(storedEvents);
     }
 
+    // Sync relationships to graph
     const updatedRels = this.engine.getRelationships();
     for (const rel of updatedRels) {
       await this.repo.setRelationship(rel);
     }
 
-    return this.eventStore.getByTickRange(this.currentTick, this.currentTick);
+    // Fetch events with IDs
+    const tickEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
+
+    // Generate narratives (async, LLM or template)
+    let dailySummary = "";
+    if (this.narrative && tickEvents.length > 0) {
+      const [narratives, summary] = await Promise.all([
+        this.narrative.generateNarratives(tickEvents),
+        this.narrative.generateDailySummary(this.currentTick, tickEvents),
+      ]);
+
+      // Update event store with narratives
+      this.eventStore.updateNarratives(
+        narratives.map((n) => ({ id: n.eventId, narrative: n.narrative })),
+      );
+      dailySummary = summary;
+      this.dailySummaries.set(this.currentTick, summary);
+
+      // Re-read events with narratives
+      const updatedEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
+      return { tick: this.currentTick, events: updatedEvents, dailySummary };
+    }
+
+    return { tick: this.currentTick, events: tickEvents, dailySummary };
   }
 
-  /**
-   * Compute the relationship graph at a specific past tick by replaying events.
-   */
+  getDailySummary(tick: number): string {
+    return this.dailySummaries.get(tick) ?? "";
+  }
+
   async getGraphAtTick(centerId: string, depth: number, tick: number): Promise<CharacterGraph> {
-    // If tick >= currentTick, return live state
     if (tick >= this.currentTick) {
       return this.repo.getCharacterGraph(centerId, depth);
     }
 
-    // Start from initial relationships and replay events up to the requested tick
     const snapshotRels = this.computeRelationshipsAtTick(tick);
-
-    // Get full live graph for structure (characters + connectivity)
     const liveGraph = await this.repo.getCharacterGraph(centerId, depth);
 
-    // Replace intimacy/type values with snapshot values
     const relMap = new Map(
       snapshotRels.map((r) => {
         const key = [r.sourceId, r.targetId].sort().join(":");
@@ -106,14 +139,9 @@ export class SimulationService {
     };
   }
 
-  /**
-   * Get intimacy timeline for a pair of characters.
-   * Returns one data point per tick from tick 0 (initial) through currentTick.
-   */
   getIntimacyTimeline(actorId: string, targetId: string): TimelinePoint[] {
     const events = this.eventStore.getByPair(actorId, targetId);
 
-    // Find initial intimacy for this pair
     const initial = this.initialRelationships.find(
       (r) =>
         (r.sourceId === actorId && r.targetId === targetId) ||
@@ -131,14 +159,12 @@ export class SimulationService {
   }
 
   private computeRelationshipsAtTick(tick: number): RelationshipEdge[] {
-    // Clone initial state
     const relMap = new Map<string, RelationshipEdge>();
     for (const r of this.initialRelationships) {
       const key = [r.sourceId, r.targetId].sort().join(":");
       relMap.set(key, { ...r });
     }
 
-    // Replay events up to the target tick
     const events = this.eventStore.getByTickRange(1, tick);
     for (const evt of events) {
       const key = [evt.actorId, evt.targetId].sort().join(":");

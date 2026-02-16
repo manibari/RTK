@@ -42,6 +42,7 @@ export interface PairEvent {
   oldIntimacy: number;
   newIntimacy: number;
   relation: string;
+  narrative: string;
 }
 
 export interface TimelinePoint {
@@ -61,6 +62,7 @@ export function GraphPage() {
   const [playing, setPlaying] = useState(false);
   const [advancing, setAdvancing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [dailySummary, setDailySummary] = useState("");
   const [error, setError] = useState<string | null>(null);
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -146,6 +148,7 @@ export function GraphPage() {
       const result = await trpc.simulation.advanceDay.mutate();
       setCurrentTick(result.tick);
       setViewTick(result.tick);
+      setDailySummary(result.dailySummary);
       // Refetch graph
       const graph = await trpc.character.getGraph.query({ centerId, depth: 2 });
       setGraphData(graph as GraphData);
@@ -253,6 +256,8 @@ export function GraphPage() {
         pairEvents={pairEvents}
         timeline={timeline}
         viewTick={viewTick}
+        dailySummary={dailySummary}
+        currentTick={currentTick}
       />
     </div>
   );

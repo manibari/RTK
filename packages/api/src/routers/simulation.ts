@@ -3,11 +3,7 @@ import { router, publicProcedure } from "../trpc.js";
 
 export const simulationRouter = router({
   advanceDay: publicProcedure.mutation(async ({ ctx }) => {
-    const events = await ctx.simulation.advanceDay();
-    return {
-      tick: ctx.simulation.currentTick,
-      events,
-    };
+    return ctx.simulation.advanceDay();
   }),
 
   getEventLog: publicProcedure
@@ -38,6 +34,12 @@ export const simulationRouter = router({
     .input(z.object({ actorId: z.string(), targetId: z.string() }))
     .query(({ ctx, input }) => {
       return ctx.simulation.getIntimacyTimeline(input.actorId, input.targetId);
+    }),
+
+  getDailySummary: publicProcedure
+    .input(z.object({ tick: z.number().min(0) }))
+    .query(({ ctx, input }) => {
+      return { tick: input.tick, summary: ctx.simulation.getDailySummary(input.tick) };
     }),
 
   getCurrentTick: publicProcedure.query(({ ctx }) => {
