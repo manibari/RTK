@@ -4,8 +4,31 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { trpc } from "../lib/trpc";
 import { GraphPage } from "./GraphPage";
 import { MapPage } from "./MapPage";
+import { GameLog } from "./GameLog";
 
-type ViewTab = "graph" | "map";
+type ViewTab = "graph" | "map" | "log";
+
+interface BattleResult {
+  tick: number;
+  cityId: string;
+  cityName: string;
+  attackerId: string;
+  attackerName: string;
+  defenderId: string | null;
+  defenderName: string | null;
+  winner: "attacker" | "defender";
+  captured: boolean;
+}
+
+interface DiplomacyEvent {
+  tick: number;
+  type: "alliance_formed" | "alliance_broken" | "betrayal";
+  factionA: string;
+  factionB: string;
+  description: string;
+}
+
+type GameStatus = "ongoing" | "victory" | "defeat";
 
 export function AppShell() {
   const [activeTab, setActiveTab] = useState<ViewTab>("graph");
@@ -13,13 +36,21 @@ export function AppShell() {
   const [viewTick, setViewTick] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [advancing, setAdvancing] = useState(false);
+  const [gameStatus, setGameStatus] = useState<GameStatus>("ongoing");
+  const [allBattles, setAllBattles] = useState<BattleResult[]>([]);
+  const [allDiplomacy, setAllDiplomacy] = useState<DiplomacyEvent[]>([]);
+  const [summaries, setSummaries] = useState<Map<number, string>>(new Map());
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Fetch initial tick
+  // Fetch initial state
   useEffect(() => {
-    trpc.simulation.getCurrentTick.query().then((data) => {
-      setCurrentTick(data.tick);
-      setViewTick(data.tick);
+    Promise.all([
+      trpc.simulation.getCurrentTick.query(),
+      trpc.simulation.getGameState.query(),
+    ]).then(([tickData, state]) => {
+      setCurrentTick(tickData.tick);
+      setViewTick(tickData.tick);
+      setGameStatus(state.status as GameStatus);
     }).catch(() => {});
   }, []);
 
@@ -51,19 +82,46 @@ export function AppShell() {
   }, [playing, viewTick, currentTick]);
 
   const handleAdvanceDay = useCallback(async () => {
+    if (gameStatus !== "ongoing") return undefined;
     setAdvancing(true);
     try {
       const result = await trpc.simulation.advanceDay.mutate();
       setCurrentTick(result.tick);
       setViewTick(result.tick);
+      setGameStatus(result.gameStatus as GameStatus);
+
+      // Accumulate log entries
+      if (result.battleResults?.length > 0) {
+        setAllBattles((prev) => [...prev, ...result.battleResults]);
+      }
+      if (result.diplomacyEvents?.length > 0) {
+        setAllDiplomacy((prev) => [...prev, ...result.diplomacyEvents]);
+      }
+      if (result.dailySummary) {
+        setSummaries((prev) => new Map(prev).set(result.tick, result.dailySummary));
+      }
+
       return result;
     } finally {
       setAdvancing(false);
     }
-  }, []);
+  }, [gameStatus]);
+
+  const statusBanner = gameStatus === "victory"
+    ? { text: "勝利！你統一了天下！", color: "#22c55e" }
+    : gameStatus === "defeat"
+      ? { text: "戰敗...你的勢力已被消滅", color: "#ef4444" }
+      : null;
 
   return (
     <div style={styles.root}>
+      {/* Game over banner */}
+      {statusBanner && (
+        <div style={{ ...styles.banner, backgroundColor: statusBanner.color }}>
+          {statusBanner.text}
+        </div>
+      )}
+
       {/* Tab bar */}
       <nav style={styles.tabBar}>
         <button
@@ -78,6 +136,14 @@ export function AppShell() {
         >
           戰略地圖
         </button>
+        <button
+          style={activeTab === "log" ? styles.tabActive : styles.tab}
+          onClick={() => setActiveTab("log")}
+        >
+          日誌 {allBattles.length + allDiplomacy.length > 0 && (
+            <span style={styles.logBadge}>{allBattles.length + allDiplomacy.length}</span>
+          )}
+        </button>
       </nav>
 
       {/* Content */}
@@ -89,19 +155,26 @@ export function AppShell() {
             onTickChange={setViewTick}
             playing={playing}
             onPlayToggle={handlePlayToggle}
-            advancing={advancing}
+            advancing={advancing || gameStatus !== "ongoing"}
             onAdvanceDay={handleAdvanceDay}
             onTickUpdate={(tick) => { setCurrentTick(tick); setViewTick(tick); }}
           />
-        ) : (
+        ) : activeTab === "map" ? (
           <MapPage
             currentTick={currentTick}
             viewTick={viewTick}
             onTickChange={setViewTick}
             playing={playing}
             onPlayToggle={handlePlayToggle}
-            advancing={advancing}
+            advancing={advancing || gameStatus !== "ongoing"}
             onAdvanceDay={handleAdvanceDay}
+          />
+        ) : (
+          <GameLog
+            battles={allBattles}
+            diplomacy={allDiplomacy}
+            summaries={summaries}
+            currentTick={currentTick}
           />
         )}
       </div>
@@ -117,6 +190,14 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: "#0f172a",
     color: "#e2e8f0",
     fontFamily: "system-ui, sans-serif",
+  },
+  banner: {
+    padding: "12px 24px",
+    textAlign: "center",
+    fontSize: 18,
+    fontWeight: 700,
+    color: "#0f172a",
+    flexShrink: 0,
   },
   tabBar: {
     display: "flex",
@@ -144,6 +225,15 @@ const styles: Record<string, React.CSSProperties> = {
     border: "none",
     borderBottom: "2px solid #f59e0b",
     cursor: "pointer",
+  },
+  logBadge: {
+    marginLeft: 6,
+    fontSize: 11,
+    backgroundColor: "#f59e0b",
+    color: "#0f172a",
+    padding: "1px 6px",
+    borderRadius: 8,
+    fontWeight: 700,
   },
   content: {
     flex: 1,

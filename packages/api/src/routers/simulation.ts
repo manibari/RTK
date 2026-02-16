@@ -71,4 +71,13 @@ export const simulationRouter = router({
   getFactions: publicProcedure.query(async ({ ctx }) => {
     return ctx.simulation.getFactions();
   }),
+
+  // Game state
+  getGameState: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getGameState();
+  }),
+
+  getAlliances: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getAlliances();
+  }),
 });

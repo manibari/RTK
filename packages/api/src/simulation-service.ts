@@ -2,6 +2,7 @@ import { Engine } from "@rtk/simulation";
 import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode } from "@rtk/graph-db";
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
 import { NarrativeService } from "./narrative/narrative-service.js";
+import { evaluateNPCDecisions } from "./ai/npc-ai.js";
 
 export interface TimelinePoint {
   tick: number;
@@ -13,6 +14,24 @@ export interface AdvanceDayResult {
   events: StoredEvent[];
   dailySummary: string;
   battleResults: BattleResult[];
+  diplomacyEvents: DiplomacyEvent[];
+  gameStatus: GameStatus;
+}
+
+export interface DiplomacyEvent {
+  tick: number;
+  type: "alliance_formed" | "alliance_broken" | "betrayal";
+  factionA: string;
+  factionB: string;
+  description: string;
+}
+
+export type GameStatus = "ongoing" | "victory" | "defeat";
+
+export interface GameState {
+  status: GameStatus;
+  winnerFaction?: string;
+  tick: number;
 }
 
 export interface PlayerCommand {
@@ -58,6 +77,8 @@ export class SimulationService {
   private initialRelationships: RelationshipEdge[] = [];
   private dailySummaries = new Map<number, string>();
   private commandQueue: PlayerCommand[] = [];
+  private alliances = new Set<string>(); // "factionA:factionB" sorted
+  private gameState: GameState = { status: "ongoing", tick: 0 };
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -135,7 +156,27 @@ export class SimulationService {
     return null;
   }
 
+  getGameState(): GameState {
+    return { ...this.gameState };
+  }
+
+  getAlliances(): string[][] {
+    return [...this.alliances].map((a) => a.split(":"));
+  }
+
   async advanceDay(): Promise<AdvanceDayResult> {
+    // Prevent advancing after game ends
+    if (this.gameState.status !== "ongoing") {
+      return {
+        tick: this.currentTick,
+        events: [],
+        dailySummary: "",
+        battleResults: [],
+        diplomacyEvents: [],
+        gameStatus: this.gameState.status,
+      };
+    }
+
     const simEvents = this.engine.advanceDay();
 
     const storedEvents: Omit<StoredEvent, "id">[] = simEvents.map((e) => ({
@@ -164,11 +205,20 @@ export class SimulationService {
     // Execute player commands
     await this.executeCommands();
 
-    // Generate random movements (20% chance per character, skip commanded ones)
+    // NPC AI decisions
+    await this.runNPCDecisions();
+
+    // Generate random movements for remaining idle characters (10%)
     await this.generateMovements();
 
     // Resolve arrivals and battles
     const battleResults = await this.resolveArrivals();
+
+    // Evaluate diplomacy
+    const diplomacyEvents = await this.evaluateDiplomacy();
+
+    // Check win/defeat conditions
+    const gameStatus = await this.checkGameOver();
 
     // Fetch events with IDs
     const tickEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
@@ -190,10 +240,10 @@ export class SimulationService {
 
       // Re-read events with narratives
       const updatedEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
-      return { tick: this.currentTick, events: updatedEvents, dailySummary, battleResults };
+      return { tick: this.currentTick, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, gameStatus };
     }
 
-    return { tick: this.currentTick, events: tickEvents, dailySummary, battleResults };
+    return { tick: this.currentTick, events: tickEvents, dailySummary, battleResults, diplomacyEvents, gameStatus };
   }
 
   getDailySummary(tick: number): string {
@@ -286,6 +336,34 @@ export class SimulationService {
 
   private commandedThisTick = new Set<string>();
 
+  private async runNPCDecisions(): Promise<void> {
+    const characters = await this.repo.getAllCharacters();
+    const cities = await this.repo.getAllPlaces();
+
+    const decisions = evaluateNPCDecisions(FACTIONS, characters, cities, "shu");
+
+    for (const decision of decisions) {
+      if (decision.action === "stay" || !decision.targetCityId) continue;
+      if (this.commandedThisTick.has(decision.characterId)) continue;
+
+      const char = await this.repo.getCharacter(decision.characterId);
+      if (!char?.cityId || char.cityId === decision.targetCityId) continue;
+
+      this.commandedThisTick.add(decision.characterId);
+      const travelTime = decision.action === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+
+      await this.repo.addMovement({
+        characterId: decision.characterId,
+        originCityId: char.cityId,
+        destinationCityId: decision.targetCityId,
+        departureTick: this.currentTick,
+        arrivalTick: this.currentTick + travelTime,
+      });
+
+      await this.repo.createCharacter({ ...char, cityId: decision.targetCityId });
+    }
+  }
+
   private async executeCommands(): Promise<void> {
     this.commandedThisTick.clear();
     const commands = [...this.commandQueue];
@@ -320,7 +398,7 @@ export class SimulationService {
     if (activeCityIds.length < 2) return;
 
     for (const char of characters) {
-      if (!char.cityId || Math.random() > 0.15) continue;
+      if (!char.cityId || Math.random() > 0.1) continue;
       if (this.commandedThisTick.has(char.id)) continue;
 
       const destinations = activeCityIds.filter((id) => id !== char.cityId);
@@ -355,8 +433,9 @@ export class SimulationService {
       const arriverFaction = this.getFactionOf(arrival.characterId);
       const controllerFaction = city.controllerId ? this.getFactionOf(city.controllerId) : null;
 
-      // No battle if same faction or uncontrolled
+      // No battle if same faction, uncontrolled, or allied
       if (!city.controllerId || arriverFaction === controllerFaction) continue;
+      if (arriverFaction && controllerFaction && this.areAllied(arriverFaction, controllerFaction)) continue;
 
       const attacker = await this.repo.getCharacter(arrival.characterId);
       const defender = city.controllerId ? await this.repo.getCharacter(city.controllerId) : null;
@@ -391,6 +470,100 @@ export class SimulationService {
     }
 
     return results;
+  }
+
+  private allianceKey(a: string, b: string): string {
+    return [a, b].sort().join(":");
+  }
+
+  private async evaluateDiplomacy(): Promise<DiplomacyEvent[]> {
+    const events: DiplomacyEvent[] = [];
+    const rels = this.engine.getRelationships();
+
+    // Check leader-to-leader relationships for alliance triggers
+    for (let i = 0; i < FACTIONS.length; i++) {
+      for (let j = i + 1; j < FACTIONS.length; j++) {
+        const fA = FACTIONS[i];
+        const fB = FACTIONS[j];
+        const key = this.allianceKey(fA.id, fB.id);
+
+        // Find relationship between leaders
+        const rel = rels.find(
+          (r) =>
+            (r.sourceId === fA.leaderId && r.targetId === fB.leaderId) ||
+            (r.sourceId === fB.leaderId && r.targetId === fA.leaderId),
+        );
+        if (!rel) continue;
+
+        const isAllied = this.alliances.has(key);
+
+        if (!isAllied && rel.intimacy >= 65) {
+          // Form alliance
+          this.alliances.add(key);
+          events.push({
+            tick: this.currentTick,
+            type: "alliance_formed",
+            factionA: fA.id,
+            factionB: fB.id,
+            description: `${fA.leaderId} 與 ${fB.leaderId} 結盟`,
+          });
+        } else if (isAllied && rel.intimacy <= 25) {
+          // Break alliance
+          this.alliances.delete(key);
+          events.push({
+            tick: this.currentTick,
+            type: "alliance_broken",
+            factionA: fA.id,
+            factionB: fB.id,
+            description: `${fA.leaderId} 與 ${fB.leaderId} 的同盟破裂`,
+          });
+        }
+      }
+    }
+
+    return events;
+  }
+
+  areAllied(factionA: string, factionB: string): boolean {
+    return this.alliances.has(this.allianceKey(factionA, factionB));
+  }
+
+  private async checkGameOver(): Promise<GameStatus> {
+    const cities = await this.repo.getAllPlaces();
+    const majorCities = cities.filter((c) => c.tier === "major");
+
+    // Count major cities per faction
+    const factionMajors = new Map<string, number>();
+    for (const city of majorCities) {
+      if (!city.controllerId) continue;
+      const faction = this.getFactionOf(city.controllerId);
+      if (faction) {
+        factionMajors.set(faction, (factionMajors.get(faction) ?? 0) + 1);
+      }
+    }
+
+    // Victory: one faction controls all major cities
+    for (const [factionId, count] of factionMajors) {
+      if (count >= majorCities.length) {
+        this.gameState = {
+          status: factionId === "shu" ? "victory" : "defeat",
+          winnerFaction: factionId,
+          tick: this.currentTick,
+        };
+        return this.gameState.status;
+      }
+    }
+
+    // Defeat: player faction has no cities at all
+    const playerCities = cities.filter(
+      (c) => c.controllerId && FACTIONS[0].members.includes(c.controllerId),
+    );
+    if (playerCities.length === 0 && this.currentTick > 0) {
+      this.gameState = { status: "defeat", tick: this.currentTick };
+      return "defeat";
+    }
+
+    return "ongoing";
   }
 
   private factionToStatus(factionId: string | null): "allied" | "hostile" | "neutral" {
