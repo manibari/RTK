@@ -3,6 +3,13 @@
 import { useState, useEffect } from "react";
 import { trpc } from "../lib/trpc";
 
+interface CharacterSkills {
+  leadership: number;
+  tactics: number;
+  commerce: number;
+  espionage: number;
+}
+
 interface CharacterInfo {
   id: string;
   name: string;
@@ -11,7 +18,15 @@ interface CharacterInfo {
   military: number;
   intelligence: number;
   charm: number;
+  skills?: CharacterSkills;
 }
+
+const SKILL_LABELS: Record<string, { label: string; color: string }> = {
+  leadership: { label: "統率", color: "#f59e0b" },
+  tactics: { label: "戰術", color: "#ef4444" },
+  commerce: { label: "商才", color: "#22c55e" },
+  espionage: { label: "諜報", color: "#6366f1" },
+};
 
 interface RelationshipInfo {
   sourceId: string;
@@ -127,6 +142,24 @@ export function CharacterDetail({
               <span style={styles.ratingValue}>{character.charm}</span>
             </div>
           </div>
+          {/* Skills */}
+          {character.skills && (
+            <div style={styles.skillGrid}>
+              {(Object.entries(character.skills) as [string, number][]).map(([key, val]) => {
+                const info = SKILL_LABELS[key];
+                if (!info || val === 0) return null;
+                return (
+                  <div key={key} style={styles.skillItem}>
+                    <span style={{ ...styles.skillLabel, color: info.color }}>{info.label}</span>
+                    <div style={styles.skillBar}>
+                      <div style={{ ...styles.skillFill, width: `${(val / 5) * 100}%`, backgroundColor: info.color }} />
+                    </div>
+                    <span style={styles.skillValue}>{val}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Relationships */}
@@ -247,6 +280,12 @@ const styles: Record<string, React.CSSProperties> = {
   ratingItem: { display: "flex", alignItems: "center", gap: 4 },
   ratingLabel: { fontSize: 13, fontWeight: 700 },
   ratingValue: { fontSize: 14, fontWeight: 600, color: "#e2e8f0" },
+  skillGrid: { display: "flex", flexDirection: "column", gap: 4, marginTop: 10, paddingTop: 8, borderTop: "1px solid #334155" },
+  skillItem: { display: "flex", alignItems: "center", gap: 6 },
+  skillLabel: { fontSize: 11, fontWeight: 700, width: 28 },
+  skillBar: { flex: 1, height: 6, backgroundColor: "#0f172a", borderRadius: 3, overflow: "hidden" },
+  skillFill: { height: "100%", borderRadius: 3, transition: "width 0.3s" },
+  skillValue: { fontSize: 11, color: "#94a3b8", width: 16, textAlign: "right" },
   trait: {
     fontSize: 12,
     padding: "3px 10px",

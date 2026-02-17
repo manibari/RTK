@@ -1,3 +1,10 @@
+export interface CharacterSkills {
+  leadership: number;  // alliance stability, charm bonus
+  tactics: number;     // siege/defense bonus
+  commerce: number;    // gold production bonus
+  espionage: number;   // spy mission success rate
+}
+
 export interface CharacterNode {
   id: string;
   name: string;
@@ -6,6 +13,7 @@ export interface CharacterNode {
   military: number;
   intelligence: number;
   charm: number;
+  skills?: CharacterSkills;
 }
 
 export interface RelationshipEdge {
@@ -55,6 +63,19 @@ export interface CharacterGraph {
   center: CharacterNode;
   characters: CharacterNode[];
   relationships: RelationshipEdge[];
+}
+
+export type SpyMissionType = "intel" | "sabotage";
+export type SpyMissionStatus = "traveling" | "infiltrated" | "success" | "caught";
+
+export interface SpyMission {
+  id: string;
+  characterId: string;
+  targetCityId: string;
+  missionType: SpyMissionType;
+  departureTick: number;
+  arrivalTick: number;
+  status: SpyMissionStatus;
 }
 
 export interface MapData {

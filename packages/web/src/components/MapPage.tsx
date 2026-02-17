@@ -220,6 +220,20 @@ export function MapPage({
     }
   };
 
+  const handleSpy = async (type: "spy" | "sabotage") => {
+    if (!selectedChar || !selectedCity) return;
+    try {
+      await trpc.simulation.queueCommand.mutate({
+        type,
+        characterId: selectedChar,
+        targetCityId: selectedCity.id,
+      });
+      setCommandCount((c) => c + 1);
+    } catch {
+      // silently fail
+    }
+  };
+
   const handleCommand = async (type: "move" | "attack") => {
     if (!selectedChar || !selectedCity) return;
     try {
@@ -395,6 +409,16 @@ export function MapPage({
                     攻擊此城
                   </button>
                 </div>
+                {selectedCity.status !== "allied" && (
+                  <div style={{ ...styles.cmdButtons, marginTop: 6 }}>
+                    <button style={styles.spyBtn} onClick={() => handleSpy("spy")}>
+                      偵查（100金）
+                    </button>
+                    <button style={styles.sabotageBtn} onClick={() => handleSpy("sabotage")}>
+                      破壞（100金）
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -586,6 +610,8 @@ const styles: Record<string, React.CSSProperties> = {
   reinforceBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   developBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#a855f7", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   improvementBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#22c55e", color: "#0f172a", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+  spyBtn: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#6366f1", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  sabotageBtn: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#a855f7", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   factionList: { display: "flex", flexDirection: "column", gap: 6 },
   factionItem: { display: "flex", alignItems: "center", gap: 8, fontSize: 13 },
   factionDot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0 },

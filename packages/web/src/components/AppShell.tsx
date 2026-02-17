@@ -11,6 +11,14 @@ import type { TimelineMarker } from "./Timeline";
 
 type ViewTab = "graph" | "map" | "log" | "stats";
 type SimSpeed = 1 | 2 | 5;
+type Season = "spring" | "summer" | "autumn" | "winter";
+
+const SEASON_INFO: Record<Season, { label: string; color: string }> = {
+  spring: { label: "春", color: "#22c55e" },
+  summer: { label: "夏", color: "#ef4444" },
+  autumn: { label: "秋", color: "#f59e0b" },
+  winter: { label: "冬", color: "#3b82f6" },
+};
 
 interface BattleResult {
   tick: number;
@@ -70,6 +78,7 @@ export function AppShell() {
   const [playing, setPlaying] = useState(false);
   const [advancing, setAdvancing] = useState(false);
   const [gameStatus, setGameStatus] = useState<GameStatus>("ongoing");
+  const [season, setSeason] = useState<Season>("spring");
   const [allBattles, setAllBattles] = useState<BattleResult[]>([]);
   const [allDiplomacy, setAllDiplomacy] = useState<DiplomacyEvent[]>([]);
   const [summaries, setSummaries] = useState<Map<number, string>>(new Map());
@@ -90,6 +99,7 @@ export function AppShell() {
       setCurrentTick(tickData.tick);
       setViewTick(tickData.tick);
       setGameStatus(state.status as GameStatus);
+      if (tickData.season) setSeason(tickData.season as Season);
     }).catch(() => {});
   }, []);
 
@@ -133,6 +143,7 @@ export function AppShell() {
       setCurrentTick(result.tick);
       setViewTick(result.tick);
       setGameStatus(result.gameStatus as GameStatus);
+      if (result.season) setSeason(result.season as Season);
 
       // Stop auto-sim on game over
       if (result.gameStatus !== "ongoing") {
@@ -168,6 +179,19 @@ export function AppShell() {
       if (result.betrayalEvents?.length > 0) {
         for (const b of result.betrayalEvents) {
           addToast(`${b.characterName} 背叛了 ${b.oldFaction}，投奔 ${b.newFaction}`, "#f97316");
+        }
+      }
+      if (result.spyReports?.length > 0) {
+        for (const s of result.spyReports) {
+          if (s.success && s.missionType === "intel") {
+            addToast(`${s.characterName} 偵查 ${s.targetCityName}：守備${s.intel?.garrison} 金幣${s.intel?.gold}`, "#6366f1");
+          } else if (s.success && s.missionType === "sabotage") {
+            addToast(`${s.characterName} 破壞 ${s.targetCityName}：${s.sabotageEffect}`, "#6366f1");
+          } else if (s.caught) {
+            addToast(`${s.characterName} 在 ${s.targetCityName} 被捕！`, "#ef4444");
+          } else {
+            addToast(`${s.characterName} 任務失敗`, "#64748b");
+          }
         }
       }
       if (result.dailySummary) {
@@ -297,6 +321,9 @@ export function AppShell() {
       {/* Tab bar + auto-sim controls */}
       <nav style={styles.tabBar}>
         <div style={styles.tabGroup}>
+          <span style={{ ...styles.seasonTag, backgroundColor: SEASON_INFO[season].color }}>
+            {SEASON_INFO[season].label}
+          </span>
           <button
             style={activeTab === "graph" ? styles.tabActive : styles.tab}
             onClick={() => setActiveTab("graph")}
@@ -460,6 +487,16 @@ const styles: Record<string, React.CSSProperties> = {
   tabGroup: {
     display: "flex",
     gap: 0,
+    alignItems: "center",
+  },
+  seasonTag: {
+    fontSize: 13,
+    fontWeight: 700,
+    padding: "4px 10px",
+    borderRadius: 6,
+    color: "#0f172a",
+    marginRight: 8,
+    marginLeft: 12,
   },
   tab: {
     padding: "10px 24px",

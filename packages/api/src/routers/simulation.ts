@@ -44,13 +44,13 @@ export const simulationRouter = router({
     }),
 
   getCurrentTick: publicProcedure.query(({ ctx }) => {
-    return { tick: ctx.simulation.currentTick };
+    return { tick: ctx.simulation.currentTick, season: ctx.simulation.currentSeason };
   }),
 
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
-      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement"]),
+      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage"]),
       characterId: z.string(),
       targetCityId: z.string(),
       targetCharacterId: z.string().optional(),
@@ -114,6 +114,11 @@ export const simulationRouter = router({
     .query(({ input }) => {
       return getCombatRating(input.traits);
     }),
+
+  // Spy missions
+  getSpyMissions: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getSpyMissions();
+  }),
 
   // Event cards
   resolveEventCard: publicProcedure

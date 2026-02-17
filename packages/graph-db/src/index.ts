@@ -6,8 +6,12 @@ export type {
   PlaceNode,
   CityStatus,
   Movement,
+  CharacterSkills,
   CharacterGraph,
   MapData,
+  SpyMission,
+  SpyMissionType,
+  SpyMissionStatus,
 } from "./types/graph.js";
 export { Neo4jGraphRepository } from "./neo4j/neo4j-repository.js";
 export type { Neo4jConfig } from "./neo4j/connection.js";

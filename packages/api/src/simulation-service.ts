@@ -1,5 +1,5 @@
 import { Engine } from "@rtk/simulation";
-import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode } from "@rtk/graph-db";
+import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode, SpyMission, SpyMissionType, CharacterSkills } from "@rtk/graph-db";
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
 import { NarrativeService } from "./narrative/narrative-service.js";
 import { evaluateNPCDecisions } from "./ai/npc-ai.js";
@@ -22,12 +22,14 @@ export interface BetrayalEvent {
 
 export interface AdvanceDayResult {
   tick: number;
+  season: Season;
   events: StoredEvent[];
   dailySummary: string;
   battleResults: BattleResult[];
   diplomacyEvents: DiplomacyEvent[];
   recruitmentResults: RecruitmentResult[];
   betrayalEvents: BetrayalEvent[];
+  spyReports: SpyReport[];
   pendingCard: PendingEventCard | null;
   gameStatus: GameStatus;
 }
@@ -42,6 +44,42 @@ export interface DiplomacyEvent {
 
 export type GameStatus = "ongoing" | "victory" | "defeat";
 
+// Season system: every 4 ticks = 1 season
+export type Season = "spring" | "summer" | "autumn" | "winter";
+
+export function getSeason(tick: number): Season {
+  const phase = Math.floor(tick / 4) % 4;
+  return (["spring", "summer", "autumn", "winter"] as const)[phase];
+}
+
+export const SEASON_LABELS: Record<Season, string> = {
+  spring: "春",
+  summer: "夏",
+  autumn: "秋",
+  winter: "冬",
+};
+
+const SEASON_GOLD_MULTIPLIER: Record<Season, number> = {
+  spring: 1.0,
+  summer: 1.0,
+  autumn: 1.2,
+  winter: 0.8,
+};
+
+const SEASON_DEFENSE_BONUS: Record<Season, number> = {
+  spring: 0,
+  summer: 0,
+  autumn: 0,
+  winter: 1,
+};
+
+const SEASON_TRAVEL_PENALTY: Record<Season, number> = {
+  spring: 0,
+  summer: 0,
+  autumn: 0,
+  winter: 1,
+};
+
 export interface GameState {
   status: GameStatus;
   winnerFaction?: string;
@@ -49,10 +87,23 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement";
+  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage";
   characterId: string;
   targetCityId: string;
   targetCharacterId?: string; // for recruit
+}
+
+export interface SpyReport {
+  tick: number;
+  characterId: string;
+  characterName: string;
+  targetCityId: string;
+  targetCityName: string;
+  missionType: SpyMissionType;
+  success: boolean;
+  caught: boolean;
+  intel?: { gold: number; garrison: number; controllerId?: string };
+  sabotageEffect?: string;
 }
 
 // Specialty effects lookup
@@ -154,6 +205,18 @@ export interface FactionHistoryEntry {
   characters: number;
 }
 
+const DEFAULT_SKILLS: CharacterSkills = { leadership: 0, tactics: 0, commerce: 0, espionage: 0 };
+
+function getSkills(char: CharacterNode): CharacterSkills {
+  return char.skills ?? { ...DEFAULT_SKILLS };
+}
+
+function gainSkill(char: CharacterNode, skill: keyof CharacterSkills, amount: number = 1): CharacterSkills {
+  const skills = getSkills(char);
+  skills[skill] = Math.min(5, skills[skill] + amount);
+  return skills;
+}
+
 export class SimulationService {
   private engine: Engine;
   private repo: IGraphRepository;
@@ -166,6 +229,8 @@ export class SimulationService {
   private gameState: GameState = { status: "ongoing", tick: 0 };
   private factionHistory = new Map<string, FactionHistoryEntry[]>();
   private pendingCard: PendingEventCard | null = null;
+  private spyMissions: SpyMission[] = [];
+  private spyCounter = 0;
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -194,6 +259,8 @@ export class SimulationService {
     this.gameState = { status: "ongoing", tick: 0 };
     this.commandedThisTick.clear();
     this.factionHistory.clear();
+    this.spyMissions = [];
+    this.spyCounter = 0;
     FACTIONS = createDefaultFactions();
 
     // Re-initialize
@@ -222,6 +289,10 @@ export class SimulationService {
 
   get currentTick(): number {
     return this.engine.world.tick;
+  }
+
+  get currentSeason(): Season {
+    return getSeason(this.currentTick);
   }
 
   // Player command API
@@ -283,12 +354,14 @@ export class SimulationService {
     if (this.gameState.status !== "ongoing") {
       return {
         tick: this.currentTick,
+        season: getSeason(this.currentTick),
         events: [],
         dailySummary: "",
         battleResults: [],
         diplomacyEvents: [],
         recruitmentResults: [],
         betrayalEvents: [],
+        spyReports: [],
         pendingCard: null,
         gameStatus: this.gameState.status,
       };
@@ -346,6 +419,9 @@ export class SimulationService {
     // Recruitment: captured characters can be recruited
     const recruitmentResults = await this.processRecruitments(battleResults);
 
+    // Resolve spy missions
+    const spyReports = await this.processSpyMissions();
+
     // Evaluate diplomacy
     const diplomacyEvents = await this.evaluateDiplomacy();
 
@@ -386,10 +462,12 @@ export class SimulationService {
 
       // Re-read events with narratives
       const updatedEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
-      return { tick: this.currentTick, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, pendingCard, gameStatus };
+      const season = getSeason(this.currentTick);
+      return { tick: this.currentTick, season, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, pendingCard, gameStatus };
     }
 
-    return { tick: this.currentTick, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, pendingCard, gameStatus };
+    const season = getSeason(this.currentTick);
+    return { tick: this.currentTick, season, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, pendingCard, gameStatus };
   }
 
   getDailySummary(tick: number): string {
@@ -500,7 +578,7 @@ export class SimulationService {
       // Harbor specialty: travel time = 1 from harbor cities
       const originCity = cities.find((c) => c.id === char.cityId);
       const baseTravelTime = decision.action === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
-      const travelTime = originCity?.specialty === "harbor" ? 1 : baseTravelTime;
+      const travelTime = (originCity?.specialty === "harbor" ? 1 : baseTravelTime) + SEASON_TRAVEL_PENALTY[getSeason(this.currentTick)];
 
       await this.repo.addMovement({
         characterId: decision.characterId,
@@ -554,6 +632,28 @@ export class SimulationService {
         continue;
       }
 
+      // Spy/Sabotage: send spy on covert mission (costs 100 gold from any allied city)
+      if (cmd.type === "spy" || cmd.type === "sabotage") {
+        const spyChar = await this.repo.getCharacter(cmd.characterId);
+        if (!spyChar) continue;
+        // Deduct 100 gold from spy's current city
+        const spyCity = spyChar.cityId ? await this.repo.getPlace(spyChar.cityId) : null;
+        if (!spyCity || spyCity.gold < 100) continue;
+        await this.repo.updatePlace(spyCity.id, { gold: spyCity.gold - 100 });
+        this.spyCounter++;
+        this.spyMissions.push({
+          id: `spy-${this.spyCounter}`,
+          characterId: cmd.characterId,
+          targetCityId: cmd.targetCityId,
+          missionType: cmd.type === "spy" ? "intel" : "sabotage",
+          departureTick: this.currentTick,
+          arrivalTick: this.currentTick + 2,
+          status: "traveling",
+        });
+        this.commandedThisTick.add(cmd.characterId);
+        continue;
+      }
+
       const char = await this.repo.getCharacter(cmd.characterId);
       if (!char || !char.cityId) continue;
       if (char.cityId === cmd.targetCityId) continue;
@@ -562,7 +662,7 @@ export class SimulationService {
       // Harbor specialty: travel time = 1 from harbor cities
       const originCity = cities.find((c) => c.id === char.cityId);
       const baseTravelTime = cmd.type === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
-      const travelTime = originCity?.specialty === "harbor" ? 1 : baseTravelTime;
+      const travelTime = (originCity?.specialty === "harbor" ? 1 : baseTravelTime) + SEASON_TRAVEL_PENALTY[getSeason(this.currentTick)];
 
       await this.repo.addMovement({
         characterId: cmd.characterId,
@@ -594,7 +694,7 @@ export class SimulationService {
       const destId = destinations[Math.floor(Math.random() * destinations.length)];
       // Harbor specialty: travel time = 1 from harbor cities
       const originCity = cities.find((c) => c.id === char.cityId);
-      const travelTime = originCity?.specialty === "harbor" ? 1 : 1 + Math.floor(Math.random() * 3);
+      const travelTime = (originCity?.specialty === "harbor" ? 1 : 1 + Math.floor(Math.random() * 3)) + SEASON_TRAVEL_PENALTY[getSeason(this.currentTick)];
 
       await this.repo.addMovement({
         characterId: char.id,
@@ -651,9 +751,88 @@ export class SimulationService {
     }
   }
 
+  private async processSpyMissions(): Promise<SpyReport[]> {
+    const reports: SpyReport[] = [];
+    const remaining: SpyMission[] = [];
+
+    for (const mission of this.spyMissions) {
+      // Still traveling
+      if (mission.status === "traveling" && this.currentTick < mission.arrivalTick) {
+        remaining.push(mission);
+        continue;
+      }
+
+      // Just arrived — resolve mission
+      const spy = await this.repo.getCharacter(mission.characterId);
+      const targetCity = await this.repo.getPlace(mission.targetCityId);
+      if (!spy || !targetCity) continue;
+
+      // Base success rate: 40% for intel, 30% for sabotage
+      // Intelligence bonus: +5% per point, espionage skill: +8% per level
+      const spySkill = getSkills(spy).espionage;
+      const baseRate = mission.missionType === "intel" ? 0.4 : 0.3;
+      const successRate = Math.min(0.9, baseRate + spy.intelligence * 0.05 + spySkill * 0.08);
+      const success = Math.random() < successRate;
+
+      // Caught chance: 50% base, -5% per intelligence, -8% per espionage skill
+      const caughtRate = Math.max(0.1, 0.5 - spy.intelligence * 0.05 - spySkill * 0.08);
+      const caught = !success && Math.random() < caughtRate;
+
+      const report: SpyReport = {
+        tick: this.currentTick,
+        characterId: spy.id,
+        characterName: spy.name,
+        targetCityId: targetCity.id,
+        targetCityName: targetCity.name,
+        missionType: mission.missionType,
+        success,
+        caught,
+      };
+
+      if (success && mission.missionType === "intel") {
+        report.intel = {
+          gold: targetCity.gold,
+          garrison: targetCity.garrison,
+          controllerId: targetCity.controllerId,
+        };
+      }
+
+      if (success && mission.missionType === "sabotage") {
+        // Sabotage effects: reduce garrison by 1-2 and gold by 50-150
+        const garrisonLoss = 1 + Math.floor(Math.random() * 2);
+        const goldLoss = 50 + Math.floor(Math.random() * 100);
+        await this.repo.updatePlace(targetCity.id, {
+          garrison: Math.max(0, targetCity.garrison - garrisonLoss),
+          gold: Math.max(0, targetCity.gold - goldLoss),
+        });
+        report.sabotageEffect = `守備-${garrisonLoss}、金幣-${goldLoss}`;
+      }
+
+      if (success) {
+        // Espionage skill gain on success
+        await this.repo.createCharacter({ ...spy, skills: gainSkill(spy, "espionage") });
+      } else if (caught) {
+        // Spy is captured — imprisoned (remove from city, stays in faction but unusable)
+        await this.repo.createCharacter({ ...spy, cityId: undefined });
+      }
+
+      reports.push(report);
+      // Mission complete — don't keep it
+    }
+
+    this.spyMissions = remaining;
+    return reports;
+  }
+
+  getSpyMissions(): SpyMission[] {
+    return [...this.spyMissions];
+  }
+
   private async processSpecialtyPassives(): Promise<void> {
     const tick = this.currentTick;
-    const interval = 5; // every 5 ticks
+    // Spring: passives trigger every 4 ticks; otherwise every 5
+    const season = getSeason(tick);
+    const interval = season === "spring" ? 4 : 5;
     if (tick % interval !== 0 || tick === 0) return;
 
     const cities = await this.repo.getAllPlaces();
@@ -728,6 +907,9 @@ export class SimulationService {
 
   private async produceGold(): Promise<void> {
     const cities = await this.repo.getAllPlaces();
+    const characters = await this.repo.getAllCharacters();
+    const season = getSeason(this.currentTick);
+    const seasonMult = SEASON_GOLD_MULTIPLIER[season];
     for (const city of cities) {
       if (city.status === "dead" || !city.controllerId) continue;
       // Sieged cities produce no gold
@@ -738,7 +920,11 @@ export class SimulationService {
       if (city.specialty === "market") {
         multiplier += city.improvement ? 1.0 : 0.5;
       }
-      const income = Math.round(baseIncome * multiplier);
+      // Commerce skill bonus: best commerce character in city adds +10% per level
+      const charsHere = characters.filter((c) => c.cityId === city.id);
+      const bestCommerce = Math.max(0, ...charsHere.map((c) => getSkills(c).commerce));
+      multiplier += bestCommerce * 0.1;
+      const income = Math.round(baseIncome * multiplier * seasonMult);
       await this.repo.updatePlace(city.id, { gold: city.gold + income });
     }
   }
@@ -784,14 +970,15 @@ export class SimulationService {
 
       // Defense power: sum of defender military stats + garrison bonus + city tier bonus
       const tierBonus = city.tier === "major" ? 3 : 1;
+      const seasonDefBonus = SEASON_DEFENSE_BONUS[getSeason(this.currentTick)];
       let garrisonPower = city.garrison;
       // Forge specialty: garrison defense x1.5 (x2 with improvement)
       if (city.specialty === "forge") {
         garrisonPower = Math.round(garrisonPower * (city.improvement ? 2 : 1.5));
       }
-      let defensePower = garrisonPower + tierBonus + Math.random() * 2;
+      let defensePower = garrisonPower + tierBonus + seasonDefBonus + Math.random() * 2;
       for (const d of defenders) {
-        defensePower += d.military + d.intelligence * 0.5 + Math.random() * 2;
+        defensePower += d.military + d.intelligence * 0.5 + getSkills(d).tactics * 0.5 + Math.random() * 2;
       }
 
       // Each attacking faction battles independently
@@ -801,7 +988,7 @@ export class SimulationService {
         for (const id of attackerIds) {
           const c = await this.repo.getCharacter(id);
           if (c) {
-            attackPower += c.military + c.intelligence * 0.5 + Math.random() * 2;
+            attackPower += c.military + c.intelligence * 0.5 + getSkills(c).tactics * 0.5 + Math.random() * 2;
             attackChars.push(c);
           }
         }
@@ -821,7 +1008,7 @@ export class SimulationService {
           // Growth: winner's military +1 (cap 10)
           for (const ac of attackChars) {
             if (ac.military < 10) {
-              await this.repo.createCharacter({ ...ac, military: ac.military + 1 });
+              await this.repo.createCharacter({ ...ac, military: ac.military + 1, skills: gainSkill(ac, "tactics") });
             }
           }
         } else {
@@ -912,7 +1099,7 @@ export class SimulationService {
           }
           // Growth: recruiter's charm +1 (cap 10)
           if (attacker.charm < 10) {
-            await this.repo.createCharacter({ ...attacker, charm: attacker.charm + 1 });
+            await this.repo.createCharacter({ ...attacker, charm: attacker.charm + 1, skills: gainSkill(attacker, "leadership") });
           }
         }
 

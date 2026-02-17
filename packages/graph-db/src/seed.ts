@@ -1,17 +1,19 @@
 import type { IGraphRepository } from "./types/repository.js";
 import type { CharacterNode, RelationshipEdge, PlaceNode } from "./types/graph.js";
 
+const S0 = { leadership: 0, tactics: 0, commerce: 0, espionage: 0 };
+
 const characters: CharacterNode[] = [
-  { id: "liu_bei", name: "劉備", traits: ["benevolent", "ambitious", "charismatic"], cityId: "taipei", military: 1, intelligence: 1, charm: 5 },
-  { id: "guan_yu", name: "關羽", traits: ["loyal", "brave", "proud"], cityId: "taipei", military: 4, intelligence: 1, charm: 0 },
-  { id: "zhang_fei", name: "張飛", traits: ["brave", "impulsive", "loyal"], cityId: "taoyuan", military: 4, intelligence: 0, charm: 1 },
-  { id: "zhuge_liang", name: "諸葛亮", traits: ["wise", "cautious", "strategic"], cityId: "hsinchu", military: 1, intelligence: 5, charm: 0 },
-  { id: "cao_cao", name: "曹操", traits: ["ambitious", "cunning", "charismatic"], cityId: "taichung", military: 1, intelligence: 3, charm: 3 },
-  { id: "sun_quan", name: "孫權", traits: ["cautious", "diplomatic", "ambitious"], cityId: "tainan", military: 1, intelligence: 3, charm: 3 },
-  { id: "zhao_yun", name: "趙雲", traits: ["loyal", "brave", "humble"], cityId: "taipei", military: 3, intelligence: 1, charm: 2 },
-  { id: "lu_bu", name: "呂布", traits: ["brave", "treacherous", "impulsive"], cityId: "kaohsiung", military: 4, intelligence: 0, charm: 0 },
-  { id: "diao_chan", name: "貂蟬", traits: ["charismatic", "cunning", "diplomatic"], cityId: "kaohsiung", military: 0, intelligence: 3, charm: 5 },
-  { id: "zhou_yu", name: "周瑜", traits: ["strategic", "proud", "ambitious"], cityId: "tainan", military: 2, intelligence: 3, charm: 0 },
+  { id: "liu_bei", name: "劉備", traits: ["benevolent", "ambitious", "charismatic"], cityId: "taipei", military: 1, intelligence: 1, charm: 5, skills: { ...S0, leadership: 3 } },
+  { id: "guan_yu", name: "關羽", traits: ["loyal", "brave", "proud"], cityId: "taipei", military: 4, intelligence: 1, charm: 0, skills: { ...S0, tactics: 2 } },
+  { id: "zhang_fei", name: "張飛", traits: ["brave", "impulsive", "loyal"], cityId: "taoyuan", military: 4, intelligence: 0, charm: 1, skills: { ...S0, tactics: 1 } },
+  { id: "zhuge_liang", name: "諸葛亮", traits: ["wise", "cautious", "strategic"], cityId: "hsinchu", military: 1, intelligence: 5, charm: 0, skills: { ...S0, espionage: 2, commerce: 1 } },
+  { id: "cao_cao", name: "曹操", traits: ["ambitious", "cunning", "charismatic"], cityId: "taichung", military: 1, intelligence: 3, charm: 3, skills: { ...S0, leadership: 2, commerce: 1 } },
+  { id: "sun_quan", name: "孫權", traits: ["cautious", "diplomatic", "ambitious"], cityId: "tainan", military: 1, intelligence: 3, charm: 3, skills: { ...S0, commerce: 2, leadership: 1 } },
+  { id: "zhao_yun", name: "趙雲", traits: ["loyal", "brave", "humble"], cityId: "taipei", military: 3, intelligence: 1, charm: 2, skills: { ...S0, tactics: 2 } },
+  { id: "lu_bu", name: "呂布", traits: ["brave", "treacherous", "impulsive"], cityId: "kaohsiung", military: 4, intelligence: 0, charm: 0, skills: { ...S0, tactics: 3 } },
+  { id: "diao_chan", name: "貂蟬", traits: ["charismatic", "cunning", "diplomatic"], cityId: "kaohsiung", military: 0, intelligence: 3, charm: 5, skills: { ...S0, espionage: 2, leadership: 1 } },
+  { id: "zhou_yu", name: "周瑜", traits: ["strategic", "proud", "ambitious"], cityId: "tainan", military: 2, intelligence: 3, charm: 0, skills: { ...S0, tactics: 2, espionage: 1 } },
 ];
 
 const cities: PlaceNode[] = [
