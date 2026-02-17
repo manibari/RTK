@@ -1,4 +1,4 @@
-import type { CharacterNode, PlaceNode } from "@rtk/graph-db";
+import type { CharacterNode, PlaceNode, RelationshipEdge } from "@rtk/graph-db";
 
 interface FactionDef {
   id: string;
@@ -17,6 +17,7 @@ export interface AIDecision {
  * NPC AI: evaluates strategic decisions for non-player factions.
  * Player faction (shu) is skipped — controlled by the player.
  * Alliance-aware: won't attack allied factions.
+ * Relationship-aware: avoids attacking cities held by high-intimacy characters.
  */
 export function evaluateNPCDecisions(
   factions: FactionDef[],
@@ -24,6 +25,7 @@ export function evaluateNPCDecisions(
   cities: PlaceNode[],
   playerFactionId: string,
   alliances: Set<string> = new Set(),
+  relationships: RelationshipEdge[] = [],
 ): AIDecision[] {
   const decisions: AIDecision[] = [];
   const charMap = new Map(characters.map((c) => [c.id, c]));
@@ -77,12 +79,22 @@ export function evaluateNPCDecisions(
         enemyCities,
         defendersPerCity,
         cityMap,
+        relationships,
       );
       decisions.push(decision);
     }
   }
 
   return decisions;
+}
+
+function getIntimacyWith(charId: string, targetId: string, relationships: RelationshipEdge[]): number {
+  const rel = relationships.find(
+    (r) =>
+      (r.sourceId === charId && r.targetId === targetId) ||
+      (r.sourceId === targetId && r.targetId === charId),
+  );
+  return rel?.intimacy ?? 50;
 }
 
 function decideForCharacter(
@@ -92,14 +104,22 @@ function decideForCharacter(
   enemyCities: PlaceNode[],
   defendersPerCity: Map<string, string[]>,
   cityMap: Map<string, PlaceNode>,
+  relationships: RelationshipEdge[],
 ): AIDecision {
   const currentCity = cityMap.get(char.cityId);
   const isLeader = char.id === faction.leaderId;
 
+  // Filter out enemy cities whose controller has high intimacy with this character
+  const viableEnemyCities = enemyCities.filter((c) => {
+    if (!c.controllerId) return true;
+    const intimacy = getIntimacyWith(char.id, c.controllerId, relationships);
+    return intimacy < 70; // Won't attack someone with intimacy >= 70
+  });
+
   // Leaders prefer to stay and defend
   if (isLeader) {
     // Only attack if we have strong defense and weak enemy nearby
-    const weakEnemy = enemyCities.find((c) => {
+    const weakEnemy = viableEnemyCities.find((c) => {
       const defenders = defendersPerCity.get(c.id)?.length ?? 0;
       return defenders === 0 && c.tier === "minor";
     });
@@ -118,9 +138,9 @@ function decideForCharacter(
   const myDefenders = defendersPerCity.get(char.cityId)?.length ?? 0;
 
   // Priority 1: If city is overstaffed (>2 defenders), send to attack weak enemy
-  if (myDefenders > 2 && enemyCities.length > 0) {
+  if (myDefenders > 2 && viableEnemyCities.length > 0) {
     // Prefer undefended or weakly defended cities
-    const target = pickWeakestCity(enemyCities, defendersPerCity);
+    const target = pickWeakestCity(viableEnemyCities, defendersPerCity);
     if (target) {
       return {
         characterId: char.id,
@@ -145,8 +165,8 @@ function decideForCharacter(
   }
 
   // Priority 3: 30% chance to attack a random enemy city
-  if (Math.random() < 0.3 && enemyCities.length > 0) {
-    const target = enemyCities[Math.floor(Math.random() * enemyCities.length)];
+  if (Math.random() < 0.3 && viableEnemyCities.length > 0) {
+    const target = viableEnemyCities[Math.floor(Math.random() * viableEnemyCities.length)];
     return {
       characterId: char.id,
       action: "attack",

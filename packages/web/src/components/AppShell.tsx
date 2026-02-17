@@ -149,6 +149,11 @@ export function AppShell() {
           }
         }
       }
+      if (result.betrayalEvents?.length > 0) {
+        for (const b of result.betrayalEvents) {
+          addToast(`${b.characterName} 背叛了 ${b.oldFaction}，投奔 ${b.newFaction}`, "#f97316");
+        }
+      }
       if (result.dailySummary) {
         setSummaries((prev) => new Map(prev).set(result.tick, result.dailySummary));
       }
@@ -202,6 +207,32 @@ export function AppShell() {
     setSummaries(new Map());
     setToasts([]);
     addToast("遊戲已重置", "#22c55e");
+  }, [addToast]);
+
+  const handleSave = useCallback(async (slot: number) => {
+    try {
+      const result = await trpc.simulation.saveGame.mutate({ slot });
+      addToast(`已存檔至 Slot ${slot}（Day ${result.tick}）`, "#3b82f6");
+    } catch {
+      addToast("存檔失敗", "#ef4444");
+    }
+  }, [addToast]);
+
+  const handleLoad = useCallback(async (slot: number) => {
+    setAutoSim(false);
+    autoSimRef.current = false;
+    try {
+      const result = await trpc.simulation.loadGame.mutate({ slot });
+      setCurrentTick(result.tick);
+      setViewTick(result.tick);
+      setGameStatus(result.gameStatus as GameStatus);
+      setAllBattles([]);
+      setAllDiplomacy([]);
+      setSummaries(new Map());
+      addToast(`已讀取 Slot ${slot}（Day ${result.tick}）`, "#3b82f6");
+    } catch {
+      addToast("讀取失敗", "#ef4444");
+    }
   }, [addToast]);
 
   // Compute timeline markers from accumulated events
@@ -263,8 +294,15 @@ export function AppShell() {
           </button>
         </div>
 
-        {/* Auto-simulate controls */}
+        {/* Save/Load + Auto-simulate controls */}
         <div style={styles.autoSimBar}>
+          {[1, 2, 3].map((slot) => (
+            <div key={slot} style={styles.saveSlot}>
+              <button style={styles.saveBtn} onClick={() => handleSave(slot)}>存{slot}</button>
+              <button style={styles.loadBtn} onClick={() => handleLoad(slot)}>讀{slot}</button>
+            </div>
+          ))}
+          <div style={styles.divider} />
           <button
             style={{
               ...styles.autoSimBtn,
@@ -404,6 +442,36 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 8,
     paddingRight: 16,
+  },
+  saveSlot: {
+    display: "flex",
+    gap: 2,
+  },
+  saveBtn: {
+    padding: "4px 8px",
+    borderRadius: "4px 0 0 4px",
+    border: "1px solid #334155",
+    backgroundColor: "#1e293b",
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  loadBtn: {
+    padding: "4px 8px",
+    borderRadius: "0 4px 4px 0",
+    border: "1px solid #334155",
+    borderLeft: "none",
+    backgroundColor: "#1e293b",
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  divider: {
+    width: 1,
+    height: 20,
+    backgroundColor: "#334155",
   },
   autoSimBtn: {
     padding: "6px 14px",

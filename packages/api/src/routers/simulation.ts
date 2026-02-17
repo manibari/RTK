@@ -115,6 +115,23 @@ export const simulationRouter = router({
       return getCombatRating(input.traits);
     }),
 
+  // Save / Load
+  saveGame: publicProcedure
+    .input(z.object({ slot: z.number().min(1).max(3) }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.simulation.saveGame(input.slot);
+    }),
+
+  loadGame: publicProcedure
+    .input(z.object({ slot: z.number().min(1).max(3) }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.simulation.loadGame(input.slot);
+    }),
+
+  listSaves: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.listSaves();
+  }),
+
   // Reset
   reset: publicProcedure.mutation(async ({ ctx }) => {
     await ctx.simulation.reset();

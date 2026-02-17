@@ -3,10 +3,20 @@ import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode,
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
 import { NarrativeService } from "./narrative/narrative-service.js";
 import { evaluateNPCDecisions } from "./ai/npc-ai.js";
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
 export interface TimelinePoint {
   tick: number;
   intimacy: number;
+}
+
+export interface BetrayalEvent {
+  tick: number;
+  characterId: string;
+  characterName: string;
+  oldFaction: string;
+  newFaction: string;
 }
 
 export interface AdvanceDayResult {
@@ -16,6 +26,7 @@ export interface AdvanceDayResult {
   battleResults: BattleResult[];
   diplomacyEvents: DiplomacyEvent[];
   recruitmentResults: RecruitmentResult[];
+  betrayalEvents: BetrayalEvent[];
   gameStatus: GameStatus;
 }
 
@@ -255,6 +266,7 @@ export class SimulationService {
         battleResults: [],
         diplomacyEvents: [],
         recruitmentResults: [],
+        betrayalEvents: [],
         gameStatus: this.gameState.status,
       };
     }
@@ -308,6 +320,9 @@ export class SimulationService {
     // Evaluate diplomacy
     const diplomacyEvents = await this.evaluateDiplomacy();
 
+    // Betrayal: disloyal characters may defect
+    const betrayalEvents = await this.processBetrayals();
+
     // Check win/defeat conditions
     const gameStatus = await this.checkGameOver();
 
@@ -334,10 +349,10 @@ export class SimulationService {
 
       // Re-read events with narratives
       const updatedEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
-      return { tick: this.currentTick, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, gameStatus };
+      return { tick: this.currentTick, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, gameStatus };
     }
 
-    return { tick: this.currentTick, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, gameStatus };
+    return { tick: this.currentTick, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, gameStatus };
   }
 
   getDailySummary(tick: number): string {
@@ -434,7 +449,8 @@ export class SimulationService {
     const characters = await this.repo.getAllCharacters();
     const cities = await this.repo.getAllPlaces();
 
-    const decisions = evaluateNPCDecisions(FACTIONS, characters, cities, "shu", this.alliances);
+    const rels = this.engine.getRelationships() as import("@rtk/graph-db").RelationshipEdge[];
+    const decisions = evaluateNPCDecisions(FACTIONS, characters, cities, "shu", this.alliances, rels);
 
     for (const decision of decisions) {
       if (decision.action === "stay" || !decision.targetCityId) continue;
@@ -775,6 +791,83 @@ export class SimulationService {
     return events;
   }
 
+  private async processBetrayals(): Promise<BetrayalEvent[]> {
+    const events: BetrayalEvent[] = [];
+    const characters = await this.repo.getAllCharacters();
+    const cities = await this.repo.getAllPlaces();
+    const rels = this.engine.getRelationships();
+
+    for (const faction of FACTIONS) {
+      // Only non-leader members can betray
+      for (const memberId of [...faction.members]) {
+        if (memberId === faction.leaderId) continue;
+
+        const char = characters.find((c) => c.id === memberId);
+        if (!char) continue;
+
+        // "loyal" trait: immune to betrayal
+        if (char.traits.includes("loyal")) continue;
+
+        // Base chance: 5%
+        let chance = 0.05;
+
+        // "treacherous" trait: double chance
+        if (char.traits.includes("treacherous")) chance *= 2;
+
+        // Faction at disadvantage (fewer cities) increases chance
+        const factionCities = cities.filter(
+          (c) => c.controllerId && faction.members.includes(c.controllerId),
+        ).length;
+        if (factionCities <= 1) chance += 0.05;
+
+        // Check if character has high intimacy with rival faction leader
+        let bestRivalFaction: string | null = null;
+        let bestIntimacy = 0;
+        for (const rival of FACTIONS) {
+          if (rival.id === faction.id) continue;
+          const rel = rels.find(
+            (r) =>
+              (r.sourceId === memberId && r.targetId === rival.leaderId) ||
+              (r.sourceId === rival.leaderId && r.targetId === memberId),
+          );
+          if (rel && rel.intimacy > bestIntimacy) {
+            bestIntimacy = rel.intimacy;
+            bestRivalFaction = rival.id;
+          }
+        }
+
+        // High intimacy with rival leader increases chance
+        if (bestIntimacy >= 60) chance += 0.05;
+        // Low intimacy with own leader increases chance
+        const leaderRel = rels.find(
+          (r) =>
+            (r.sourceId === memberId && r.targetId === faction.leaderId) ||
+            (r.sourceId === faction.leaderId && r.targetId === memberId),
+        );
+        if (leaderRel && leaderRel.intimacy <= 25) chance += 0.05;
+
+        if (Math.random() >= chance || !bestRivalFaction) continue;
+
+        // Betray: move to rival faction
+        faction.members = faction.members.filter((m) => m !== memberId);
+        const targetFaction = FACTIONS.find((f) => f.id === bestRivalFaction);
+        if (targetFaction) {
+          targetFaction.members.push(memberId);
+        }
+
+        events.push({
+          tick: this.currentTick,
+          characterId: memberId,
+          characterName: char.name,
+          oldFaction: faction.id,
+          newFaction: bestRivalFaction,
+        });
+      }
+    }
+
+    return events;
+  }
+
   areAllied(factionA: string, factionB: string): boolean {
     return this.alliances.has(this.allianceKey(factionA, factionB));
   }
@@ -890,6 +983,121 @@ export class SimulationService {
     }
   }
 
+  // ── Save / Load ──────────────────────────────────────────────────
+  private savesDir(): string {
+    return join(process.cwd(), "saves");
+  }
+
+  async saveGame(slot: number): Promise<{ slot: number; tick: number; savedAt: string }> {
+    const dir = this.savesDir();
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+    const characters = await this.repo.getAllCharacters();
+    const places = await this.repo.getAllPlaces();
+    const relationships = this.engine.getRelationships() as RelationshipEdge[];
+    const allEvents = this.eventStore.getAll();
+    const movements = await this.repo.getActiveMovements(this.currentTick);
+
+    const data: SaveData = {
+      version: 1,
+      tick: this.currentTick,
+      gameState: { ...this.gameState },
+      factions: FACTIONS.map((f) => ({ ...f, members: [...f.members] })),
+      alliances: [...this.alliances],
+      characters,
+      places,
+      relationships,
+      movements,
+      events: allEvents.map(({ id: _id, ...rest }) => rest),
+      dailySummaries: [...this.dailySummaries.entries()],
+      factionHistory: [...this.factionHistory.entries()].map(([k, v]) => [k, [...v]]),
+      initialRelationships: this.initialRelationships.map((r) => ({ ...r })),
+      savedAt: new Date().toISOString(),
+    };
+
+    writeFileSync(join(dir, `slot-${slot}.json`), JSON.stringify(data), "utf-8");
+    return { slot, tick: this.currentTick, savedAt: data.savedAt };
+  }
+
+  async loadGame(slot: number): Promise<{ tick: number; gameStatus: GameStatus }> {
+    const filePath = join(this.savesDir(), `slot-${slot}.json`);
+    if (!existsSync(filePath)) throw new Error(`Save slot ${slot} not found`);
+
+    const data: SaveData = JSON.parse(readFileSync(filePath, "utf-8"));
+
+    // Clear current state
+    this.eventStore.clear();
+    await this.repo.disconnect();
+    await this.repo.connect();
+
+    // Restore characters
+    for (const c of data.characters) {
+      await this.repo.createCharacter(c);
+    }
+
+    // Restore places
+    for (const p of data.places) {
+      await this.repo.createPlace(p);
+    }
+
+    // Restore movements
+    for (const m of data.movements) {
+      await this.repo.addMovement(m);
+    }
+
+    // Restore events
+    if (data.events.length > 0) {
+      this.eventStore.append(data.events);
+    }
+
+    // Rebuild engine
+    this.engine = new Engine();
+    this.engine.loadCharacters(data.characters);
+    for (const r of data.relationships) {
+      this.engine.loadRelationships([r]);
+    }
+    this.engine.world.setTick(data.tick);
+
+    // Restore graph relationships
+    for (const r of data.relationships) {
+      await this.repo.setRelationship(r);
+    }
+
+    // Restore service state
+    FACTIONS = data.factions.map((f) => ({ ...f, members: [...f.members] }));
+    this.alliances = new Set(data.alliances);
+    this.gameState = { ...data.gameState };
+    this.dailySummaries = new Map(data.dailySummaries);
+    this.factionHistory = new Map(data.factionHistory.map(([k, v]) => [k, [...v]]));
+    this.initialRelationships = data.initialRelationships.map((r) => ({ ...r }));
+    this.commandQueue = [];
+    this.commandedThisTick.clear();
+
+    // Re-init narrative service
+    const characters = await this.repo.getAllCharacters();
+    const characterMap = new Map(characters.map((c) => [c.id, c]));
+    this.narrative = new NarrativeService(characterMap);
+
+    return { tick: data.tick, gameStatus: data.gameState.status };
+  }
+
+  listSaves(): { slot: number; tick: number; savedAt: string }[] {
+    const dir = this.savesDir();
+    if (!existsSync(dir)) return [];
+    const results: { slot: number; tick: number; savedAt: string }[] = [];
+    for (let slot = 1; slot <= 3; slot++) {
+      const filePath = join(dir, `slot-${slot}.json`);
+      if (!existsSync(filePath)) continue;
+      try {
+        const data: SaveData = JSON.parse(readFileSync(filePath, "utf-8"));
+        results.push({ slot, tick: data.tick, savedAt: data.savedAt });
+      } catch {
+        // Corrupted save, skip
+      }
+    }
+    return results;
+  }
+
   private async checkGameOver(): Promise<GameStatus> {
     const cities = await this.repo.getAllPlaces();
     const majorCities = cities.filter((c) => c.tier === "major");
@@ -933,6 +1141,23 @@ export class SimulationService {
     if (factionId === "wei" || factionId === "lu_bu") return "hostile";
     return "neutral";
   }
+}
+
+interface SaveData {
+  version: 1;
+  tick: number;
+  gameState: GameState;
+  factions: { id: string; leaderId: string; members: string[]; color: string }[];
+  alliances: string[];
+  characters: CharacterNode[];
+  places: PlaceNode[];
+  relationships: RelationshipEdge[];
+  movements: { characterId: string; originCityId: string; destinationCityId: string; departureTick: number; arrivalTick: number }[];
+  events: Omit<StoredEvent, "id">[];
+  dailySummaries: [number, string][];
+  factionHistory: [string, FactionHistoryEntry[]][];
+  initialRelationships: RelationshipEdge[];
+  savedAt: string;
 }
 
 function deriveType(intimacy: number): "friend" | "rival" | "neutral" {

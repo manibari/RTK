@@ -39,4 +39,8 @@ export class World {
   advanceTick(): number {
     return ++this._tick;
   }
+
+  setTick(tick: number): void {
+    this._tick = tick;
+  }
 }
