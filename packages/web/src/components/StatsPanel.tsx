@@ -17,9 +17,10 @@ type AlliancePair = [string, string];
 
 interface StatsPanelProps {
   currentTick: number;
+  onMessage?: (text: string, color: string) => void;
 }
 
-export function StatsPanel({ currentTick }: StatsPanelProps) {
+export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
   const [stats, setStats] = useState<FactionStat[]>([]);
   const [alliances, setAlliances] = useState<AlliancePair[]>([]);
   const [history, setHistory] = useState<Record<string, { tick: number; power: number }[]>>({});
@@ -51,7 +52,7 @@ export function StatsPanel({ currentTick }: StatsPanelProps) {
     if (result.success) {
       fetchStats();
     }
-    alert(result.reason);
+    onMessage?.(result.reason, result.success ? "#22c55e" : "#ef4444");
   };
 
   const handleBreak = async (factionId: string) => {
@@ -59,7 +60,7 @@ export function StatsPanel({ currentTick }: StatsPanelProps) {
     if (result.success) {
       fetchStats();
     }
-    alert(result.reason);
+    onMessage?.(result.reason, result.success ? "#f59e0b" : "#ef4444");
   };
 
   if (loading) {

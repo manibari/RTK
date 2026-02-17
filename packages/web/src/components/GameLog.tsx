@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 interface BattleResult {
   tick: number;
   cityName: string;
@@ -33,7 +35,19 @@ interface GameLogProps {
   currentTick: number;
 }
 
+type LogFilter = "battle" | "diplomacy" | "summary";
+
 export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogProps) {
+  const [activeFilters, setActiveFilters] = useState<Set<LogFilter>>(new Set(["battle", "diplomacy", "summary"]));
+
+  const toggleFilter = (f: LogFilter) => {
+    setActiveFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(f)) { next.delete(f); } else { next.add(f); }
+      return next;
+    });
+  };
+
   // Merge all events into a unified log
   const entries: GameLogEntry[] = [];
 
@@ -57,10 +71,18 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
   // Sort by tick descending
   entries.sort((a, b) => b.tick - a.tick);
 
+  const filtered = entries.filter((e) => activeFilters.has(e.type as LogFilter));
+
   const typeLabels: Record<string, string> = {
     battle: "戰報",
     diplomacy: "外交",
     summary: "日報",
+  };
+
+  const filterColors: Record<string, string> = {
+    battle: "#ef4444",
+    diplomacy: "#22c55e",
+    summary: "#94a3b8",
   };
 
   return (
@@ -68,14 +90,30 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
       <div style={styles.header}>
         <h1 style={styles.title}>RTK - Game Log</h1>
         <span style={styles.tick}>Day {currentTick}</span>
-        <span style={styles.count}>{entries.length} entries</span>
+        <div style={styles.filterBar}>
+          {(["battle", "diplomacy", "summary"] as LogFilter[]).map((f) => (
+            <button
+              key={f}
+              style={{
+                ...styles.filterBtn,
+                backgroundColor: activeFilters.has(f) ? filterColors[f] : "transparent",
+                color: activeFilters.has(f) ? "#0f172a" : "#94a3b8",
+                borderColor: filterColors[f],
+              }}
+              onClick={() => toggleFilter(f)}
+            >
+              {typeLabels[f]}
+            </button>
+          ))}
+        </div>
+        <span style={styles.count}>{filtered.length}/{entries.length}</span>
       </div>
 
-      {entries.length === 0 ? (
+      {filtered.length === 0 ? (
         <div style={styles.empty}>尚無記錄。推進遊戲開始產生事件。</div>
       ) : (
         <div style={styles.list}>
-          {entries.map((entry, i) => (
+          {filtered.map((entry, i) => (
             <div key={i} style={styles.entry}>
               <div style={styles.entryHeader}>
                 <span style={styles.entryDay}>Day {entry.tick}</span>
@@ -118,6 +156,19 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "4px 10px",
     borderRadius: 6,
     fontWeight: 600,
+  },
+  filterBar: {
+    display: "flex",
+    gap: 4,
+    marginLeft: 12,
+  },
+  filterBtn: {
+    padding: "3px 10px",
+    borderRadius: 4,
+    border: "1px solid",
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: "pointer",
   },
   count: {
     fontSize: 13,

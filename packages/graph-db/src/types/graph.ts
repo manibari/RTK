@@ -3,6 +3,9 @@ export interface CharacterNode {
   name: string;
   traits: string[];
   cityId?: string;
+  military: number;
+  intelligence: number;
+  charm: number;
 }
 
 export interface RelationshipEdge {
@@ -31,6 +34,9 @@ export interface PlaceNode {
   controllerId?: string;
   gold: number;
   garrison: number;
+  development: number;
+  siegedBy?: string;
+  siegeTick?: number;
 }
 
 export interface Movement {

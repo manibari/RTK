@@ -35,8 +35,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
     try {
       await session.run(
         `MERGE (c:Character {id: $id})
-         SET c.name = $name, c.traits = $traits, c.cityId = $cityId`,
-        { id: character.id, name: character.name, traits: character.traits, cityId: character.cityId ?? null },
+         SET c.name = $name, c.traits = $traits, c.cityId = $cityId,
+             c.military = $military, c.intelligence = $intelligence, c.charm = $charm`,
+        { id: character.id, name: character.name, traits: character.traits, cityId: character.cityId ?? null,
+          military: character.military, intelligence: character.intelligence, charm: character.charm },
       );
     } finally {
       await session.close();
@@ -54,7 +56,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
       if (!record) return null;
 
       const node = record.get("c").properties;
-      return { id: node.id, name: node.name, traits: node.traits, cityId: node.cityId ?? undefined };
+      return { id: node.id, name: node.name, traits: node.traits, cityId: node.cityId ?? undefined,
+        military: node.military ?? 0, intelligence: node.intelligence ?? 0, charm: node.charm ?? 0 };
     } finally {
       await session.close();
     }
@@ -66,7 +69,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const result = await session.run(`MATCH (c:Character) RETURN c`);
       return result.records.map((r) => {
         const node = r.get("c").properties;
-        return { id: node.id, name: node.name, traits: node.traits, cityId: node.cityId ?? undefined };
+        return { id: node.id, name: node.name, traits: node.traits, cityId: node.cityId ?? undefined,
+          military: node.military ?? 0, intelligence: node.intelligence ?? 0, charm: node.charm ?? 0 };
       });
     } finally {
       await session.close();
@@ -159,7 +163,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const props = record.get("p").properties;
       return { id: props.id, name: props.name, lat: props.lat, lng: props.lng,
         status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined,
-        gold: props.gold ?? 0, garrison: props.garrison ?? 0 };
+        gold: props.gold ?? 0, garrison: props.garrison ?? 0, development: props.development ?? 0,
+        siegedBy: props.siegedBy ?? undefined, siegeTick: props.siegeTick ?? undefined };
     } finally {
       await session.close();
     }
@@ -173,7 +178,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
         const props = r.get("p").properties;
         return { id: props.id, name: props.name, lat: props.lat, lng: props.lng,
           status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined,
-          gold: props.gold ?? 0, garrison: props.garrison ?? 0 };
+          gold: props.gold ?? 0, garrison: props.garrison ?? 0, development: props.development ?? 0,
+          siegedBy: props.siegedBy ?? undefined, siegeTick: props.siegeTick ?? undefined };
       });
     } finally {
       await session.close();
@@ -227,7 +233,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
 
       const record = result.records[0];
       if (!record) {
-        return { center: { id: centerId, name: "", traits: [] }, characters: [], relationships: [] };
+        return { center: { id: centerId, name: "", traits: [], military: 0, intelligence: 0, charm: 0 }, characters: [], relationships: [] };
       }
 
       const centerProps = record.get("center").properties;
@@ -235,13 +241,19 @@ export class Neo4jGraphRepository implements IGraphRepository {
         id: centerProps.id,
         name: centerProps.name,
         traits: centerProps.traits ?? [],
+        military: centerProps.military ?? 0,
+        intelligence: centerProps.intelligence ?? 0,
+        charm: centerProps.charm ?? 0,
       };
 
       const others: CharacterNode[] = (record.get("others") ?? []).map(
-        (n: { properties: { id: string; name: string; traits: string[] } }) => ({
-          id: n.properties.id,
-          name: n.properties.name,
-          traits: n.properties.traits ?? [],
+        (n: { properties: Record<string, unknown> }) => ({
+          id: n.properties.id as string,
+          name: n.properties.name as string,
+          traits: (n.properties.traits as string[]) ?? [],
+          military: (n.properties.military as number) ?? 0,
+          intelligence: (n.properties.intelligence as number) ?? 0,
+          charm: (n.properties.charm as number) ?? 0,
         }),
       );
 

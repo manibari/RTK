@@ -8,6 +8,9 @@ interface CharacterInfo {
   name: string;
   traits: string[];
   cityId?: string;
+  military: number;
+  intelligence: number;
+  charm: number;
 }
 
 interface RelationshipInfo {
@@ -54,7 +57,6 @@ export function CharacterDetail({
   const [relationships, setRelationships] = useState<RelationshipInfo[]>([]);
   const [allChars, setAllChars] = useState<Map<string, CharacterInfo>>(new Map());
   const [recentEvents, setRecentEvents] = useState<PairEvent[]>([]);
-  const [combatRating, setCombatRating] = useState<{ military: number; intelligence: number; charm: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -69,11 +71,6 @@ export function CharacterDetail({
       setRelationships(rels as RelationshipInfo[]);
       setAllChars(new Map((chars as CharacterInfo[]).map((c) => [c.id, c])));
       setRecentEvents((events as PairEvent[]).slice(-10).reverse());
-      if (char && (char as CharacterInfo).traits) {
-        trpc.simulation.getCombatRating.query({ traits: (char as CharacterInfo).traits })
-          .then((r) => setCombatRating(r as { military: number; intelligence: number; charm: number }))
-          .catch(() => {});
-      }
     }).catch(() => {}).finally(() => setLoading(false));
   }, [characterId]);
 
@@ -116,22 +113,20 @@ export function CharacterDetail({
               <span key={t} style={styles.trait}>{t}</span>
             ))}
           </div>
-          {combatRating && (
-            <div style={styles.ratingGrid}>
-              <div style={styles.ratingItem}>
-                <span style={{ ...styles.ratingLabel, color: "#ef4444" }}>武</span>
-                <span style={styles.ratingValue}>{combatRating.military}</span>
-              </div>
-              <div style={styles.ratingItem}>
-                <span style={{ ...styles.ratingLabel, color: "#3b82f6" }}>智</span>
-                <span style={styles.ratingValue}>{combatRating.intelligence}</span>
-              </div>
-              <div style={styles.ratingItem}>
-                <span style={{ ...styles.ratingLabel, color: "#f59e0b" }}>魅</span>
-                <span style={styles.ratingValue}>{combatRating.charm}</span>
-              </div>
+          <div style={styles.ratingGrid}>
+            <div style={styles.ratingItem}>
+              <span style={{ ...styles.ratingLabel, color: "#ef4444" }}>武</span>
+              <span style={styles.ratingValue}>{character.military}</span>
             </div>
-          )}
+            <div style={styles.ratingItem}>
+              <span style={{ ...styles.ratingLabel, color: "#3b82f6" }}>智</span>
+              <span style={styles.ratingValue}>{character.intelligence}</span>
+            </div>
+            <div style={styles.ratingItem}>
+              <span style={{ ...styles.ratingLabel, color: "#f59e0b" }}>魅</span>
+              <span style={styles.ratingValue}>{character.charm}</span>
+            </div>
+          </div>
         </div>
 
         {/* Relationships */}

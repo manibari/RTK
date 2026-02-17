@@ -21,6 +21,9 @@ interface PlaceNode {
   controllerId?: string;
   gold: number;
   garrison: number;
+  development: number;
+  siegedBy?: string;
+  siegeTick?: number;
 }
 
 interface CharacterOnMap {
@@ -162,7 +165,20 @@ export function MapPage({
     try {
       await trpc.simulation.queueCommand.mutate({
         type: "reinforce",
-        characterId: "liu_bei", // unused for reinforce but required by schema
+        characterId: "liu_bei",
+        targetCityId: cityId,
+      });
+      setCommandCount((c) => c + 1);
+    } catch {
+      // silently fail
+    }
+  };
+
+  const handleDevelop = async (cityId: string) => {
+    try {
+      await trpc.simulation.queueCommand.mutate({
+        type: "develop",
+        characterId: "liu_bei",
         targetCityId: cityId,
       });
       setCommandCount((c) => c + 1);
@@ -276,6 +292,16 @@ export function MapPage({
                 <span style={styles.infoLabel}>守備</span>
                 <span style={{ color: "#3b82f6", fontWeight: 600 }}>{selectedCity.garrison ?? 0}</span>
               </div>
+              <div style={styles.infoRow}>
+                <span style={styles.infoLabel}>開發</span>
+                <span style={{ color: "#a855f7", fontWeight: 600 }}>Lv.{selectedCity.development ?? 0}/5</span>
+              </div>
+              {selectedCity.siegedBy && (
+                <div style={{ ...styles.infoRow, color: "#ef4444" }}>
+                  <span style={styles.infoLabel}>圍城中</span>
+                  <span style={{ fontWeight: 700 }}>{selectedCity.siegedBy}</span>
+                </div>
+              )}
             </div>
 
             {/* Command buttons */}
@@ -303,13 +329,25 @@ export function MapPage({
               </div>
             )}
 
-            {/* Reinforce button */}
-            {selectedCity.status === "allied" && (selectedCity.gold ?? 0) >= 100 && (
+            {/* Reinforce + Develop buttons */}
+            {selectedCity.status === "allied" && (
               <div style={styles.cmdSection}>
-                <p style={styles.cmdLabel}>強化守備（消耗 100 金幣）</p>
-                <button style={styles.reinforceBtn} onClick={() => handleReinforce(selectedCity.id)}>
-                  強化守備 +1
-                </button>
+                {(selectedCity.gold ?? 0) >= 100 && (
+                  <>
+                    <p style={styles.cmdLabel}>強化守備（100 金）</p>
+                    <button style={styles.reinforceBtn} onClick={() => handleReinforce(selectedCity.id)}>
+                      強化守備 +1
+                    </button>
+                  </>
+                )}
+                {(selectedCity.gold ?? 0) >= 300 && (selectedCity.development ?? 0) < 5 && (
+                  <>
+                    <p style={{ ...styles.cmdLabel, marginTop: 8 }}>城市開發（300 金，收入 +30%）</p>
+                    <button style={styles.developBtn} onClick={() => handleDevelop(selectedCity.id)}>
+                      開發 Lv.{(selectedCity.development ?? 0) + 1}
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
@@ -469,6 +507,7 @@ const styles: Record<string, React.CSSProperties> = {
   cmdMove: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   cmdAttack: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   reinforceBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  developBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#a855f7", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   factionList: { display: "flex", flexDirection: "column", gap: 6 },
   factionItem: { display: "flex", alignItems: "center", gap: 8, fontSize: 13 },
   factionDot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0 },

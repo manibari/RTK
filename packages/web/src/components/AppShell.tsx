@@ -359,7 +359,7 @@ export function AppShell() {
             currentTick={currentTick}
           />
         ) : (
-          <StatsPanel currentTick={currentTick} />
+          <StatsPanel currentTick={currentTick} onMessage={addToast} />
         )}
       </div>
 

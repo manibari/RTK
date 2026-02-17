@@ -47,7 +47,7 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit" | "reinforce";
+  type: "move" | "attack" | "recruit" | "reinforce" | "develop";
   characterId: string;
   targetCityId: string;
   targetCharacterId?: string; // for recruit
@@ -305,8 +305,11 @@ export class SimulationService {
     // NPC AI decisions
     await this.runNPCDecisions();
 
-    // NPC factions spend gold to reinforce weak cities
-    await this.npcReinforce();
+    // NPC factions spend gold (reinforce + develop)
+    await this.npcSpend();
+
+    // Process ongoing sieges (garrison attrition)
+    await this.processSieges();
 
     // Generate random movements for remaining idle characters (10%)
     await this.generateMovements();
@@ -491,6 +494,17 @@ export class SimulationService {
         continue;
       }
 
+      // Develop: spend gold to increase city development
+      if (cmd.type === "develop") {
+        const city = await this.repo.getPlace(cmd.targetCityId);
+        if (!city || city.gold < 300 || city.development >= 5) continue;
+        await this.repo.updatePlace(city.id, {
+          gold: city.gold - 300,
+          development: city.development + 1,
+        });
+        continue;
+      }
+
       const char = await this.repo.getCharacter(cmd.characterId);
       if (!char || !char.cityId) continue;
       if (char.cityId === cmd.targetCityId) continue;
@@ -540,21 +554,71 @@ export class SimulationService {
     }
   }
 
-  private async npcReinforce(): Promise<void> {
+  private async npcSpend(): Promise<void> {
     const cities = await this.repo.getAllPlaces();
     for (const faction of FACTIONS) {
       if (faction.id === "shu") continue; // Player controls shu spending
       const factionCities = cities.filter(
         (c) => c.controllerId && faction.members.includes(c.controllerId),
       );
-      // Find weakest garrison city with enough gold
+
+      // First: reinforce weakest garrison if any city has enough gold
       const weakest = factionCities
         .filter((c) => c.gold >= 100)
         .sort((a, b) => a.garrison - b.garrison)[0];
-      if (weakest) {
+      if (weakest && weakest.garrison < 4) {
         await this.repo.updatePlace(weakest.id, {
           gold: weakest.gold - 100,
           garrison: weakest.garrison + 1,
+        });
+      }
+
+      // Then: develop richest city if affordable and low development
+      const devTarget = factionCities
+        .filter((c) => c.gold >= 300 && c.development < 3)
+        .sort((a, b) => b.gold - a.gold)[0];
+      if (devTarget) {
+        await this.repo.updatePlace(devTarget.id, {
+          gold: devTarget.gold - 300,
+          development: devTarget.development + 1,
+        });
+      }
+    }
+  }
+
+  private async processSieges(): Promise<void> {
+    const cities = await this.repo.getAllPlaces();
+    for (const city of cities) {
+      if (!city.siegedBy || city.siegeTick == null) continue;
+      const duration = this.currentTick - city.siegeTick;
+
+      // Siege needs 2+ ticks to start damaging garrison
+      if (duration < 2) continue;
+
+      // Check if besieging faction still has characters nearby
+      const allChars = await this.repo.getAllCharacters();
+      const besiegers = allChars.filter(
+        (c) => c.cityId === city.id && this.getFactionOf(c.id) === city.siegedBy,
+      );
+
+      if (besiegers.length === 0) {
+        // Siege broken: no besiegers remain
+        await this.repo.updatePlace(city.id, { siegedBy: undefined, siegeTick: undefined });
+        continue;
+      }
+
+      // Garrison attrition: -1 per tick while sieged
+      const newGarrison = Math.max(0, city.garrison - 1);
+      await this.repo.updatePlace(city.id, { garrison: newGarrison });
+
+      // If garrison reaches 0, city falls to besiegers
+      if (newGarrison === 0) {
+        const leadBesieger = besiegers[0];
+        await this.repo.updatePlace(city.id, {
+          controllerId: leadBesieger.id,
+          status: this.factionToStatus(city.siegedBy),
+          siegedBy: undefined,
+          siegeTick: undefined,
         });
       }
     }
@@ -564,7 +628,10 @@ export class SimulationService {
     const cities = await this.repo.getAllPlaces();
     for (const city of cities) {
       if (city.status === "dead" || !city.controllerId) continue;
-      const income = city.tier === "major" ? 100 : 50;
+      // Sieged cities produce no gold
+      if (city.siegedBy) continue;
+      const baseIncome = city.tier === "major" ? 100 : 50;
+      const income = Math.round(baseIncome * (1 + city.development * 0.3));
       await this.repo.updatePlace(city.id, { gold: city.gold + income });
     }
   }
@@ -608,11 +675,11 @@ export class SimulationService {
         (c) => c.cityId === cityId && city.controllerId && this.getFactionOf(c.id) === this.getFactionOf(city.controllerId),
       );
 
-      // Defense power: sum of defender traits + garrison bonus + city tier bonus
+      // Defense power: sum of defender military stats + garrison bonus + city tier bonus
       const tierBonus = city.tier === "major" ? 3 : 1;
       let defensePower = city.garrison + tierBonus + Math.random() * 2;
       for (const d of defenders) {
-        defensePower += d.traits.length * 2 + Math.random() * 2;
+        defensePower += d.military + d.intelligence * 0.5 + Math.random() * 2;
       }
 
       // Each attacking faction battles independently
@@ -622,7 +689,7 @@ export class SimulationService {
         for (const id of attackerIds) {
           const c = await this.repo.getCharacter(id);
           if (c) {
-            attackPower += c.traits.length * 2 + Math.random() * 2;
+            attackPower += c.military + c.intelligence * 0.5 + Math.random() * 2;
             attackChars.push(c);
           }
         }
@@ -636,12 +703,22 @@ export class SimulationService {
           await this.repo.updatePlace(city.id, {
             controllerId: leadAttacker.id,
             status: newStatus,
-            garrison: Math.max(0, city.garrison - 1), // Garrison damaged in battle
+            garrison: Math.max(0, city.garrison - 1),
+            siegedBy: undefined, siegeTick: undefined, // Clear siege on capture
           });
+          // Growth: winner's military +1 (cap 10)
+          for (const ac of attackChars) {
+            if (ac.military < 10) {
+              await this.repo.createCharacter({ ...ac, military: ac.military + 1 });
+            }
+          }
         } else {
-          // Failed attack: garrison takes minor damage
+          // Failed attack: start or strengthen siege
           if (city.garrison > 0) {
-            await this.repo.updatePlace(city.id, { garrison: city.garrison - 1 });
+            if (!city.siegedBy) {
+              // Begin siege
+              await this.repo.updatePlace(city.id, { siegedBy: attackFaction, siegeTick: this.currentTick });
+            }
           }
         }
 
@@ -702,13 +779,12 @@ export class SimulationService {
         );
         const intimacy = rel?.intimacy ?? 30;
 
-        // Base recruitment chance: 15% + intimacy/300
-        let chance = 0.15 + intimacy / 300;
+        // Base recruitment chance: 15% + intimacy/300 + charm bonus
+        let chance = 0.15 + intimacy / 300 + attacker.charm * 0.03;
 
         // Trait modifiers
         if (captured.traits.includes("loyal")) chance -= 0.2;
         if (captured.traits.includes("treacherous")) chance += 0.2;
-        if (attacker.traits.includes("charismatic")) chance += 0.1;
 
         chance = Math.max(0.05, Math.min(0.8, chance));
         const success = Math.random() < chance;
@@ -721,6 +797,10 @@ export class SimulationService {
           const newFaction = FACTIONS.find((f) => f.id === attackerFaction);
           if (newFaction) {
             newFaction.members.push(captured.id);
+          }
+          // Growth: recruiter's charm +1 (cap 10)
+          if (attacker.charm < 10) {
+            await this.repo.createCharacter({ ...attacker, charm: attacker.charm + 1 });
           }
         }
 
@@ -949,10 +1029,10 @@ export class SimulationService {
     let totalDef = 0;
     for (let i = 0; i < 100; i++) {
       let atkPower = Math.random() * 2;
-      for (const c of attackChars) atkPower += c.traits.length * 2 + Math.random() * 2;
+      for (const c of attackChars) atkPower += c.military + c.intelligence * 0.5 + Math.random() * 2;
 
       let defPower = city.garrison + tierBonus + Math.random() * 2;
-      for (const d of defenders) defPower += d.traits.length * 2 + Math.random() * 2;
+      for (const d of defenders) defPower += d.military + d.intelligence * 0.5 + Math.random() * 2;
 
       if (atkPower > defPower) wins++;
       totalAtk += atkPower;

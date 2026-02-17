@@ -99,7 +99,7 @@ export class InMemoryGraphRepository implements IGraphRepository {
   async getCharacterGraph(centerId: string, depth: number): Promise<CharacterGraph> {
     const center = this.characters.get(centerId);
     if (!center) {
-      return { center: { id: centerId, name: "", traits: [] }, characters: [], relationships: [] };
+      return { center: { id: centerId, name: "", traits: [], military: 0, intelligence: 0, charm: 0 }, characters: [], relationships: [] };
     }
 
     const visited = new Set<string>([centerId]);
