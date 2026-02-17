@@ -95,6 +95,7 @@ export function CharacterDetail({
   const [recentEvents, setRecentEvents] = useState<PairEvent[]>([]);
   const [prestige, setPrestige] = useState(0);
   const [achievements, setAchievements] = useState<string[]>([]);
+  const [favorability, setFavorability] = useState(60);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -105,7 +106,8 @@ export function CharacterDetail({
       trpc.character.getAll.query(),
       trpc.simulation.getEventLog.query({ characterId }),
       trpc.simulation.getCharacterAchievements.query({ characterId }),
-    ]).then(([char, rels, chars, events, achievementData]) => {
+      trpc.simulation.getCharacterFavorability.query({ characterId }),
+    ]).then(([char, rels, chars, events, achievementData, favData]) => {
       setCharacter(char as CharacterInfo | null);
       setRelationships(rels as RelationshipInfo[]);
       setAllChars(new Map((chars as CharacterInfo[]).map((c) => [c.id, c])));
@@ -113,6 +115,7 @@ export function CharacterDetail({
       const ad = achievementData as { prestige: number; achievements: string[] };
       setPrestige(ad.prestige);
       setAchievements(ad.achievements);
+      setFavorability((favData as { favorability: number }).favorability);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [characterId]);
 
@@ -226,6 +229,14 @@ export function CharacterDetail({
               )}
             </div>
           )}
+          {/* Favorability */}
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #334155", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 13, color: favorability >= 60 ? "#22c55e" : favorability >= 30 ? "#f59e0b" : "#ef4444", fontWeight: 700 }}>支持度</span>
+            <div style={{ flex: 1, height: 6, backgroundColor: "#0f172a", borderRadius: 3, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${favorability}%`, backgroundColor: favorability >= 60 ? "#22c55e" : favorability >= 30 ? "#f59e0b" : "#ef4444", borderRadius: 3 }} />
+            </div>
+            <span style={{ fontSize: 12, color: "#94a3b8" }}>{favorability}</span>
+          </div>
         </div>
 
         {/* Relationships */}

@@ -37,6 +37,13 @@ export type CityStatus = "allied" | "hostile" | "neutral" | "dead";
 
 export type CitySpecialty = "military_academy" | "forge" | "harbor" | "library" | "market" | "granary";
 
+export type DistrictType = "defense" | "commerce" | "agriculture" | "recruitment";
+
+export interface District {
+  type: DistrictType;
+  builtTick: number;
+}
+
 export interface PlaceNode {
   id: string;
   name: string;
@@ -52,6 +59,7 @@ export interface PlaceNode {
   siegeTick?: number;
   specialty?: CitySpecialty;
   improvement?: string;
+  districts?: District[];
 }
 
 export interface Movement {

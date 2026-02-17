@@ -11,6 +11,11 @@ const StrategicMap = dynamic(
   { ssr: false },
 );
 
+interface District {
+  type: string;
+  builtTick: number;
+}
+
 interface PlaceNode {
   id: string;
   name: string;
@@ -26,7 +31,22 @@ interface PlaceNode {
   siegeTick?: number;
   specialty?: string;
   improvement?: string;
+  districts?: District[];
 }
+
+const DISTRICT_LABELS: Record<string, string> = {
+  defense: "防禦區",
+  commerce: "商業區",
+  agriculture: "農業區",
+  recruitment: "招募區",
+};
+
+const DISTRICT_EFFECTS: Record<string, string> = {
+  defense: "守備+2",
+  commerce: "收入+80%",
+  agriculture: "圍城延遲+3天",
+  recruitment: "招募-100金,成功率+25%",
+};
 
 const SPECIALTY_LABELS: Record<string, string> = {
   military_academy: "軍校",
@@ -551,6 +571,43 @@ export function MapPage({
                         ))}
                       </select>
                     </>
+                  );
+                })()}
+                {/* District display and build */}
+                {(() => {
+                  const districts = selectedCity.districts ?? [];
+                  return (
+                    <div style={{ marginTop: 8 }}>
+                      <p style={{ ...styles.cmdLabel, marginBottom: 4 }}>區域 ({districts.length}/2)</p>
+                      {districts.map((d, i) => (
+                        <div key={i} style={{ fontSize: 11, color: "#94a3b8" }}>
+                          {DISTRICT_LABELS[d.type] ?? d.type} — {DISTRICT_EFFECTS[d.type] ?? ""}
+                        </div>
+                      ))}
+                      {districts.length < 2 && (selectedCity.development ?? 0) >= 2 && (selectedCity.gold ?? 0) >= 400 && (
+                        <select
+                          style={{ ...styles.tacticSelect, marginTop: 4 }}
+                          onChange={(e) => {
+                            if (!e.target.value) return;
+                            trpc.simulation.queueCommand.mutate({
+                              type: "build_district",
+                              characterId: "liu_bei",
+                              targetCityId: selectedCity.id,
+                              districtType: e.target.value as "defense" | "commerce" | "agriculture" | "recruitment",
+                            }).then(() => setCommandCount((c) => c + 1));
+                            e.target.value = "";
+                          }}
+                          defaultValue=""
+                        >
+                          <option value="" disabled>建造區域（400金）</option>
+                          {(["defense", "commerce", "agriculture", "recruitment"] as const)
+                            .filter((t) => !districts.some((d) => d.type === t))
+                            .map((t) => (
+                              <option key={t} value={t}>{DISTRICT_LABELS[t]} — {DISTRICT_EFFECTS[t]}</option>
+                            ))}
+                        </select>
+                      )}
+                    </div>
                   );
                 })()}
               </div>

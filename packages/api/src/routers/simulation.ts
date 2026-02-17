@@ -50,7 +50,7 @@ export const simulationRouter = router({
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
-      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "hire_neutral", "assign_role", "start_research", "establish_trade"]),
+      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "hire_neutral", "assign_role", "start_research", "establish_trade", "build_district", "assign_mentor"]),
       characterId: z.string(),
       targetCityId: z.string(),
       targetCharacterId: z.string().optional(),
@@ -58,6 +58,7 @@ export const simulationRouter = router({
       techId: z.string().optional(),
       tactic: z.enum(["aggressive", "defensive", "balanced"]).optional(),
       tradeCityId: z.string().optional(),
+      districtType: z.enum(["defense", "commerce", "agriculture", "recruitment"]).optional(),
     }))
     .mutation(({ ctx, input }) => {
       ctx.simulation.queueCommand(input);
@@ -165,6 +166,18 @@ export const simulationRouter = router({
   // Supply status
   getSupplyStatus: publicProcedure.query(async ({ ctx }) => {
     return ctx.simulation.computeSupplyStatus();
+  }),
+
+  // Favorability
+  getCharacterFavorability: publicProcedure
+    .input(z.object({ characterId: z.string() }))
+    .query(({ ctx, input }) => {
+      return { favorability: ctx.simulation.getFavorability(input.characterId) };
+    }),
+
+  // Mentor pairs
+  getMentorPairs: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getMentorPairs();
   }),
 
   // Event cards

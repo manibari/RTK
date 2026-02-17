@@ -1,5 +1,5 @@
 import { Engine } from "@rtk/simulation";
-import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode, SpyMission, SpyMissionType, CharacterSkills, CharacterRole } from "@rtk/graph-db";
+import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode, SpyMission, SpyMissionType, CharacterSkills, CharacterRole, DistrictType, District } from "@rtk/graph-db";
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
 import { NarrativeService } from "./narrative/narrative-service.js";
 import { evaluateNPCDecisions } from "./ai/npc-ai.js";
@@ -115,14 +115,33 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade";
+  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade" | "build_district" | "assign_mentor";
   characterId: string;
   targetCityId: string;
-  targetCharacterId?: string; // for recruit / hire_neutral
+  targetCharacterId?: string; // for recruit / hire_neutral / assign_mentor (apprentice)
   role?: CharacterRole; // for assign_role
   techId?: string; // for start_research
   tactic?: BattleTactic; // for attack
   tradeCityId?: string; // for establish_trade (second city)
+  districtType?: DistrictType; // for build_district
+}
+
+// ── District system ──
+const DISTRICT_COST = 400;
+const MAX_DISTRICTS = 2;
+const DISTRICT_LABELS: Record<DistrictType, string> = {
+  defense: "防禦區",
+  commerce: "商業區",
+  agriculture: "農業區",
+  recruitment: "招募區",
+};
+
+// ── Mentor system ──
+export interface MentorPair {
+  mentorId: string;
+  apprenticeId: string;
+  factionId: string;
+  startTick: number;
 }
 
 // ── Technology system ──
@@ -339,6 +358,8 @@ export class SimulationService {
   private characterDiploCount = new Map<string, number>();
   private characterAchievements = new Map<string, string[]>(); // characterId -> achievement ids
   private legacyBonuses = new Map<string, number>(); // factionId -> cumulative legacy bonus from dead prestigious chars
+  private characterFavorability = new Map<string, number>(); // characterId -> favorability toward leader (0-100)
+  private mentorPairs: MentorPair[] = [];
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -382,6 +403,8 @@ export class SimulationService {
     this.characterDiploCount.clear();
     this.characterAchievements.clear();
     this.legacyBonuses.clear();
+    this.characterFavorability.clear();
+    this.mentorPairs = [];
     FACTIONS = createDefaultFactions();
 
     // Re-initialize
@@ -756,6 +779,96 @@ export class SimulationService {
     }
   }
 
+  // ── Favorability API ──
+  getFavorability(charId: string): number {
+    return this.characterFavorability.get(charId) ?? 60; // default 60
+  }
+
+  getAllFavorability(): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const [id, val] of this.characterFavorability) {
+      result[id] = val;
+    }
+    return result;
+  }
+
+  private adjustFavorability(charId: string, delta: number): void {
+    const current = this.getFavorability(charId);
+    this.characterFavorability.set(charId, Math.max(0, Math.min(100, Math.round(current + delta))));
+  }
+
+  private async updateFavorability(battleResults: BattleResult[], betrayalEvents: BetrayalEvent[]): Promise<void> {
+    const rels = this.engine.getRelationships();
+    for (const faction of FACTIONS) {
+      for (const memberId of faction.members) {
+        if (memberId === faction.leaderId) continue;
+
+        // Intimacy with leader boosts favorability
+        const rel = rels.find(
+          (r) => (r.sourceId === memberId && r.targetId === faction.leaderId) ||
+                 (r.sourceId === faction.leaderId && r.targetId === memberId),
+        );
+        const intimacy = rel?.intimacy ?? 50;
+        if (intimacy >= 70) this.adjustFavorability(memberId, 1);
+        else if (intimacy <= 30) this.adjustFavorability(memberId, -1);
+
+        // Battle participation boosts favorability
+        for (const b of battleResults) {
+          if (b.attackerId === memberId || b.defenderId === memberId) {
+            this.adjustFavorability(memberId, b.winner === "attacker" && b.attackerId === memberId ? 3 : 1);
+          }
+        }
+
+        // Faction morale affects favorability
+        const morale = this.getMorale(faction.id);
+        if (morale < 30) this.adjustFavorability(memberId, -1);
+        else if (morale >= 80) this.adjustFavorability(memberId, 1);
+      }
+    }
+  }
+
+  // ── Mentor API ──
+  getMentorPairs(): MentorPair[] {
+    return [...this.mentorPairs];
+  }
+
+  private async processMentorship(): Promise<void> {
+    if (this.currentTick % 5 !== 0) return; // every 5 ticks
+    const allChars = await this.repo.getAllCharacters();
+    const charMap = new Map(allChars.map((c) => [c.id, c]));
+
+    for (const pair of this.mentorPairs) {
+      const mentor = charMap.get(pair.mentorId);
+      const apprentice = charMap.get(pair.apprenticeId);
+      if (!mentor || !apprentice) continue;
+      if (this.deadCharacters.has(pair.mentorId) || this.deadCharacters.has(pair.apprenticeId)) continue;
+
+      // Find mentor's highest skill
+      const mentorSkills = getSkills(mentor);
+      const skillEntries = Object.entries(mentorSkills) as [keyof CharacterSkills, number][];
+      const best = skillEntries.reduce((a, b) => b[1] > a[1] ? b : a);
+      if (best[1] <= 0) continue;
+
+      // Transfer: apprentice gains +1 to that skill (capped at mentor's level)
+      const apprenticeSkills = getSkills(apprentice);
+      if (apprenticeSkills[best[0]] >= best[1]) continue; // already at mentor level
+      const newSkills = gainSkill(apprentice, best[0]);
+      await this.repo.createCharacter({ ...apprentice, skills: newSkills });
+
+      // Mentor gains prestige
+      this.addPrestige(pair.mentorId, 1);
+    }
+  }
+
+  // ── District helpers ──
+  private hasDistrict(city: PlaceNode, type: DistrictType): boolean {
+    return (city.districts ?? []).some((d) => d.type === type);
+  }
+
+  private cityDistrictCount(city: PlaceNode): number {
+    return (city.districts ?? []).length;
+  }
+
   private travelTimeFor(charId: string, originCity: PlaceNode | undefined, baseTravelTime: number): number {
     const faction = this.getFactionOf(charId);
     let time = originCity?.specialty === "harbor" ? 1 : baseTravelTime;
@@ -872,6 +985,12 @@ export class SimulationService {
     this.updatePrestigeFromBattles(battleResults);
     this.updatePrestigeFromSpyReports(spyReports);
     this.applyDeathLegacy(deathEvents);
+
+    // Update favorability
+    await this.updateFavorability(battleResults, betrayalEvents);
+
+    // Process mentor-apprentice skill transfer
+    await this.processMentorship();
 
     // Draw event card (30% chance)
     const drawnCard = drawEventCard();
@@ -1076,21 +1195,23 @@ export class SimulationService {
         continue;
       }
 
-      // Hire neutral character: costs 200 gold from the city
+      // Hire neutral character: costs 200 gold (100 with recruitment district)
       if (cmd.type === "hire_neutral" && cmd.targetCharacterId) {
         const target = await this.repo.getCharacter(cmd.targetCharacterId);
         if (!target || !this.isNeutral(cmd.targetCharacterId)) continue;
         const city = await this.repo.getPlace(cmd.targetCityId);
-        if (!city || city.gold < 200) continue;
+        const hireCost = this.hasDistrict(city!, "recruitment") ? 100 : 200;
+        if (!city || city.gold < hireCost) continue;
         // Recruiter is the faction leader
         const recruiter = await this.repo.getCharacter(cmd.characterId);
         if (!recruiter) continue;
         const faction = this.getFactionOf(cmd.characterId);
         if (!faction) continue;
-        // Success chance: 50% + charm*5% + leadership*5%
-        const chance = Math.min(0.95, 0.5 + recruiter.charm * 0.05 + getSkills(recruiter).leadership * 0.05);
+        // Success chance: 50% + charm*5% + leadership*5% (+25% with recruitment district)
+        let chance = Math.min(0.95, 0.5 + recruiter.charm * 0.05 + getSkills(recruiter).leadership * 0.05);
+        if (this.hasDistrict(city, "recruitment")) chance = Math.min(0.95, chance + 0.25);
         const success = Math.random() < chance;
-        await this.repo.updatePlace(city.id, { gold: city.gold - 200 });
+        await this.repo.updatePlace(city.id, { gold: city.gold - hireCost });
         if (success) {
           const factionObj = FACTIONS.find((f) => f.id === faction);
           if (factionObj) factionObj.members.push(cmd.targetCharacterId);
@@ -1130,6 +1251,40 @@ export class SimulationService {
           cityB: cityB.id,
           factionId: "shu",
           establishedTick: this.currentTick,
+        });
+        continue;
+      }
+
+      // Build district in a city
+      if (cmd.type === "build_district" && cmd.districtType) {
+        const city = await this.repo.getPlace(cmd.targetCityId);
+        if (!city || city.gold < DISTRICT_COST || city.development < 2) continue;
+        if (this.cityDistrictCount(city) >= MAX_DISTRICTS) continue;
+        if (this.hasDistrict(city, cmd.districtType)) continue;
+        const districts = [...(city.districts ?? []), { type: cmd.districtType, builtTick: this.currentTick }];
+        await this.repo.updatePlace(city.id, { gold: city.gold - DISTRICT_COST, districts } as Partial<PlaceNode>);
+        continue;
+      }
+
+      // Assign mentor-apprentice pair
+      if (cmd.type === "assign_mentor" && cmd.targetCharacterId) {
+        const mentor = await this.repo.getCharacter(cmd.characterId);
+        const apprentice = await this.repo.getCharacter(cmd.targetCharacterId);
+        if (!mentor || !apprentice) continue;
+        // Both must be in same faction
+        const mentorFaction = this.getFactionOf(cmd.characterId);
+        const apprenticeFaction = this.getFactionOf(cmd.targetCharacterId);
+        if (!mentorFaction || mentorFaction !== apprenticeFaction) continue;
+        // No duplicate: mentor already has an apprentice, or apprentice already has a mentor
+        const existing = this.mentorPairs.find(
+          (p) => p.mentorId === cmd.characterId || p.apprenticeId === cmd.targetCharacterId,
+        );
+        if (existing) continue;
+        this.mentorPairs.push({
+          mentorId: cmd.characterId,
+          apprenticeId: cmd.targetCharacterId,
+          factionId: mentorFaction,
+          startTick: this.currentTick,
         });
         continue;
       }
@@ -1496,7 +1651,9 @@ export class SimulationService {
       const duration = this.currentTick - city.siegeTick;
 
       // Granary specialty: siege attrition delayed to 4 ticks (6 with improvement)
-      const siegeDelay = city.specialty === "granary" ? (city.improvement ? 6 : 4) : 2;
+      // Agriculture district: +3 ticks additional delay
+      let siegeDelay = city.specialty === "granary" ? (city.improvement ? 6 : 4) : 2;
+      if (this.hasDistrict(city, "agriculture")) siegeDelay += 3;
       if (duration < siegeDelay) continue;
 
       // Check if besieging faction still has characters nearby
@@ -1552,6 +1709,8 @@ export class SimulationService {
       multiplier += bestCommerce * 0.1;
       // Governor role bonus: +20% income
       multiplier += this.roleGoldBonus(charsHere);
+      // Commerce district: +80% income
+      if (this.hasDistrict(city, "commerce")) multiplier += 0.8;
       const income = Math.round(baseIncome * multiplier * seasonMult);
       // Trade route bonus: +10 gold per active route
       const tradeBonus = this.tradeRoutesForCity(city.id).length * 10;
@@ -1610,6 +1769,8 @@ export class SimulationService {
         if (defenderFaction && this.hasTech(defenderFaction, "iron_working")) forgeMult *= 1.5;
         garrisonPower = Math.round(garrisonPower * forgeMult);
       }
+      // Defense district: +2 garrison bonus
+      if (this.hasDistrict(city, "defense")) garrisonPower += 2;
       let defensePower = garrisonPower + tierBonus + seasonDefBonus + Math.random() * 2;
       for (const d of defenders) {
         defensePower += d.military + d.intelligence * 0.5 + getSkills(d).tactics * 0.5 + Math.random() * 2;
@@ -1983,6 +2144,11 @@ export class SimulationService {
         if (morale < 30) chance += 0.08;
         else if (morale < 50) chance += 0.03;
 
+        // Low favorability increases betrayal chance
+        const favorability = this.getFavorability(memberId);
+        if (favorability < 25) chance += 0.10;
+        else if (favorability < 40) chance += 0.04;
+
         // Faction at disadvantage (fewer cities) increases chance
         const factionCities = cities.filter(
           (c) => c.controllerId && faction.members.includes(c.controllerId),
@@ -2229,6 +2395,8 @@ export class SimulationService {
       characterDiploCount: [...this.characterDiploCount.entries()],
       characterAchievements: [...this.characterAchievements.entries()],
       legacyBonuses: [...this.legacyBonuses.entries()],
+      characterFavorability: [...this.characterFavorability.entries()],
+      mentorPairs: [...this.mentorPairs],
       savedAt: new Date().toISOString(),
     };
 
@@ -2301,6 +2469,8 @@ export class SimulationService {
     this.characterDiploCount = new Map(data.characterDiploCount ?? []);
     this.characterAchievements = new Map((data.characterAchievements ?? []).map(([k, v]) => [k, [...v]]));
     this.legacyBonuses = new Map(data.legacyBonuses ?? []);
+    this.characterFavorability = new Map(data.characterFavorability ?? []);
+    this.mentorPairs = data.mentorPairs ?? [];
 
     // Re-init narrative service
     const characters = await this.repo.getAllCharacters();
@@ -2447,6 +2617,8 @@ interface SaveData {
   characterDiploCount: [string, number][];
   characterAchievements: [string, string[]][];
   legacyBonuses: [string, number][];
+  characterFavorability: [string, number][];
+  mentorPairs: MentorPair[];
   savedAt: string;
 }
 
