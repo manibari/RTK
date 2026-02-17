@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { trpc } from "../lib/trpc";
-import { Timeline } from "./Timeline";
+import { Timeline, type TimelineMarker } from "./Timeline";
 import { CharacterDetail } from "./CharacterDetail";
 
 const StrategicMap = dynamic(
@@ -73,6 +73,7 @@ interface MapPageProps {
   onPlayToggle: () => void;
   advancing: boolean;
   onAdvanceDay: () => Promise<{ battleResults?: BattleResult[] } | undefined>;
+  timelineMarkers?: TimelineMarker[];
 }
 
 export function MapPage({
@@ -83,6 +84,7 @@ export function MapPage({
   onPlayToggle,
   advancing,
   onAdvanceDay,
+  timelineMarkers,
 }: MapPageProps) {
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [selectedCity, setSelectedCity] = useState<PlaceNode | null>(null);
@@ -91,6 +93,7 @@ export function MapPage({
   const [battleLog, setBattleLog] = useState<BattleResult[]>([]);
   const [commandCount, setCommandCount] = useState(0);
   const [detailCharId, setDetailCharId] = useState<string | null>(null);
+  const [prediction, setPrediction] = useState<{ winRate: number; attackPower: number; defensePower: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchMapData = useCallback(async (tick: number) => {
@@ -142,6 +145,18 @@ export function MapPage({
     if (!selectedCity || !mapData) return [];
     return mapData.characters.filter((c) => c.cityId === selectedCity.id);
   }, [selectedCity, mapData]);
+
+  // Fetch battle prediction when attacker and target are selected
+  useEffect(() => {
+    if (!selectedChar || !selectedCity || selectedCity.status === "allied") {
+      setPrediction(null);
+      return;
+    }
+    trpc.simulation.predictBattle
+      .query({ attackerIds: [selectedChar], cityId: selectedCity.id })
+      .then((r) => setPrediction(r as { winRate: number; attackPower: number; defensePower: number }))
+      .catch(() => setPrediction(null));
+  }, [selectedChar, selectedCity]);
 
   const handleReinforce = async (cityId: string) => {
     try {
@@ -218,6 +233,7 @@ export function MapPage({
           onTickChange={onTickChange}
           playing={playing}
           onPlayToggle={onPlayToggle}
+          markers={timelineMarkers}
         />
 
         {loading ? (
@@ -266,6 +282,16 @@ export function MapPage({
             {selectedChar && (
               <div style={styles.cmdSection}>
                 <p style={styles.cmdLabel}>指令目標：{selectedCity.name}</p>
+                {prediction && selectedCity.status !== "allied" && (
+                  <div style={styles.predictionRow}>
+                    <span style={{ color: prediction.winRate >= 50 ? "#22c55e" : "#ef4444", fontWeight: 700, fontSize: 14 }}>
+                      勝率 {prediction.winRate}%
+                    </span>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                      攻:{prediction.attackPower} vs 守:{prediction.defensePower}
+                    </span>
+                  </div>
+                )}
                 <div style={styles.cmdButtons}>
                   <button style={styles.cmdMove} onClick={() => handleCommand("move")}>
                     移動至此
@@ -438,6 +464,7 @@ const styles: Record<string, React.CSSProperties> = {
   detailBtn: { fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid #334155", backgroundColor: "transparent", color: "#94a3b8", cursor: "pointer" },
   cmdSection: { marginTop: 12, padding: "10px 12px", backgroundColor: "#0f172a", borderRadius: 8, borderLeft: "3px solid #f59e0b" },
   cmdLabel: { fontSize: 12, color: "#f59e0b", margin: "0 0 8px" },
+  predictionRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   cmdButtons: { display: "flex", gap: 8 },
   cmdMove: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   cmdAttack: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },

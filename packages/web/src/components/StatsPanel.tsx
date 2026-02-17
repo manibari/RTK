@@ -22,16 +22,19 @@ interface StatsPanelProps {
 export function StatsPanel({ currentTick }: StatsPanelProps) {
   const [stats, setStats] = useState<FactionStat[]>([]);
   const [alliances, setAlliances] = useState<AlliancePair[]>([]);
+  const [history, setHistory] = useState<Record<string, { tick: number; power: number }[]>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchStats = useCallback(async () => {
     try {
-      const [s, a] = await Promise.all([
+      const [s, a, h] = await Promise.all([
         trpc.simulation.getFactionStats.query(),
         trpc.simulation.getAlliances.query(),
+        trpc.simulation.getFactionHistory.query(),
       ]);
       setStats(s as FactionStat[]);
       setAlliances(a as unknown as AlliancePair[]);
+      setHistory(h as Record<string, { tick: number; power: number }[]>);
     } catch {
       // silently fail
     } finally {
@@ -118,6 +121,14 @@ export function StatsPanel({ currentTick }: StatsPanelProps) {
               <span style={styles.statValue}>{f.gold}</span>
             </div>
 
+            {/* Power trend sparkline */}
+            {history[f.id] && history[f.id].length > 1 && (
+              <div style={styles.sparklineWrap}>
+                <span style={{ fontSize: 11, color: "#64748b" }}>軍力趨勢</span>
+                <Sparkline data={history[f.id].map((e) => e.power)} color={f.color} />
+              </div>
+            )}
+
             {/* Diplomacy buttons (only for non-player factions) */}
             {f.id !== "shu" && (
               <div style={styles.diplomacyRow}>
@@ -160,6 +171,26 @@ export function StatsPanel({ currentTick }: StatsPanelProps) {
         </div>
       )}
     </div>
+  );
+}
+
+function Sparkline({ data, color }: { data: number[]; color: string }) {
+  if (data.length < 2) return null;
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data, 0);
+  const range = max - min || 1;
+  const w = 120;
+  const h = 24;
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * w;
+    const y = h - ((v - min) / range) * h;
+    return `${x},${y}`;
+  }).join(" ");
+
+  return (
+    <svg width={w} height={h} style={{ display: "block" }}>
+      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} />
+    </svg>
   );
 }
 
@@ -253,6 +284,14 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#e2e8f0",
     width: 40,
     textAlign: "right" as const,
+  },
+  sparklineWrap: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+    paddingTop: 8,
+    borderTop: "1px solid #334155",
   },
   diplomacyRow: {
     marginTop: 10,

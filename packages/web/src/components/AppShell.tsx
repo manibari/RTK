@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { trpc } from "../lib/trpc";
 import { GraphPage } from "./GraphPage";
 import { MapPage } from "./MapPage";
 import { GameLog } from "./GameLog";
 import { StatsPanel } from "./StatsPanel";
 import { ToastStack, createToastId, type ToastMessage } from "./ToastStack";
+import type { TimelineMarker } from "./Timeline";
 
 type ViewTab = "graph" | "map" | "log" | "stats";
 type SimSpeed = 1 | 2 | 5;
@@ -203,6 +204,18 @@ export function AppShell() {
     addToast("遊戲已重置", "#22c55e");
   }, [addToast]);
 
+  // Compute timeline markers from accumulated events
+  const timelineMarkers: TimelineMarker[] = useMemo(() => {
+    const markers: TimelineMarker[] = [];
+    for (const b of allBattles) {
+      markers.push({ tick: b.tick, color: b.captured ? "#ef4444" : "#94a3b8", type: "battle" });
+    }
+    for (const d of allDiplomacy) {
+      markers.push({ tick: d.tick, color: d.type === "alliance_formed" ? "#22c55e" : "#f59e0b", type: "diplomacy" });
+    }
+    return markers;
+  }, [allBattles, allDiplomacy]);
+
   const statusBanner = gameStatus === "victory"
     ? { text: "勝利！你統一了天下！", color: "#22c55e" }
     : gameStatus === "defeat"
@@ -287,6 +300,7 @@ export function AppShell() {
             advancing={advancing || autoSim || gameStatus !== "ongoing"}
             onAdvanceDay={handleAdvanceDay}
             onTickUpdate={(tick) => { setCurrentTick(tick); setViewTick(tick); }}
+            timelineMarkers={timelineMarkers}
           />
         ) : activeTab === "map" ? (
           <MapPage
@@ -297,6 +311,7 @@ export function AppShell() {
             onPlayToggle={handlePlayToggle}
             advancing={advancing || autoSim || gameStatus !== "ongoing"}
             onAdvanceDay={handleAdvanceDay}
+            timelineMarkers={timelineMarkers}
           />
         ) : activeTab === "log" ? (
           <GameLog

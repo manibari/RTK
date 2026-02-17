@@ -87,6 +87,41 @@ function createDefaultFactions(): { id: string; leaderId: string; members: strin
 
 let FACTIONS = createDefaultFactions();
 
+// Trait -> stat mapping for combat ratings
+const TRAIT_STATS: Record<string, { military: number; intelligence: number; charm: number }> = {
+  brave: { military: 2, intelligence: 0, charm: 0 },
+  impulsive: { military: 1, intelligence: -1, charm: 0 },
+  loyal: { military: 1, intelligence: 1, charm: 1 },
+  wise: { military: 0, intelligence: 2, charm: 0 },
+  strategic: { military: 1, intelligence: 2, charm: 0 },
+  cautious: { military: 0, intelligence: 1, charm: 0 },
+  ambitious: { military: 1, intelligence: 1, charm: 1 },
+  charismatic: { military: 0, intelligence: 0, charm: 2 },
+  diplomatic: { military: 0, intelligence: 1, charm: 2 },
+  cunning: { military: 0, intelligence: 2, charm: 1 },
+  benevolent: { military: 0, intelligence: 0, charm: 2 },
+  proud: { military: 1, intelligence: 0, charm: -1 },
+  humble: { military: 0, intelligence: 0, charm: 1 },
+  treacherous: { military: 1, intelligence: 1, charm: -1 },
+};
+
+export function getCombatRating(traits: string[]): { military: number; intelligence: number; charm: number } {
+  let military = 0, intelligence = 0, charm = 0;
+  for (const t of traits) {
+    const s = TRAIT_STATS[t];
+    if (s) { military += s.military; intelligence += s.intelligence; charm += s.charm; }
+  }
+  return { military: Math.max(0, military), intelligence: Math.max(0, intelligence), charm: Math.max(0, charm) };
+}
+
+export interface FactionHistoryEntry {
+  tick: number;
+  power: number;
+  cities: number;
+  gold: number;
+  characters: number;
+}
+
 export class SimulationService {
   private engine: Engine;
   private repo: IGraphRepository;
@@ -97,6 +132,7 @@ export class SimulationService {
   private commandQueue: PlayerCommand[] = [];
   private alliances = new Set<string>(); // "factionA:factionB" sorted
   private gameState: GameState = { status: "ongoing", tick: 0 };
+  private factionHistory = new Map<string, FactionHistoryEntry[]>();
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -124,6 +160,7 @@ export class SimulationService {
     this.alliances.clear();
     this.gameState = { status: "ongoing", tick: 0 };
     this.commandedThisTick.clear();
+    this.factionHistory.clear();
     FACTIONS = createDefaultFactions();
 
     // Re-initialize
@@ -273,6 +310,9 @@ export class SimulationService {
 
     // Check win/defeat conditions
     const gameStatus = await this.checkGameOver();
+
+    // Record faction history
+    await this.recordFactionHistory();
 
     // Fetch events with IDs
     const tickEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
@@ -796,6 +836,58 @@ export class SimulationService {
         power: totalPower,
       };
     });
+  }
+
+  async predictBattle(attackerIds: string[], cityId: string): Promise<{ winRate: number; attackPower: number; defensePower: number }> {
+    const city = await this.repo.getPlace(cityId);
+    if (!city) return { winRate: 0, attackPower: 0, defensePower: 0 };
+
+    const allChars = await this.repo.getAllCharacters();
+    const attackChars = attackerIds.map((id) => allChars.find((c) => c.id === id)).filter(Boolean) as CharacterNode[];
+    const defenders = allChars.filter(
+      (c) => c.cityId === cityId && city.controllerId && this.getFactionOf(c.id) === this.getFactionOf(city.controllerId),
+    );
+
+    const tierBonus = city.tier === "major" ? 3 : 1;
+
+    // Simulate 100 times
+    let wins = 0;
+    let totalAtk = 0;
+    let totalDef = 0;
+    for (let i = 0; i < 100; i++) {
+      let atkPower = Math.random() * 2;
+      for (const c of attackChars) atkPower += c.traits.length * 2 + Math.random() * 2;
+
+      let defPower = city.garrison + tierBonus + Math.random() * 2;
+      for (const d of defenders) defPower += d.traits.length * 2 + Math.random() * 2;
+
+      if (atkPower > defPower) wins++;
+      totalAtk += atkPower;
+      totalDef += defPower;
+    }
+
+    return {
+      winRate: Math.round(wins),
+      attackPower: Math.round((totalAtk / 100) * 10) / 10,
+      defensePower: Math.round((totalDef / 100) * 10) / 10,
+    };
+  }
+
+  getFactionHistory(): Record<string, FactionHistoryEntry[]> {
+    const result: Record<string, FactionHistoryEntry[]> = {};
+    for (const [id, entries] of this.factionHistory) {
+      result[id] = [...entries];
+    }
+    return result;
+  }
+
+  private async recordFactionHistory(): Promise<void> {
+    const stats = await this.getFactionStats();
+    for (const s of stats) {
+      const list = this.factionHistory.get(s.id) ?? [];
+      list.push({ tick: this.currentTick, power: s.power, cities: s.cities, gold: s.gold, characters: s.characters });
+      this.factionHistory.set(s.id, list);
+    }
   }
 
   private async checkGameOver(): Promise<GameStatus> {

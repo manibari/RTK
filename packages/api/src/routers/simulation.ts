@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../trpc.js";
+import { getCombatRating } from "../simulation-service.js";
 
 export const simulationRouter = router({
   advanceDay: publicProcedure.mutation(async ({ ctx }) => {
@@ -97,6 +98,22 @@ export const simulationRouter = router({
   getFactionStats: publicProcedure.query(async ({ ctx }) => {
     return ctx.simulation.getFactionStats();
   }),
+
+  predictBattle: publicProcedure
+    .input(z.object({ attackerIds: z.array(z.string()), cityId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.simulation.predictBattle(input.attackerIds, input.cityId);
+    }),
+
+  getFactionHistory: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getFactionHistory();
+  }),
+
+  getCombatRating: publicProcedure
+    .input(z.object({ traits: z.array(z.string()) }))
+    .query(({ input }) => {
+      return getCombatRating(input.traits);
+    }),
 
   // Reset
   reset: publicProcedure.mutation(async ({ ctx }) => {

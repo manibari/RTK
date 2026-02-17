@@ -1,6 +1,10 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+export interface TimelineMarker {
+  tick: number;
+  color: string;
+  type: "battle" | "diplomacy" | "recruitment";
+}
 
 interface TimelineProps {
   currentTick: number;
@@ -8,9 +12,10 @@ interface TimelineProps {
   onTickChange: (tick: number) => void;
   playing: boolean;
   onPlayToggle: () => void;
+  markers?: TimelineMarker[];
 }
 
-export function Timeline({ currentTick, viewTick, onTickChange, playing, onPlayToggle }: TimelineProps) {
+export function Timeline({ currentTick, viewTick, onTickChange, playing, onPlayToggle, markers = [] }: TimelineProps) {
   const disabled = currentTick === 0;
 
   return (
@@ -27,15 +32,34 @@ export function Timeline({ currentTick, viewTick, onTickChange, playing, onPlayT
         {playing ? "||" : "\u25B6"}
       </button>
       <span style={styles.label}>Day {viewTick}</span>
-      <input
-        type="range"
-        min={0}
-        max={currentTick}
-        value={viewTick}
-        onChange={(e) => onTickChange(Number(e.target.value))}
-        disabled={disabled}
-        style={styles.slider}
-      />
+      <div style={styles.sliderWrap}>
+        {/* Event markers */}
+        {currentTick > 0 && markers.map((m, i) => (
+          <div
+            key={i}
+            style={{
+              position: "absolute",
+              left: `${(m.tick / currentTick) * 100}%`,
+              top: -3,
+              width: 4,
+              height: 4,
+              borderRadius: "50%",
+              backgroundColor: m.color,
+              transform: "translateX(-2px)",
+              pointerEvents: "none",
+            }}
+          />
+        ))}
+        <input
+          type="range"
+          min={0}
+          max={currentTick}
+          value={viewTick}
+          onChange={(e) => onTickChange(Number(e.target.value))}
+          disabled={disabled}
+          style={styles.slider}
+        />
+      </div>
       <span style={styles.label}>/ {currentTick}</span>
     </div>
   );
@@ -66,8 +90,13 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 50,
     fontVariantNumeric: "tabular-nums",
   },
-  slider: {
+  sliderWrap: {
     flex: 1,
+    position: "relative" as const,
+    paddingTop: 6,
+  },
+  slider: {
+    width: "100%",
     accentColor: "#f59e0b",
     height: 6,
   },

@@ -54,6 +54,7 @@ export function CharacterDetail({
   const [relationships, setRelationships] = useState<RelationshipInfo[]>([]);
   const [allChars, setAllChars] = useState<Map<string, CharacterInfo>>(new Map());
   const [recentEvents, setRecentEvents] = useState<PairEvent[]>([]);
+  const [combatRating, setCombatRating] = useState<{ military: number; intelligence: number; charm: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -68,6 +69,11 @@ export function CharacterDetail({
       setRelationships(rels as RelationshipInfo[]);
       setAllChars(new Map((chars as CharacterInfo[]).map((c) => [c.id, c])));
       setRecentEvents((events as PairEvent[]).slice(-10).reverse());
+      if (char && (char as CharacterInfo).traits) {
+        trpc.simulation.getCombatRating.query({ traits: (char as CharacterInfo).traits })
+          .then((r) => setCombatRating(r as { military: number; intelligence: number; charm: number }))
+          .catch(() => {});
+      }
     }).catch(() => {}).finally(() => setLoading(false));
   }, [characterId]);
 
@@ -102,7 +108,7 @@ export function CharacterDetail({
           <button style={styles.closeBtn} onClick={onClose}>✕</button>
         </div>
 
-        {/* Traits */}
+        {/* Traits + Combat Rating */}
         <div style={styles.section}>
           <h3 style={styles.subtitle}>特質</h3>
           <div style={styles.traitList}>
@@ -110,6 +116,22 @@ export function CharacterDetail({
               <span key={t} style={styles.trait}>{t}</span>
             ))}
           </div>
+          {combatRating && (
+            <div style={styles.ratingGrid}>
+              <div style={styles.ratingItem}>
+                <span style={{ ...styles.ratingLabel, color: "#ef4444" }}>武</span>
+                <span style={styles.ratingValue}>{combatRating.military}</span>
+              </div>
+              <div style={styles.ratingItem}>
+                <span style={{ ...styles.ratingLabel, color: "#3b82f6" }}>智</span>
+                <span style={styles.ratingValue}>{combatRating.intelligence}</span>
+              </div>
+              <div style={styles.ratingItem}>
+                <span style={{ ...styles.ratingLabel, color: "#f59e0b" }}>魅</span>
+                <span style={styles.ratingValue}>{combatRating.charm}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Relationships */}
@@ -225,7 +247,11 @@ const styles: Record<string, React.CSSProperties> = {
     borderTop: "1px solid #334155",
   },
   subtitle: { fontSize: 14, fontWeight: 600, marginTop: 0, marginBottom: 8 },
-  traitList: { display: "flex", gap: 6, flexWrap: "wrap" },
+  traitList: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 },
+  ratingGrid: { display: "flex", gap: 12, marginTop: 4 },
+  ratingItem: { display: "flex", alignItems: "center", gap: 4 },
+  ratingLabel: { fontSize: 13, fontWeight: 700 },
+  ratingValue: { fontSize: 14, fontWeight: 600, color: "#e2e8f0" },
   trait: {
     fontSize: 12,
     padding: "3px 10px",

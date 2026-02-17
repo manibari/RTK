@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { trpc } from "../lib/trpc";
 import { RadialGraph } from "./RadialGraph";
 import { Sidebar } from "./Sidebar";
-import { Timeline } from "./Timeline";
+import { Timeline, type TimelineMarker } from "./Timeline";
 
 interface CharacterNode {
   id: string;
@@ -59,6 +59,7 @@ interface GraphPageProps {
   advancing: boolean;
   onAdvanceDay: () => Promise<{ tick: number; dailySummary: string } | undefined>;
   onTickUpdate: (tick: number) => void;
+  timelineMarkers?: TimelineMarker[];
 }
 
 export function GraphPage({
@@ -70,6 +71,7 @@ export function GraphPage({
   advancing,
   onAdvanceDay,
   onTickUpdate,
+  timelineMarkers,
 }: GraphPageProps) {
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [allCharacters, setAllCharacters] = useState<CharacterNode[]>([]);
@@ -219,6 +221,7 @@ export function GraphPage({
           onTickChange={onTickChange}
           playing={playing}
           onPlayToggle={onPlayToggle}
+          markers={timelineMarkers}
         />
 
         {error && <div style={styles.error}>{error}</div>}
