@@ -525,6 +525,21 @@ export function MapPage({
                     </button>
                   </div>
                 )}
+                {/* Siege engine button: when selected char is at a city being besieged by shu */}
+                {selectedCity.siegedBy && (
+                  <button
+                    style={{ ...styles.reinforceBtn, backgroundColor: "#a855f7", marginTop: 6 }}
+                    onClick={() => {
+                      trpc.simulation.queueCommand.mutate({
+                        type: "build_siege",
+                        characterId: selectedChar,
+                        targetCityId: selectedCity.id,
+                      }).then(() => setCommandCount((c) => c + 1));
+                    }}
+                  >
+                    攻城器械（300金，戰術≥2）
+                  </button>
+                )}
               </div>
             )}
 

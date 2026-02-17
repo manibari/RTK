@@ -13,11 +13,32 @@ export interface AIDecision {
   reason: string;
 }
 
+// ── Personality system ──
+const AGGRESSION_TRAITS: Record<string, number> = {
+  brave: 2, ambitious: 1, impulsive: 3, proud: 1, treacherous: 1,
+};
+const CAUTION_TRAITS: Record<string, number> = {
+  cautious: 2, strategic: 2, wise: 1, humble: 1, loyal: 1,
+};
+
+function personalityWeight(char: CharacterNode): { aggression: number; caution: number } {
+  let aggression = 0, caution = 0;
+  for (const t of char.traits) {
+    aggression += AGGRESSION_TRAITS[t] ?? 0;
+    caution += CAUTION_TRAITS[t] ?? 0;
+  }
+  // Military-heavy chars are slightly more aggressive; intelligence-heavy are more cautious
+  aggression += Math.floor(char.military / 4);
+  caution += Math.floor(char.intelligence / 4);
+  return { aggression: Math.min(6, aggression), caution: Math.min(6, caution) };
+}
+
 /**
  * NPC AI: evaluates strategic decisions for non-player factions.
  * Player faction (shu) is skipped — controlled by the player.
  * Alliance-aware: won't attack allied factions.
  * Relationship-aware: avoids attacking cities held by high-intimacy characters.
+ * Personality-aware: traits drive aggression vs caution thresholds.
  */
 export function evaluateNPCDecisions(
   factions: FactionDef[],
@@ -108,6 +129,7 @@ function decideForCharacter(
 ): AIDecision {
   const currentCity = cityMap.get(char.cityId);
   const isLeader = char.id === faction.leaderId;
+  const { aggression, caution } = personalityWeight(char);
 
   // Filter out enemy cities whose controller has high intimacy with this character
   const viableEnemyCities = enemyCities.filter((c) => {
@@ -116,19 +138,17 @@ function decideForCharacter(
     return intimacy < 70; // Won't attack someone with intimacy >= 70
   });
 
-  // Leaders prefer to stay and defend
+  // Leaders prefer to stay and defend (but aggressive leaders are bolder)
   if (isLeader) {
-    // Only attack if we have strong defense and weak enemy nearby
-    const weakEnemy = viableEnemyCities.find((c) => {
-      const defenders = defendersPerCity.get(c.id)?.length ?? 0;
-      return defenders === 0 && c.tier === "minor";
-    });
-    if (weakEnemy && (defendersPerCity.get(char.cityId)?.length ?? 0) > 1) {
+    const weakEnemy = pickBestTarget(viableEnemyCities, defendersPerCity, caution);
+    const homeDefenders = defendersPerCity.get(char.cityId)?.length ?? 0;
+    const leaderThreshold = Math.max(1, 2 - Math.floor(aggression / 3));
+    if (weakEnemy && homeDefenders > leaderThreshold) {
       return {
         characterId: char.id,
         action: "attack",
         targetCityId: weakEnemy.id,
-        reason: `Leader attacks undefended ${weakEnemy.name}`,
+        reason: `Leader attacks ${weakEnemy.name}`,
       };
     }
     return { characterId: char.id, action: "stay", reason: "Leader holds position" };
@@ -137,16 +157,17 @@ function decideForCharacter(
   // Non-leaders: evaluate priorities
   const myDefenders = defendersPerCity.get(char.cityId)?.length ?? 0;
 
-  // Priority 1: If city is overstaffed (>2 defenders), send to attack weak enemy
-  if (myDefenders > 2 && viableEnemyCities.length > 0) {
-    // Prefer undefended or weakly defended cities
-    const target = pickWeakestCity(viableEnemyCities, defendersPerCity);
+  // Priority 1: If city is overstaffed, send to attack
+  // Aggressive chars attack from overstaffed-by-1; cautious wait for overstaffed-by-3+
+  const attackThreshold = Math.max(1, 2 + Math.floor(caution / 2) - Math.floor(aggression / 2));
+  if (myDefenders > attackThreshold && viableEnemyCities.length > 0) {
+    const target = pickBestTarget(viableEnemyCities, defendersPerCity, caution);
     if (target) {
       return {
         characterId: char.id,
         action: "attack",
         targetCityId: target.id,
-        reason: `Attack weakly defended ${target.name}`,
+        reason: `Attack ${target.name} (personality-driven)`,
       };
     }
   }
@@ -164,8 +185,9 @@ function decideForCharacter(
     };
   }
 
-  // Priority 3: 30% chance to attack a random enemy city
-  if (Math.random() < 0.3 && viableEnemyCities.length > 0) {
+  // Priority 3: Random attack — chance scales with aggression, reduced by caution
+  const randomAttackChance = 0.15 + aggression * 0.05 - caution * 0.03;
+  if (Math.random() < randomAttackChance && viableEnemyCities.length > 0) {
     const target = viableEnemyCities[Math.floor(Math.random() * viableEnemyCities.length)];
     return {
       characterId: char.id,
@@ -179,20 +201,34 @@ function decideForCharacter(
   return { characterId: char.id, action: "stay", reason: "Hold position" };
 }
 
-function pickWeakestCity(
+/**
+ * Pick the best target city to attack.
+ * Cautious chars prefer weakly defended cities; aggressive chars also consider high-value targets.
+ */
+function pickBestTarget(
   cities: PlaceNode[],
   defendersPerCity: Map<string, string[]>,
+  caution: number,
 ): PlaceNode | null {
-  let weakest: PlaceNode | null = null;
-  let minDefenders = Infinity;
+  let best: PlaceNode | null = null;
+  let bestScore = -Infinity;
 
   for (const city of cities) {
-    const count = defendersPerCity.get(city.id)?.length ?? 0;
-    if (count < minDefenders) {
-      minDefenders = count;
-      weakest = city;
+    const defenders = defendersPerCity.get(city.id)?.length ?? 0;
+    const garrison = city.garrison;
+    // Score: lower defense = higher score; high caution penalizes well-defended targets more
+    let score = 10 - defenders * (1 + caution * 0.3) - garrison * 0.5;
+    // Bonus for undefended cities
+    if (defenders === 0) score += 5;
+    // Bonus for minor cities (easier to capture)
+    if (city.tier === "minor") score += 2;
+    // Bonus for low food cities (starving)
+    if ((city.food ?? 100) < 30) score += 3;
+    if (score > bestScore) {
+      bestScore = score;
+      best = city;
     }
   }
 
-  return weakest;
+  return best;
 }

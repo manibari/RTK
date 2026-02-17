@@ -50,7 +50,7 @@ export const simulationRouter = router({
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
-      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "hire_neutral", "assign_role", "start_research", "establish_trade", "build_district", "assign_mentor"]),
+      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "hire_neutral", "assign_role", "start_research", "establish_trade", "build_district", "assign_mentor", "build_siege"]),
       characterId: z.string(),
       targetCityId: z.string(),
       targetCharacterId: z.string().optional(),

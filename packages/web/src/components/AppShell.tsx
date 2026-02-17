@@ -201,6 +201,12 @@ export function AppShell() {
           addToast(`${d.characterName} 戰死${suffix}`, "#991b1b");
         }
       }
+      if (result.worldEvents?.length > 0) {
+        for (const w of result.worldEvents) {
+          const colors: Record<string, string> = { plague: "#a855f7", drought: "#f59e0b", bandits: "#f97316" };
+          addToast(w.description, colors[w.type] ?? "#64748b");
+        }
+      }
       if (result.dailySummary) {
         setSummaries((prev) => new Map(prev).set(result.tick, result.dailySummary));
       }
