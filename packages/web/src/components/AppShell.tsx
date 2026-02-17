@@ -44,6 +44,21 @@ interface RecruitmentResult {
   newFaction?: string;
 }
 
+interface EventCardChoice {
+  label: string;
+  effect: Record<string, unknown>;
+}
+
+interface PendingEventCard {
+  card: {
+    id: string;
+    title: string;
+    description: string;
+    choices: EventCardChoice[];
+  };
+  tick: number;
+}
+
 type GameStatus = "ongoing" | "victory" | "defeat";
 
 const SPEED_DELAYS: Record<SimSpeed, number> = { 1: 1500, 2: 750, 5: 300 };
@@ -59,6 +74,7 @@ export function AppShell() {
   const [allDiplomacy, setAllDiplomacy] = useState<DiplomacyEvent[]>([]);
   const [summaries, setSummaries] = useState<Map<number, string>>(new Map());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [pendingCard, setPendingCard] = useState<PendingEventCard | null>(null);
   const [autoSim, setAutoSim] = useState(false);
   const [simSpeed, setSimSpeed] = useState<SimSpeed>(1);
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -157,6 +173,9 @@ export function AppShell() {
       if (result.dailySummary) {
         setSummaries((prev) => new Map(prev).set(result.tick, result.dailySummary));
       }
+      if (result.pendingCard) {
+        setPendingCard(result.pendingCard as PendingEventCard);
+      }
 
       return result;
     } finally {
@@ -190,6 +209,18 @@ export function AppShell() {
       return next;
     });
   }, []);
+
+  const handleEventCardChoice = useCallback(async (choiceIndex: number) => {
+    try {
+      const result = await trpc.simulation.resolveEventCard.mutate({ choiceIndex });
+      if (result.success) {
+        addToast(result.description, "#3b82f6");
+      }
+    } catch {
+      // silently fail
+    }
+    setPendingCard(null);
+  }, [addToast]);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -363,6 +394,28 @@ export function AppShell() {
         )}
       </div>
 
+      {/* Event card modal */}
+      {pendingCard && (
+        <div style={styles.cardOverlay}>
+          <div style={styles.cardPanel}>
+            <div style={styles.cardTick}>Day {pendingCard.tick}</div>
+            <h2 style={styles.cardTitle}>{pendingCard.card.title}</h2>
+            <p style={styles.cardDesc}>{pendingCard.card.description}</p>
+            <div style={styles.cardChoices}>
+              {pendingCard.card.choices.map((choice, i) => (
+                <button
+                  key={i}
+                  style={styles.cardChoiceBtn}
+                  onClick={() => handleEventCardChoice(i)}
+                >
+                  {choice.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
@@ -500,5 +553,56 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minHeight: 0,
     display: "flex",
+  },
+  cardOverlay: {
+    position: "fixed",
+    inset: 0,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2000,
+  },
+  cardPanel: {
+    width: 380,
+    backgroundColor: "#1e293b",
+    borderRadius: 12,
+    padding: 28,
+    color: "#e2e8f0",
+    border: "2px solid #f59e0b",
+  },
+  cardTick: {
+    fontSize: 12,
+    color: "#f59e0b",
+    fontWeight: 600,
+    marginBottom: 8,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: 700,
+    margin: "0 0 12px",
+    color: "#f59e0b",
+  },
+  cardDesc: {
+    fontSize: 14,
+    color: "#cbd5e1",
+    lineHeight: 1.6,
+    margin: "0 0 20px",
+  },
+  cardChoices: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  cardChoiceBtn: {
+    padding: "10px 16px",
+    borderRadius: 8,
+    border: "1px solid #334155",
+    backgroundColor: "#0f172a",
+    color: "#e2e8f0",
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: "pointer",
+    textAlign: "left",
   },
 };

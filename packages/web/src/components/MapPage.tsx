@@ -24,7 +24,27 @@ interface PlaceNode {
   development: number;
   siegedBy?: string;
   siegeTick?: number;
+  specialty?: string;
+  improvement?: string;
 }
+
+const SPECIALTY_LABELS: Record<string, string> = {
+  military_academy: "軍校",
+  forge: "鍛冶場",
+  harbor: "港口",
+  library: "書院",
+  market: "市場",
+  granary: "穀倉",
+};
+
+const SPECIALTY_EFFECTS: Record<string, string> = {
+  military_academy: "每5天武力+1",
+  forge: "守備防禦x1.5",
+  harbor: "出發移動1天",
+  library: "每5天智力+1",
+  market: "收入+50%",
+  granary: "圍城4天才損耗",
+};
 
 interface CharacterOnMap {
   id: string;
@@ -187,6 +207,19 @@ export function MapPage({
     }
   };
 
+  const handleBuildImprovement = async (cityId: string) => {
+    try {
+      await trpc.simulation.queueCommand.mutate({
+        type: "build_improvement",
+        characterId: "liu_bei",
+        targetCityId: cityId,
+      });
+      setCommandCount((c) => c + 1);
+    } catch {
+      // silently fail
+    }
+  };
+
   const handleCommand = async (type: "move" | "attack") => {
     if (!selectedChar || !selectedCity) return;
     try {
@@ -296,6 +329,42 @@ export function MapPage({
                 <span style={styles.infoLabel}>開發</span>
                 <span style={{ color: "#a855f7", fontWeight: 600 }}>Lv.{selectedCity.development ?? 0}/5</span>
               </div>
+              {(() => {
+                // Check if this is the last city for its faction
+                const controllerFaction = factions.find((f) => f.members.includes(selectedCity.controllerId ?? ""));
+                if (controllerFaction && controllerFaction.cities.length === 1 && controllerFaction.cities[0] === selectedCity.id) {
+                  return (
+                    <div style={{ ...styles.infoRow, color: "#f97316" }}>
+                      <span style={styles.infoLabel}>警告</span>
+                      <span style={{ fontWeight: 700, animation: "pulse 1.5s ease-in-out infinite" }}>最後據點！</span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              {selectedCity.specialty && (
+                <div style={styles.infoRow}>
+                  <span style={styles.infoLabel}>特產</span>
+                  <span style={{ color: "#22c55e", fontWeight: 600 }}>
+                    {SPECIALTY_LABELS[selectedCity.specialty] ?? selectedCity.specialty}
+                  </span>
+                </div>
+              )}
+              {selectedCity.specialty && (
+                <div style={{ ...styles.infoRow, fontSize: 11 }}>
+                  <span style={styles.infoLabel}>效果</span>
+                  <span style={{ color: "#94a3b8" }}>
+                    {SPECIALTY_EFFECTS[selectedCity.specialty] ?? ""}
+                    {selectedCity.improvement ? " (強化)" : ""}
+                  </span>
+                </div>
+              )}
+              {selectedCity.improvement && (
+                <div style={styles.infoRow}>
+                  <span style={styles.infoLabel}>改良</span>
+                  <span style={{ color: "#f59e0b", fontWeight: 600 }}>{selectedCity.improvement}</span>
+                </div>
+              )}
               {selectedCity.siegedBy && (
                 <div style={{ ...styles.infoRow, color: "#ef4444" }}>
                   <span style={styles.infoLabel}>圍城中</span>
@@ -345,6 +414,14 @@ export function MapPage({
                     <p style={{ ...styles.cmdLabel, marginTop: 8 }}>城市開發（300 金，收入 +30%）</p>
                     <button style={styles.developBtn} onClick={() => handleDevelop(selectedCity.id)}>
                       開發 Lv.{(selectedCity.development ?? 0) + 1}
+                    </button>
+                  </>
+                )}
+                {(selectedCity.gold ?? 0) >= 500 && (selectedCity.development ?? 0) >= 3 && selectedCity.specialty && !selectedCity.improvement && (
+                  <>
+                    <p style={{ ...styles.cmdLabel, marginTop: 8 }}>建造改良（500 金，強化特產效果）</p>
+                    <button style={styles.improvementBtn} onClick={() => handleBuildImprovement(selectedCity.id)}>
+                      建造 {SPECIALTY_LABELS[selectedCity.specialty] ?? selectedCity.specialty}改良
                     </button>
                   </>
                 )}
@@ -508,6 +585,7 @@ const styles: Record<string, React.CSSProperties> = {
   cmdAttack: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   reinforceBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   developBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#a855f7", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  improvementBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#22c55e", color: "#0f172a", fontSize: 13, fontWeight: 700, cursor: "pointer" },
   factionList: { display: "flex", flexDirection: "column", gap: 6 },
   factionItem: { display: "flex", alignItems: "center", gap: 8, fontSize: 13 },
   factionDot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0 },

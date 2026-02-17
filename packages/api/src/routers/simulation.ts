@@ -50,7 +50,7 @@ export const simulationRouter = router({
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
-      type: z.enum(["move", "attack", "recruit", "reinforce", "develop"]),
+      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement"]),
       characterId: z.string(),
       targetCityId: z.string(),
       targetCharacterId: z.string().optional(),
@@ -113,6 +113,13 @@ export const simulationRouter = router({
     .input(z.object({ traits: z.array(z.string()) }))
     .query(({ input }) => {
       return getCombatRating(input.traits);
+    }),
+
+  // Event cards
+  resolveEventCard: publicProcedure
+    .input(z.object({ choiceIndex: z.number().min(0).max(3) }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.simulation.resolveEventCard(input.choiceIndex);
     }),
 
   // Save / Load

@@ -5,6 +5,7 @@ import { NarrativeService } from "./narrative/narrative-service.js";
 import { evaluateNPCDecisions } from "./ai/npc-ai.js";
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { drawEventCard, applyEventCardChoice, type EventCard, type PendingEventCard } from "./event-cards.js";
 
 export interface TimelinePoint {
   tick: number;
@@ -27,6 +28,7 @@ export interface AdvanceDayResult {
   diplomacyEvents: DiplomacyEvent[];
   recruitmentResults: RecruitmentResult[];
   betrayalEvents: BetrayalEvent[];
+  pendingCard: PendingEventCard | null;
   gameStatus: GameStatus;
 }
 
@@ -47,11 +49,30 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit" | "reinforce" | "develop";
+  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement";
   characterId: string;
   targetCityId: string;
   targetCharacterId?: string; // for recruit
 }
+
+// Specialty effects lookup
+const SPECIALTY_LABELS: Record<string, string> = {
+  military_academy: "軍校",
+  forge: "鍛冶場",
+  harbor: "港口",
+  library: "書院",
+  market: "市場",
+  granary: "穀倉",
+};
+
+const SPECIALTY_IMPROVEMENT: Record<string, string> = {
+  military_academy: "精銳營",
+  forge: "名匠坊",
+  harbor: "大港",
+  library: "大學",
+  market: "商會",
+  granary: "大穀倉",
+};
 
 export interface BattleResult {
   tick: number;
@@ -144,6 +165,7 @@ export class SimulationService {
   private alliances = new Set<string>(); // "factionA:factionB" sorted
   private gameState: GameState = { status: "ongoing", tick: 0 };
   private factionHistory = new Map<string, FactionHistoryEntry[]>();
+  private pendingCard: PendingEventCard | null = null;
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -267,6 +289,7 @@ export class SimulationService {
         diplomacyEvents: [],
         recruitmentResults: [],
         betrayalEvents: [],
+        pendingCard: null,
         gameStatus: this.gameState.status,
       };
     }
@@ -305,8 +328,11 @@ export class SimulationService {
     // NPC AI decisions
     await this.runNPCDecisions();
 
-    // NPC factions spend gold (reinforce + develop)
+    // NPC factions spend gold (reinforce + develop + improvements)
     await this.npcSpend();
+
+    // Specialty passive effects (military_academy, library)
+    await this.processSpecialtyPassives();
 
     // Process ongoing sieges (garrison attrition)
     await this.processSieges();
@@ -325,6 +351,14 @@ export class SimulationService {
 
     // Betrayal: disloyal characters may defect
     const betrayalEvents = await this.processBetrayals();
+
+    // Draw event card (30% chance)
+    const drawnCard = drawEventCard();
+    const pendingCard: PendingEventCard | null = drawnCard ? { card: drawnCard, tick: this.currentTick } : null;
+    this.pendingCard = pendingCard;
+
+    // Eliminate factions that lost all cities
+    await this.processEliminatedFactions();
 
     // Check win/defeat conditions
     const gameStatus = await this.checkGameOver();
@@ -352,10 +386,10 @@ export class SimulationService {
 
       // Re-read events with narratives
       const updatedEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
-      return { tick: this.currentTick, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, gameStatus };
+      return { tick: this.currentTick, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, pendingCard, gameStatus };
     }
 
-    return { tick: this.currentTick, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, gameStatus };
+    return { tick: this.currentTick, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, pendingCard, gameStatus };
   }
 
   getDailySummary(tick: number): string {
@@ -463,7 +497,10 @@ export class SimulationService {
       if (!char?.cityId || char.cityId === decision.targetCityId) continue;
 
       this.commandedThisTick.add(decision.characterId);
-      const travelTime = decision.action === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+      // Harbor specialty: travel time = 1 from harbor cities
+      const originCity = cities.find((c) => c.id === char.cityId);
+      const baseTravelTime = decision.action === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+      const travelTime = originCity?.specialty === "harbor" ? 1 : baseTravelTime;
 
       await this.repo.addMovement({
         characterId: decision.characterId,
@@ -481,6 +518,7 @@ export class SimulationService {
     this.commandedThisTick.clear();
     const commands = [...this.commandQueue];
     this.commandQueue = [];
+    const cities = await this.repo.getAllPlaces();
 
     for (const cmd of commands) {
       // Reinforce: spend gold to increase garrison
@@ -505,12 +543,26 @@ export class SimulationService {
         continue;
       }
 
+      // Build improvement: spend 500 gold, requires dev Lv.3+, must have specialty
+      if (cmd.type === "build_improvement") {
+        const city = await this.repo.getPlace(cmd.targetCityId);
+        if (!city || city.gold < 500 || city.development < 3 || !city.specialty || city.improvement) continue;
+        await this.repo.updatePlace(city.id, {
+          gold: city.gold - 500,
+          improvement: SPECIALTY_IMPROVEMENT[city.specialty] ?? city.specialty,
+        });
+        continue;
+      }
+
       const char = await this.repo.getCharacter(cmd.characterId);
       if (!char || !char.cityId) continue;
       if (char.cityId === cmd.targetCityId) continue;
 
       this.commandedThisTick.add(cmd.characterId);
-      const travelTime = cmd.type === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+      // Harbor specialty: travel time = 1 from harbor cities
+      const originCity = cities.find((c) => c.id === char.cityId);
+      const baseTravelTime = cmd.type === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+      const travelTime = originCity?.specialty === "harbor" ? 1 : baseTravelTime;
 
       await this.repo.addMovement({
         characterId: cmd.characterId,
@@ -540,7 +592,9 @@ export class SimulationService {
       if (destinations.length === 0) continue;
 
       const destId = destinations[Math.floor(Math.random() * destinations.length)];
-      const travelTime = 1 + Math.floor(Math.random() * 3);
+      // Harbor specialty: travel time = 1 from harbor cities
+      const originCity = cities.find((c) => c.id === char.cityId);
+      const travelTime = originCity?.specialty === "harbor" ? 1 : 1 + Math.floor(Math.random() * 3);
 
       await this.repo.addMovement({
         characterId: char.id,
@@ -583,6 +637,53 @@ export class SimulationService {
           development: devTarget.development + 1,
         });
       }
+
+      // Build improvement if dev >= 3, has specialty, no improvement yet, and can afford
+      const improvable = factionCities
+        .filter((c) => c.gold >= 500 && c.development >= 3 && c.specialty && !c.improvement)
+        .sort((a, b) => b.gold - a.gold)[0];
+      if (improvable && improvable.specialty) {
+        await this.repo.updatePlace(improvable.id, {
+          gold: improvable.gold - 500,
+          improvement: SPECIALTY_IMPROVEMENT[improvable.specialty] ?? improvable.specialty,
+        });
+      }
+    }
+  }
+
+  private async processSpecialtyPassives(): Promise<void> {
+    const tick = this.currentTick;
+    const interval = 5; // every 5 ticks
+    if (tick % interval !== 0 || tick === 0) return;
+
+    const cities = await this.repo.getAllPlaces();
+    const characters = await this.repo.getAllCharacters();
+
+    for (const city of cities) {
+      if (city.status === "dead" || !city.controllerId) continue;
+
+      const charsHere = characters.filter((c) => c.cityId === city.id);
+      if (charsHere.length === 0) continue;
+
+      // Military academy: +1 military to characters here (cap 10)
+      if (city.specialty === "military_academy") {
+        const gain = city.improvement ? 2 : 1;
+        for (const ch of charsHere) {
+          if (ch.military < 10) {
+            await this.repo.createCharacter({ ...ch, military: Math.min(10, ch.military + gain) });
+          }
+        }
+      }
+
+      // Library: +1 intelligence to characters here (cap 10)
+      if (city.specialty === "library") {
+        const gain = city.improvement ? 2 : 1;
+        for (const ch of charsHere) {
+          if (ch.intelligence < 10) {
+            await this.repo.createCharacter({ ...ch, intelligence: Math.min(10, ch.intelligence + gain) });
+          }
+        }
+      }
     }
   }
 
@@ -592,8 +693,9 @@ export class SimulationService {
       if (!city.siegedBy || city.siegeTick == null) continue;
       const duration = this.currentTick - city.siegeTick;
 
-      // Siege needs 2+ ticks to start damaging garrison
-      if (duration < 2) continue;
+      // Granary specialty: siege attrition delayed to 4 ticks (6 with improvement)
+      const siegeDelay = city.specialty === "granary" ? (city.improvement ? 6 : 4) : 2;
+      if (duration < siegeDelay) continue;
 
       // Check if besieging faction still has characters nearby
       const allChars = await this.repo.getAllCharacters();
@@ -631,7 +733,12 @@ export class SimulationService {
       // Sieged cities produce no gold
       if (city.siegedBy) continue;
       const baseIncome = city.tier === "major" ? 100 : 50;
-      const income = Math.round(baseIncome * (1 + city.development * 0.3));
+      let multiplier = 1 + city.development * 0.3;
+      // Market specialty: +50% income (doubled with improvement)
+      if (city.specialty === "market") {
+        multiplier += city.improvement ? 1.0 : 0.5;
+      }
+      const income = Math.round(baseIncome * multiplier);
       await this.repo.updatePlace(city.id, { gold: city.gold + income });
     }
   }
@@ -677,7 +784,12 @@ export class SimulationService {
 
       // Defense power: sum of defender military stats + garrison bonus + city tier bonus
       const tierBonus = city.tier === "major" ? 3 : 1;
-      let defensePower = city.garrison + tierBonus + Math.random() * 2;
+      let garrisonPower = city.garrison;
+      // Forge specialty: garrison defense x1.5 (x2 with improvement)
+      if (city.specialty === "forge") {
+        garrisonPower = Math.round(garrisonPower * (city.improvement ? 2 : 1.5));
+      }
+      let defensePower = garrisonPower + tierBonus + Math.random() * 2;
       for (const d of defenders) {
         defensePower += d.military + d.intelligence * 0.5 + Math.random() * 2;
       }
@@ -977,6 +1089,38 @@ export class SimulationService {
     return { success: true, reason: `與 ${targetLeader} 結盟成功` };
   }
 
+  async resolveEventCard(choiceIndex: number): Promise<{ success: boolean; description: string }> {
+    if (!this.pendingCard) return { success: false, description: "No pending event card" };
+
+    const card = this.pendingCard.card;
+    const choice = card.choices[choiceIndex];
+    if (!choice) return { success: false, description: "Invalid choice" };
+
+    const playerFaction = FACTIONS.find((f) => f.id === "shu");
+    if (!playerFaction) return { success: false, description: "Player faction not found" };
+
+    const leader = await this.repo.getCharacter(playerFaction.leaderId);
+    if (!leader) return { success: false, description: "Leader not found" };
+
+    const cities = await this.repo.getAllPlaces();
+    const alliedCities = cities.filter(
+      (c) => c.controllerId && playerFaction.members.includes(c.controllerId),
+    );
+
+    const { cityUpdates, charUpdate } = applyEventCardChoice(choice, playerFaction.leaderId, alliedCities, leader);
+
+    for (const { cityId, updates } of cityUpdates) {
+      await this.repo.updatePlace(cityId, updates);
+    }
+
+    if (charUpdate) {
+      await this.repo.createCharacter({ ...leader, ...charUpdate });
+    }
+
+    this.pendingCard = null;
+    return { success: true, description: `${card.title}：${choice.label}` };
+  }
+
   breakAlliance(factionId: string): { success: boolean; reason: string } {
     const playerFaction = "shu";
     const key = this.allianceKey(playerFaction, factionId);
@@ -1176,6 +1320,56 @@ export class SimulationService {
       }
     }
     return results;
+  }
+
+  private async processEliminatedFactions(): Promise<void> {
+    const cities = await this.repo.getAllPlaces();
+
+    for (const faction of FACTIONS) {
+      if (faction.id === "shu") continue; // Player elimination handled by checkGameOver
+      if (faction.members.length === 0) continue; // Already eliminated
+
+      const factionCities = cities.filter(
+        (c) => c.controllerId && faction.members.includes(c.controllerId),
+      );
+
+      if (factionCities.length > 0) continue; // Still has cities, not eliminated
+
+      // Faction has no cities — scatter members to the strongest rival
+      const survivingFactions = FACTIONS.filter(
+        (f) => f.id !== faction.id && f.members.length > 0,
+      );
+      if (survivingFactions.length === 0) continue;
+
+      // Find strongest rival by city count
+      const strongest = survivingFactions.reduce((best, f) => {
+        const count = cities.filter(
+          (c) => c.controllerId && f.members.includes(c.controllerId),
+        ).length;
+        const bestCount = cities.filter(
+          (c) => c.controllerId && best.members.includes(c.controllerId),
+        ).length;
+        return count > bestCount ? f : best;
+      });
+
+      // Move all non-leader members to strongest faction
+      const scattered = [...faction.members].filter((m) => m !== faction.leaderId);
+      for (const memberId of scattered) {
+        faction.members = faction.members.filter((m) => m !== memberId);
+        strongest.members.push(memberId);
+      }
+
+      // Leader is also absorbed
+      faction.members = faction.members.filter((m) => m !== faction.leaderId);
+      strongest.members.push(faction.leaderId);
+
+      // Clear any alliances involving this faction
+      for (const key of [...this.alliances]) {
+        if (key.includes(faction.id)) {
+          this.alliances.delete(key);
+        }
+      }
+    }
   }
 
   private async checkGameOver(): Promise<GameStatus> {

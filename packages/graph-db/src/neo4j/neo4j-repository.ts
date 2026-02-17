@@ -164,7 +164,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
       return { id: props.id, name: props.name, lat: props.lat, lng: props.lng,
         status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined,
         gold: props.gold ?? 0, garrison: props.garrison ?? 0, development: props.development ?? 0,
-        siegedBy: props.siegedBy ?? undefined, siegeTick: props.siegeTick ?? undefined };
+        siegedBy: props.siegedBy ?? undefined, siegeTick: props.siegeTick ?? undefined,
+        specialty: props.specialty ?? undefined, improvement: props.improvement ?? undefined };
     } finally {
       await session.close();
     }
@@ -179,7 +180,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
         return { id: props.id, name: props.name, lat: props.lat, lng: props.lng,
           status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined,
           gold: props.gold ?? 0, garrison: props.garrison ?? 0, development: props.development ?? 0,
-          siegedBy: props.siegedBy ?? undefined, siegeTick: props.siegeTick ?? undefined };
+          siegedBy: props.siegedBy ?? undefined, siegeTick: props.siegeTick ?? undefined,
+          specialty: props.specialty ?? undefined, improvement: props.improvement ?? undefined };
       });
     } finally {
       await session.close();

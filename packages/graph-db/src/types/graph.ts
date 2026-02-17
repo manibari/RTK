@@ -24,6 +24,8 @@ export interface EventNode {
 
 export type CityStatus = "allied" | "hostile" | "neutral" | "dead";
 
+export type CitySpecialty = "military_academy" | "forge" | "harbor" | "library" | "market" | "granary";
+
 export interface PlaceNode {
   id: string;
   name: string;
@@ -37,6 +39,8 @@ export interface PlaceNode {
   development: number;
   siegedBy?: string;
   siegeTick?: number;
+  specialty?: CitySpecialty;
+  improvement?: string;
 }
 
 export interface Movement {
