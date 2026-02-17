@@ -50,12 +50,14 @@ export const simulationRouter = router({
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
-      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "hire_neutral", "assign_role", "start_research"]),
+      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "hire_neutral", "assign_role", "start_research", "establish_trade"]),
       characterId: z.string(),
       targetCityId: z.string(),
       targetCharacterId: z.string().optional(),
       role: z.enum(["general", "governor", "diplomat", "spymaster"]).optional(),
       techId: z.string().optional(),
+      tactic: z.enum(["aggressive", "defensive", "balanced"]).optional(),
+      tradeCityId: z.string().optional(),
     }))
     .mutation(({ ctx, input }) => {
       ctx.simulation.queueCommand(input);
@@ -133,6 +135,16 @@ export const simulationRouter = router({
     .query(({ ctx, input }) => {
       return { neutral: ctx.simulation.isNeutral(input.characterId) };
     }),
+
+  // Trade routes
+  getTradeRoutes: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getTradeRoutes();
+  }),
+
+  // Dead characters
+  getDeadCharacters: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getDeadCharacters();
+  }),
 
   // Event cards
   resolveEventCard: publicProcedure

@@ -20,6 +20,33 @@ export interface BetrayalEvent {
   newFaction: string;
 }
 
+export interface DeathEvent {
+  tick: number;
+  characterId: string;
+  characterName: string;
+  cause: "battle" | "captured";
+  factionId: string;
+  wasLeader: boolean;
+  successorId?: string;
+  successorName?: string;
+}
+
+export interface TradeRoute {
+  id: string;
+  cityA: string;
+  cityB: string;
+  factionId: string;
+  establishedTick: number;
+}
+
+export type BattleTactic = "aggressive" | "defensive" | "balanced";
+
+const TACTIC_MODIFIERS: Record<BattleTactic, { attack: number; defense: number }> = {
+  aggressive: { attack: 0.3, defense: -0.15 },
+  defensive: { attack: -0.15, defense: 0.3 },
+  balanced: { attack: 0, defense: 0 },
+};
+
 export interface AdvanceDayResult {
   tick: number;
   season: Season;
@@ -30,6 +57,7 @@ export interface AdvanceDayResult {
   recruitmentResults: RecruitmentResult[];
   betrayalEvents: BetrayalEvent[];
   spyReports: SpyReport[];
+  deathEvents: DeathEvent[];
   pendingCard: PendingEventCard | null;
   gameStatus: GameStatus;
 }
@@ -87,12 +115,14 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "hire_neutral" | "assign_role" | "start_research";
+  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade";
   characterId: string;
   targetCityId: string;
   targetCharacterId?: string; // for recruit / hire_neutral
   role?: CharacterRole; // for assign_role
   techId?: string; // for start_research
+  tactic?: BattleTactic; // for attack
+  tradeCityId?: string; // for establish_trade (second city)
 }
 
 // ── Technology system ──
@@ -177,6 +207,7 @@ export interface BattleResult {
   captured: boolean;
   attackPower: number;
   defensePower: number;
+  tactic?: BattleTactic;
 }
 
 export interface RecruitmentResult {
@@ -272,6 +303,10 @@ export class SimulationService {
   private spyMissions: SpyMission[] = [];
   private spyCounter = 0;
   private factionTech = new Map<string, FactionTechState>();
+  private tradeRoutes: TradeRoute[] = [];
+  private tradeCounter = 0;
+  private deadCharacters = new Set<string>();
+  private pendingTactics = new Map<string, BattleTactic>(); // characterId -> tactic for next battle
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -303,6 +338,10 @@ export class SimulationService {
     this.spyMissions = [];
     this.spyCounter = 0;
     this.factionTech.clear();
+    this.tradeRoutes = [];
+    this.tradeCounter = 0;
+    this.deadCharacters.clear();
+    this.pendingTactics.clear();
     FACTIONS = createDefaultFactions();
 
     // Re-initialize
@@ -430,6 +469,33 @@ export class SimulationService {
     return char.role === "spymaster" ? 0.2 : 0;
   }
 
+  getTradeRoutes(): TradeRoute[] {
+    return [...this.tradeRoutes];
+  }
+
+  getDeadCharacters(): string[] {
+    return [...this.deadCharacters];
+  }
+
+  private removeCharacter(charId: string, factionId: string): void {
+    this.deadCharacters.add(charId);
+    const faction = FACTIONS.find((f) => f.id === factionId);
+    if (!faction) return;
+    faction.members = faction.members.filter((m) => m !== charId);
+
+    // If leader died, succession to highest military member
+    if (faction.leaderId === charId) {
+      const remaining = faction.members.filter((m) => m !== charId);
+      if (remaining.length === 0) return;
+      // Will be resolved asynchronously — set sync for now
+      faction.leaderId = remaining[0]; // placeholder, actual pick done in processDeaths
+    }
+  }
+
+  private tradeRoutesForCity(cityId: string): TradeRoute[] {
+    return this.tradeRoutes.filter((r) => r.cityA === cityId || r.cityB === cityId);
+  }
+
   private travelTimeFor(charId: string, originCity: PlaceNode | undefined, baseTravelTime: number): number {
     const faction = this.getFactionOf(charId);
     let time = originCity?.specialty === "harbor" ? 1 : baseTravelTime;
@@ -452,6 +518,7 @@ export class SimulationService {
         recruitmentResults: [],
         betrayalEvents: [],
         spyReports: [],
+        deathEvents: [],
         pendingCard: null,
         gameStatus: this.gameState.status,
       };
@@ -524,6 +591,13 @@ export class SimulationService {
     // NPC hire neutral characters
     await this.npcHireNeutrals();
 
+    // Character deaths from recent battles
+    const deathEvents = await this.processDeaths(battleResults);
+
+    // Clean up invalid trade routes and NPC establish new ones
+    await this.cleanupTradeRoutes();
+    await this.npcEstablishTrades();
+
     // Draw event card (30% chance)
     const drawnCard = drawEventCard();
     const pendingCard: PendingEventCard | null = drawnCard ? { card: drawnCard, tick: this.currentTick } : null;
@@ -559,11 +633,11 @@ export class SimulationService {
       // Re-read events with narratives
       const updatedEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
       const season = getSeason(this.currentTick);
-      return { tick: this.currentTick, season, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, pendingCard, gameStatus };
+      return { tick: this.currentTick, season, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, pendingCard, gameStatus };
     }
 
     const season = getSeason(this.currentTick);
-    return { tick: this.currentTick, season, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, pendingCard, gameStatus };
+    return { tick: this.currentTick, season, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, pendingCard, gameStatus };
   }
 
   getDailySummary(tick: number): string {
@@ -755,6 +829,39 @@ export class SimulationService {
         if (!char) continue;
         await this.repo.createCharacter({ ...char, role: cmd.role });
         continue;
+      }
+
+      // Establish trade route between two allied cities
+      if (cmd.type === "establish_trade" && cmd.tradeCityId) {
+        const cityA = await this.repo.getPlace(cmd.targetCityId);
+        const cityB = await this.repo.getPlace(cmd.tradeCityId);
+        if (!cityA || !cityB) continue;
+        if (cityA.gold < 200) continue;
+        // Both cities must be allied
+        if (cityA.status !== "allied" || cityB.status !== "allied") continue;
+        // Max 3 routes per city
+        if (this.tradeRoutesForCity(cityA.id).length >= 3) continue;
+        if (this.tradeRoutesForCity(cityB.id).length >= 3) continue;
+        // No duplicate route
+        const dup = this.tradeRoutes.find(
+          (r) => (r.cityA === cityA.id && r.cityB === cityB.id) || (r.cityA === cityB.id && r.cityB === cityA.id),
+        );
+        if (dup) continue;
+        await this.repo.updatePlace(cityA.id, { gold: cityA.gold - 200 });
+        this.tradeCounter++;
+        this.tradeRoutes.push({
+          id: `trade-${this.tradeCounter}`,
+          cityA: cityA.id,
+          cityB: cityB.id,
+          factionId: "shu",
+          establishedTick: this.currentTick,
+        });
+        continue;
+      }
+
+      // Store tactic for attack commands
+      if (cmd.type === "attack" && cmd.tactic) {
+        this.pendingTactics.set(cmd.characterId, cmd.tactic);
       }
 
       // Start research for player faction
@@ -1168,7 +1275,9 @@ export class SimulationService {
       // Governor role bonus: +20% income
       multiplier += this.roleGoldBonus(charsHere);
       const income = Math.round(baseIncome * multiplier * seasonMult);
-      await this.repo.updatePlace(city.id, { gold: city.gold + income });
+      // Trade route bonus: +10 gold per active route
+      const tradeBonus = this.tradeRoutesForCity(city.id).length * 10;
+      await this.repo.updatePlace(city.id, { gold: city.gold + income + tradeBonus });
     }
   }
 
@@ -1232,7 +1341,11 @@ export class SimulationService {
       for (const [attackFaction, attackerIds] of attackersByFaction) {
         let attackPower = Math.random() * 2;
         const attackChars: CharacterNode[] = [];
+        // Determine tactic (player or NPC picks)
+        const leadTactic = this.pendingTactics.get(attackerIds[0]) ?? (attackFaction !== "shu" ? this.npcPickTactic() : "balanced");
+        const tacticMod = TACTIC_MODIFIERS[leadTactic];
         for (const id of attackerIds) {
+          this.pendingTactics.delete(id);
           const c = await this.repo.getCharacter(id);
           if (c) {
             const base = c.military + c.intelligence * 0.5 + getSkills(c).tactics * 0.5 + Math.random() * 2;
@@ -1240,12 +1353,15 @@ export class SimulationService {
             attackChars.push(c);
           }
         }
-        // Logistics tech bonus: extra attack momentum
+        // Apply tactic modifiers: attack bonus/penalty directly, defense modifier reduces effective enemy defense
+        attackPower *= (1 + tacticMod.attack);
+        const effectiveDefense = defensePower * (1 - tacticMod.defense);
+        // Logistics tech bonus
         if (this.hasTech(attackFaction, "logistics")) {
           attackPower += 1;
         }
 
-        const attackerWins = attackPower > defensePower;
+        const attackerWins = attackPower > effectiveDefense;
         const leadAttacker = attackChars[0];
         if (!leadAttacker) continue;
 
@@ -1287,6 +1403,7 @@ export class SimulationService {
           captured: attackerWins,
           attackPower: Math.round(attackPower * 10) / 10,
           defensePower: Math.round(defensePower * 10) / 10,
+          tactic: leadTactic,
         });
 
         // If captured, defenders can no longer defend against next attacker
@@ -1295,6 +1412,137 @@ export class SimulationService {
     }
 
     return results;
+  }
+
+  private npcPickTactic(): BattleTactic {
+    const r = Math.random();
+    if (r < 0.3) return "aggressive";
+    if (r < 0.6) return "defensive";
+    return "balanced";
+  }
+
+  private async processDeaths(battleResults: BattleResult[]): Promise<DeathEvent[]> {
+    const events: DeathEvent[] = [];
+
+    for (const battle of battleResults) {
+      // Losing side characters have 15% death chance (aggressive tactic: 25%)
+      const loserId = battle.winner === "attacker" ? battle.defenderId : battle.attackerId;
+      if (!loserId) continue;
+      if (this.deadCharacters.has(loserId)) continue;
+
+      const tactic = battle.tactic ?? "balanced";
+      const deathChance = tactic === "aggressive" && battle.winner === "defender" ? 0.25 : 0.15;
+      if (Math.random() >= deathChance) continue;
+
+      const loser = await this.repo.getCharacter(loserId);
+      if (!loser) continue;
+
+      const factionId = this.getFactionOf(loserId);
+      if (!factionId) continue;
+      const faction = FACTIONS.find((f) => f.id === factionId);
+      if (!faction) continue;
+
+      const wasLeader = faction.leaderId === loserId;
+
+      // Remove from faction
+      faction.members = faction.members.filter((m) => m !== loserId);
+
+      // Remove from map
+      await this.repo.createCharacter({ ...loser, cityId: undefined });
+      this.deadCharacters.add(loserId);
+
+      let successorId: string | undefined;
+      let successorName: string | undefined;
+
+      // Succession: pick highest military member
+      if (wasLeader && faction.members.length > 0) {
+        const allChars = await this.repo.getAllCharacters();
+        const best = faction.members
+          .map((id) => allChars.find((c) => c.id === id))
+          .filter(Boolean)
+          .sort((a, b) => (b!.military + b!.intelligence) - (a!.military + a!.intelligence))[0];
+        if (best) {
+          faction.leaderId = best.id;
+          successorId = best.id;
+          successorName = best.name;
+        }
+      }
+
+      events.push({
+        tick: this.currentTick,
+        characterId: loserId,
+        characterName: loser.name,
+        cause: "battle",
+        factionId,
+        wasLeader,
+        successorId,
+        successorName,
+      });
+    }
+
+    return events;
+  }
+
+  private breakTradeRoutesForSiegedCities(): void {
+    const toRemove: string[] = [];
+    for (const route of this.tradeRoutes) {
+      // We'll check siege status lazily — just remove routes where faction lost control
+      // This is called after battles resolve, so we check updated city status
+    }
+    // For simplicity, we clean up in advanceDay after siege processing
+  }
+
+  private async cleanupTradeRoutes(): Promise<void> {
+    const cities = await this.repo.getAllPlaces();
+    const cityMap = new Map(cities.map((c) => [c.id, c]));
+    this.tradeRoutes = this.tradeRoutes.filter((r) => {
+      const a = cityMap.get(r.cityA);
+      const b = cityMap.get(r.cityB);
+      // Remove if either city is sieged, or not controlled by the faction
+      if (!a || !b) return false;
+      if (a.siegedBy || b.siegedBy) return false;
+      const factionMembers = FACTIONS.find((f) => f.id === r.factionId)?.members ?? [];
+      if (!a.controllerId || !factionMembers.includes(a.controllerId)) return false;
+      if (!b.controllerId || !factionMembers.includes(b.controllerId)) return false;
+      return true;
+    });
+  }
+
+  private async npcEstablishTrades(): Promise<void> {
+    const cities = await this.repo.getAllPlaces();
+    for (const faction of FACTIONS) {
+      if (faction.id === "shu") continue;
+      if (Math.random() > 0.15) continue; // 15% chance per turn
+
+      const factionCities = cities.filter(
+        (c) => c.controllerId && faction.members.includes(c.controllerId) && !c.siegedBy,
+      );
+      if (factionCities.length < 2) continue;
+
+      // Pick two cities that don't already have a route between them
+      for (let i = 0; i < factionCities.length; i++) {
+        const a = factionCities[i];
+        if (a.gold < 200 || this.tradeRoutesForCity(a.id).length >= 3) continue;
+        for (let j = i + 1; j < factionCities.length; j++) {
+          const b = factionCities[j];
+          if (this.tradeRoutesForCity(b.id).length >= 3) continue;
+          const dup = this.tradeRoutes.find(
+            (r) => (r.cityA === a.id && r.cityB === b.id) || (r.cityA === b.id && r.cityB === a.id),
+          );
+          if (dup) continue;
+          await this.repo.updatePlace(a.id, { gold: a.gold - 200 });
+          this.tradeCounter++;
+          this.tradeRoutes.push({
+            id: `trade-${this.tradeCounter}`,
+            cityA: a.id,
+            cityB: b.id,
+            factionId: faction.id,
+            establishedTick: this.currentTick,
+          });
+          return; // One per turn per faction
+        }
+      }
+    }
   }
 
   private async processRecruitments(battleResults: BattleResult[]): Promise<RecruitmentResult[]> {
@@ -1676,6 +1924,8 @@ export class SimulationService {
       factionHistory: [...this.factionHistory.entries()].map(([k, v]) => [k, [...v]]),
       initialRelationships: this.initialRelationships.map((r) => ({ ...r })),
       factionTech: [...this.factionTech.entries()].map(([k, v]) => [k, { ...v, completed: [...v.completed] }]),
+      tradeRoutes: [...this.tradeRoutes],
+      deadCharacters: [...this.deadCharacters],
       savedAt: new Date().toISOString(),
     };
 
@@ -1737,6 +1987,9 @@ export class SimulationService {
     this.commandQueue = [];
     this.commandedThisTick.clear();
     this.factionTech = new Map((data.factionTech ?? []).map(([k, v]) => [k, { ...v, completed: [...v.completed] }]));
+    this.tradeRoutes = data.tradeRoutes ?? [];
+    this.deadCharacters = new Set(data.deadCharacters ?? []);
+    this.pendingTactics.clear();
 
     // Re-init narrative service
     const characters = await this.repo.getAllCharacters();
@@ -1873,6 +2126,8 @@ interface SaveData {
   factionHistory: [string, FactionHistoryEntry[]][];
   initialRelationships: RelationshipEdge[];
   factionTech: [string, FactionTechState][];
+  tradeRoutes: TradeRoute[];
+  deadCharacters: string[];
   savedAt: string;
 }
 

@@ -118,6 +118,7 @@ export function MapPage({
   const [commandCount, setCommandCount] = useState(0);
   const [detailCharId, setDetailCharId] = useState<string | null>(null);
   const [prediction, setPrediction] = useState<{ winRate: number; attackPower: number; defensePower: number } | null>(null);
+  const [tactic, setTactic] = useState<"aggressive" | "defensive" | "balanced">("balanced");
   const [loading, setLoading] = useState(true);
 
   const fetchMapData = useCallback(async (tick: number) => {
@@ -282,6 +283,22 @@ export function MapPage({
         type,
         characterId: selectedChar,
         targetCityId: selectedCity.id,
+        ...(type === "attack" ? { tactic } : {}),
+      });
+      setCommandCount((c) => c + 1);
+    } catch {
+      // silently fail
+    }
+  };
+
+  const handleEstablishTrade = async (targetCityId: string) => {
+    if (!selectedCity) return;
+    try {
+      await trpc.simulation.queueCommand.mutate({
+        type: "establish_trade",
+        characterId: "liu_bei",
+        targetCityId: selectedCity.id,
+        tradeCityId: targetCityId,
       });
       setCommandCount((c) => c + 1);
     } catch {
@@ -450,6 +467,18 @@ export function MapPage({
                     攻擊此城
                   </button>
                 </div>
+                <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 11, color: "#94a3b8" }}>戰術：</span>
+                  <select
+                    style={styles.tacticSelect}
+                    value={tactic}
+                    onChange={(e) => setTactic(e.target.value as "aggressive" | "defensive" | "balanced")}
+                  >
+                    <option value="balanced">均衡</option>
+                    <option value="aggressive">猛攻（攻+30% 守-15%）</option>
+                    <option value="defensive">防守（守+30% 攻-15%）</option>
+                  </select>
+                </div>
                 {selectedCity.status !== "allied" && (
                   <div style={{ ...styles.cmdButtons, marginTop: 6 }}>
                     <button style={styles.spyBtn} onClick={() => handleSpy("spy")}>
@@ -490,6 +519,29 @@ export function MapPage({
                     </button>
                   </>
                 )}
+                {(selectedCity.gold ?? 0) >= 200 && (() => {
+                  const playerFaction = factions.find((f) => f.id === "shu");
+                  if (!playerFaction) return null;
+                  const otherCities = mapData?.cities.filter(
+                    (c) => c.id !== selectedCity.id && c.status === "allied" && !c.siegedBy,
+                  ) ?? [];
+                  if (otherCities.length === 0) return null;
+                  return (
+                    <>
+                      <p style={{ ...styles.cmdLabel, marginTop: 8 }}>建立貿易路線（200 金，+10金/天）</p>
+                      <select
+                        style={styles.tacticSelect}
+                        onChange={(e) => { if (e.target.value) handleEstablishTrade(e.target.value); e.target.value = ""; }}
+                        defaultValue=""
+                      >
+                        <option value="" disabled>選擇目標城市</option>
+                        {otherCities.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </>
+                  );
+                })()}
               </div>
             )}
 
@@ -682,4 +734,5 @@ const styles: Record<string, React.CSSProperties> = {
   battleText: { fontSize: 13, color: "#cbd5e1", margin: "4px 0 0", lineHeight: 1.4 },
   neutralTag: { fontSize: 10, color: "#94a3b8", marginLeft: 6, fontWeight: 400, fontStyle: "italic" },
   hireBtn: { fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "none", backgroundColor: "#f59e0b", color: "#0f172a", fontWeight: 700, cursor: "pointer" },
+  tacticSelect: { fontSize: 12, padding: "3px 8px", borderRadius: 4, border: "1px solid #334155", backgroundColor: "#0f172a", color: "#e2e8f0", cursor: "pointer", flex: 1 },
 };

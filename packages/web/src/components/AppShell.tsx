@@ -194,6 +194,12 @@ export function AppShell() {
           }
         }
       }
+      if (result.deathEvents?.length > 0) {
+        for (const d of result.deathEvents) {
+          const suffix = d.wasLeader && d.successorName ? `，${d.successorName} 繼任` : "";
+          addToast(`${d.characterName} 戰死${suffix}`, "#991b1b");
+        }
+      }
       if (result.dailySummary) {
         setSummaries((prev) => new Map(prev).set(result.tick, result.dailySummary));
       }
