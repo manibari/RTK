@@ -24,7 +24,7 @@ export interface DeathEvent {
   tick: number;
   characterId: string;
   characterName: string;
-  cause: "battle" | "captured";
+  cause: "battle" | "captured" | "old_age";
   factionId: string;
   wasLeader: boolean;
   successorId?: string;
@@ -65,7 +65,7 @@ export interface AdvanceDayResult {
 
 export interface DiplomacyEvent {
   tick: number;
-  type: "alliance_formed" | "alliance_broken" | "betrayal";
+  type: "alliance_formed" | "alliance_broken" | "betrayal" | "demand_accepted" | "demand_rejected";
   factionA: string;
   factionB: string;
   description: string;
@@ -136,7 +136,7 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade" | "build_district" | "assign_mentor" | "build_siege";
+  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade" | "build_district" | "assign_mentor" | "build_siege" | "demand";
   characterId: string;
   targetCityId: string;
   targetCharacterId?: string; // for recruit / hire_neutral / assign_mentor (apprentice)
@@ -145,6 +145,8 @@ export interface PlayerCommand {
   tactic?: BattleTactic; // for attack
   tradeCityId?: string; // for establish_trade (second city)
   districtType?: DistrictType; // for build_district
+  demandType?: "tribute" | "withdraw"; // for demand
+  demandAmount?: number; // for tribute demand (gold amount)
 }
 
 // ── District system ──
@@ -235,6 +237,13 @@ const SPECIALTY_IMPROVEMENT: Record<string, string> = {
   granary: "大穀倉",
 };
 
+export interface BattleRound {
+  phase: string;
+  attackerDelta: number;
+  defenderDelta: number;
+  note?: string;
+}
+
 export interface BattleResult {
   tick: number;
   cityId: string;
@@ -248,6 +257,7 @@ export interface BattleResult {
   attackPower: number;
   defensePower: number;
   tactic?: BattleTactic;
+  rounds?: BattleRound[];
 }
 
 export interface RecruitmentResult {
@@ -889,6 +899,71 @@ export class SimulationService {
     }
   }
 
+  // ── Aging ──
+  getAge(charId: string, bornTick?: number): number {
+    if (bornTick == null) return 30; // default age
+    return Math.floor((this.currentTick - bornTick) / 16);
+  }
+
+  private async processAging(): Promise<DeathEvent[]> {
+    if (this.currentTick % 16 !== 0) return []; // check every 16 ticks (~1 year)
+    const allChars = await this.repo.getAllCharacters();
+    const deathEvents: DeathEvent[] = [];
+
+    for (const ch of allChars) {
+      if (this.deadCharacters.has(ch.id)) continue;
+      if (ch.bornTick == null) continue;
+
+      const age = this.getAge(ch.id, ch.bornTick);
+
+      // Peak period (25-45): small chance to gain +1 to a random stat
+      if (age >= 25 && age <= 45 && Math.random() < 0.15) {
+        const stat = Math.random() < 0.5 ? "military" : "intelligence";
+        const val = Math.min(10, ch[stat] + 1);
+        await this.repo.createCharacter({ ...ch, [stat]: val });
+      }
+
+      // Old age (55+): stat decay
+      if (age >= 55 && Math.random() < 0.2) {
+        const mil = Math.max(0, ch.military - 1);
+        await this.repo.createCharacter({ ...ch, military: mil });
+      }
+
+      // Natural death (60+): increasing chance per year
+      if (age >= 60) {
+        const deathChance = 0.05 + (age - 60) * 0.03; // 5% at 60, 35% at 70
+        if (Math.random() < deathChance) {
+          const factionId = this.getFactionOf(ch.id);
+          if (factionId) {
+            const faction = FACTIONS.find((f) => f.id === factionId);
+            const wasLeader = faction?.leaderId === ch.id;
+            this.removeCharacter(ch.id, factionId);
+
+            let successorId: string | undefined;
+            let successorName: string | undefined;
+            if (wasLeader && faction) {
+              const successor = allChars.find((c) => c.id === faction.leaderId && c.id !== ch.id);
+              successorId = successor?.id;
+              successorName = successor?.name;
+            }
+
+            deathEvents.push({
+              tick: this.currentTick,
+              characterId: ch.id,
+              characterName: ch.name,
+              cause: "old_age",
+              factionId,
+              wasLeader,
+              successorId,
+              successorName,
+            });
+          }
+        }
+      }
+    }
+    return deathEvents;
+  }
+
   // ── District helpers ──
   private hasDistrict(city: PlaceNode, type: DistrictType): boolean {
     return (city.districts ?? []).some((d) => d.type === type);
@@ -955,6 +1030,63 @@ export class SimulationService {
       }
     }
     return events;
+  }
+
+  private async processDemands(): Promise<DiplomacyEvent[]> {
+    const results: DiplomacyEvent[] = [];
+    const demandCmds = this.commandQueue.filter((c) => c.type === "demand");
+
+    for (const cmd of demandCmds) {
+      const demanderFaction = this.getFactionOf(cmd.characterId);
+      if (!demanderFaction) continue;
+      const targetCity = await this.repo.getPlace(cmd.targetCityId);
+      if (!targetCity?.controllerId) continue;
+      const targetFaction = this.getFactionOf(targetCity.controllerId);
+      if (!targetFaction || targetFaction === demanderFaction) continue;
+
+      const demanderPrestige = [...this.characterPrestige.values()].reduce((s, v) => s + v, 0);
+      const targetExhaustion = this.warExhaustion.get(targetFaction) ?? 0;
+      const targetMorale = this.getMorale(targetFaction);
+
+      if (cmd.demandType === "tribute") {
+        const amount = cmd.demandAmount ?? 100;
+        let acceptChance = 0.1 + (demanderPrestige / 500) + (targetExhaustion > 50 ? 0.2 : 0) - (amount / 1000);
+        if (targetMorale < 30) acceptChance += 0.15;
+        acceptChance = Math.max(0.05, Math.min(0.85, acceptChance));
+
+        if (Math.random() < acceptChance) {
+          const allCities = await this.repo.getAllPlaces();
+          const targetCities = allCities.filter((c) => c.controllerId && this.getFactionOf(c.controllerId) === targetFaction);
+          const payCity = targetCities.find((c) => c.gold >= amount);
+          if (payCity) {
+            await this.repo.updatePlace(payCity.id, { gold: payCity.gold - amount });
+            const receiveCity = allCities.find((c) => c.controllerId && this.getFactionOf(c.controllerId) === demanderFaction);
+            if (receiveCity) await this.repo.updatePlace(receiveCity.id, { gold: receiveCity.gold + amount });
+          }
+          this.adjustMorale(targetFaction, -5);
+          results.push({ tick: this.currentTick, type: "demand_accepted", factionA: demanderFaction, factionB: targetFaction, description: `${demanderFaction} 索求歲幣 ${amount} 金，${targetFaction} 被迫接受` });
+        } else {
+          this.adjustExhaustion(targetFaction, -5); // Anger fuels resolve
+          this.adjustMorale(targetFaction, 3);
+          results.push({ tick: this.currentTick, type: "demand_rejected", factionA: demanderFaction, factionB: targetFaction, description: `${targetFaction} 拒絕 ${demanderFaction} 的歲幣要求，關係惡化` });
+        }
+      } else if (cmd.demandType === "withdraw") {
+        // Demand enemy withdraw from a city (break siege or retreat)
+        let acceptChance = 0.05 + (targetExhaustion > 60 ? 0.25 : 0);
+        if (targetMorale < 30) acceptChance += 0.15;
+        acceptChance = Math.max(0.05, Math.min(0.7, acceptChance));
+
+        if (Math.random() < acceptChance && targetCity.siegedBy === targetFaction) {
+          await this.repo.updatePlace(targetCity.id, { siegedBy: undefined, siegeTick: undefined });
+          results.push({ tick: this.currentTick, type: "demand_accepted", factionA: demanderFaction, factionB: targetFaction, description: `${targetFaction} 接受撤退要求，解除對 ${targetCity.name} 的圍城` });
+        } else {
+          results.push({ tick: this.currentTick, type: "demand_rejected", factionA: demanderFaction, factionB: targetFaction, description: `${targetFaction} 拒絕從 ${targetCity.name} 撤退` });
+        }
+      }
+    }
+    // Remove demand commands from queue (they've been processed)
+    this.commandQueue = this.commandQueue.filter((c) => c.type !== "demand");
+    return results;
   }
 
   // ── Food system ──
@@ -1111,6 +1243,10 @@ export class SimulationService {
     // Evaluate diplomacy
     const diplomacyEvents = await this.evaluateDiplomacy();
 
+    // Process diplomatic demands from player
+    const demandEvents = await this.processDemands();
+    diplomacyEvents.push(...demandEvents);
+
     // Betrayal: disloyal characters may defect
     const betrayalEvents = await this.processBetrayals();
 
@@ -1155,6 +1291,10 @@ export class SimulationService {
 
     // Process mentor-apprentice skill transfer
     await this.processMentorship();
+
+    // Process aging: stat changes and natural death
+    const agingDeaths = await this.processAging();
+    deathEvents.push(...agingDeaths);
 
     // Draw event card (30% chance)
     const drawnCard = drawEventCard();
@@ -2060,6 +2200,31 @@ export class SimulationService {
 
         const leadDefender = defenders[0] ?? (city.controllerId ? await this.repo.getCharacter(city.controllerId) : null);
 
+        // Generate battle rounds for detailed report
+        const rounds: BattleRound[] = [];
+        const leadMil = Math.max(...attackChars.map((c) => c.military), 0);
+        const leadTac = Math.max(...attackChars.map((c) => getSkills(c).tactics), 0);
+        const leadInt = Math.max(...attackChars.map((c) => c.intelligence), 0);
+        const defMil = defenders.length > 0 ? Math.max(...defenders.map((c) => c.military)) : 0;
+        rounds.push({
+          phase: "先鋒衝鋒",
+          attackerDelta: Math.round(leadMil * 0.3 * 10) / 10,
+          defenderDelta: Math.round(defMil * 0.2 * 10) / 10,
+          note: leadAttacker ? `${leadAttacker.name} 率先衝鋒` : undefined,
+        });
+        rounds.push({
+          phase: "戰術對決",
+          attackerDelta: Math.round(leadTac * 0.5 * 10) / 10,
+          defenderDelta: Math.round(garrisonPower * 0.3 * 10) / 10,
+          note: leadTactic !== "balanced" ? `${leadTactic === "aggressive" ? "猛攻" : "堅守"}陣型` : undefined,
+        });
+        rounds.push({
+          phase: "智謀交鋒",
+          attackerDelta: Math.round(leadInt * 0.2 * 10) / 10,
+          defenderDelta: Math.round((defenders[0]?.intelligence ?? 0) * 0.2 * 10) / 10,
+          note: leadInt >= 4 ? `${attackChars.find((c) => c.intelligence === leadInt)?.name ?? ""}妙計退敵` : undefined,
+        });
+
         results.push({
           tick: this.currentTick,
           cityId: city.id,
@@ -2073,6 +2238,7 @@ export class SimulationService {
           attackPower: Math.round(attackPower * 10) / 10,
           defensePower: Math.round(defensePower * 10) / 10,
           tactic: leadTactic,
+          rounds,
         });
 
         // If captured, defenders can no longer defend against next attacker

@@ -540,6 +540,40 @@ export function MapPage({
                     攻城器械（300金，戰術≥2）
                   </button>
                 )}
+                {/* Diplomatic demand buttons for enemy cities */}
+                {selectedCity.status === "hostile" && (
+                  <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
+                    <button
+                      style={{ ...styles.reinforceBtn, backgroundColor: "#f59e0b", fontSize: 11, flex: 1 }}
+                      onClick={() => {
+                        trpc.simulation.queueCommand.mutate({
+                          type: "demand",
+                          characterId: selectedChar,
+                          targetCityId: selectedCity.id,
+                          demandType: "tribute",
+                          demandAmount: 100,
+                        }).then(() => setCommandCount((c) => c + 1));
+                      }}
+                    >
+                      索求歲幣（100金）
+                    </button>
+                    {selectedCity.siegedBy && (
+                      <button
+                        style={{ ...styles.reinforceBtn, backgroundColor: "#fb923c", fontSize: 11, flex: 1 }}
+                        onClick={() => {
+                          trpc.simulation.queueCommand.mutate({
+                            type: "demand",
+                            characterId: selectedChar,
+                            targetCityId: selectedCity.id,
+                            demandType: "withdraw",
+                          }).then(() => setCommandCount((c) => c + 1));
+                        }}
+                      >
+                        要求撤退
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -746,6 +780,7 @@ export function MapPage({
           factionColor={factionColors.get(detailCharId)}
           cityName={mapData?.cities.find((c) => c.id === mapData?.characters.find((ch) => ch.id === detailCharId)?.cityId)?.name}
           isPlayerFaction={factions.find((f) => f.id === "shu")?.members.includes(detailCharId)}
+          currentTick={currentTick}
           onClose={() => setDetailCharId(null)}
           onCharacterClick={(id) => setDetailCharId(id)}
           onAssignRole={(charId, role) => handleAssignRole(charId, role)}

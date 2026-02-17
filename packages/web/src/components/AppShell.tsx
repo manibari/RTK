@@ -37,7 +37,7 @@ interface BattleResult {
 
 interface DiplomacyEvent {
   tick: number;
-  type: "alliance_formed" | "alliance_broken" | "betrayal";
+  type: "alliance_formed" | "alliance_broken" | "betrayal" | "demand_accepted" | "demand_rejected";
   factionA: string;
   factionB: string;
   description: string;
@@ -198,7 +198,8 @@ export function AppShell() {
       if (result.deathEvents?.length > 0) {
         for (const d of result.deathEvents) {
           const suffix = d.wasLeader && d.successorName ? `，${d.successorName} 繼任` : "";
-          addToast(`${d.characterName} 戰死${suffix}`, "#991b1b");
+          const causeText = d.cause === "old_age" ? "壽終正寢" : "戰死";
+          addToast(`${d.characterName} ${causeText}${suffix}`, d.cause === "old_age" ? "#64748b" : "#991b1b");
         }
       }
       if (result.worldEvents?.length > 0) {

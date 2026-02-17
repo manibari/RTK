@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 
+interface BattleRound {
+  phase: string;
+  attackerDelta: number;
+  defenderDelta: number;
+  note?: string;
+}
+
 interface BattleResult {
   tick: number;
   cityName: string;
@@ -11,11 +18,13 @@ interface BattleResult {
   captured: boolean;
   attackPower?: number;
   defensePower?: number;
+  tactic?: string;
+  rounds?: BattleRound[];
 }
 
 interface DiplomacyEvent {
   tick: number;
-  type: "alliance_formed" | "alliance_broken" | "betrayal";
+  type: string;
   factionA: string;
   factionB: string;
   description: string;
@@ -26,6 +35,8 @@ interface GameLogEntry {
   type: "battle" | "diplomacy" | "summary";
   text: string;
   color: string;
+  rounds?: BattleRound[];
+  tactic?: string;
 }
 
 interface GameLogProps {
@@ -37,8 +48,15 @@ interface GameLogProps {
 
 type LogFilter = "battle" | "diplomacy" | "summary";
 
+const TACTIC_LABELS: Record<string, string> = {
+  aggressive: "猛攻",
+  defensive: "堅守",
+  balanced: "平衡",
+};
+
 export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogProps) {
   const [activeFilters, setActiveFilters] = useState<Set<LogFilter>>(new Set(["battle", "diplomacy", "summary"]));
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   const toggleFilter = (f: LogFilter) => {
     setActiveFilters((prev) => {
@@ -56,11 +74,11 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
     const result = b.captured
       ? `${b.attackerName} 攻陷 ${b.cityName}${b.defenderName ? `（守將：${b.defenderName}）` : ""}${powerStr}`
       : `${b.attackerName} 未能攻下 ${b.cityName}${b.defenderName ? `（${b.defenderName} 防守成功）` : ""}${powerStr}`;
-    entries.push({ tick: b.tick, type: "battle", text: result, color: b.captured ? "#ef4444" : "#94a3b8" });
+    entries.push({ tick: b.tick, type: "battle", text: result, color: b.captured ? "#ef4444" : "#94a3b8", rounds: b.rounds, tactic: b.tactic });
   }
 
   for (const d of diplomacy) {
-    const color = d.type === "alliance_formed" ? "#22c55e" : "#f59e0b";
+    const color = d.type === "alliance_formed" ? "#22c55e" : d.type.includes("demand") ? "#f59e0b" : "#f59e0b";
     entries.push({ tick: d.tick, type: "diplomacy", text: d.description, color });
   }
 
@@ -114,14 +132,41 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
       ) : (
         <div style={styles.list}>
           {filtered.map((entry, i) => (
-            <div key={i} style={styles.entry}>
+            <div
+              key={i}
+              style={{ ...styles.entry, cursor: entry.rounds ? "pointer" : "default" }}
+              onClick={() => entry.rounds && setExpandedIdx(expandedIdx === i ? null : i)}
+            >
               <div style={styles.entryHeader}>
                 <span style={styles.entryDay}>Day {entry.tick}</span>
-                <span style={{ ...styles.entryType, color: entry.color }}>
-                  {typeLabels[entry.type]}
-                </span>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  {entry.tactic && (
+                    <span style={{ fontSize: 10, color: "#a855f7", fontWeight: 600 }}>
+                      {TACTIC_LABELS[entry.tactic] ?? entry.tactic}
+                    </span>
+                  )}
+                  <span style={{ ...styles.entryType, color: entry.color }}>
+                    {typeLabels[entry.type]}
+                  </span>
+                  {entry.rounds && (
+                    <span style={{ fontSize: 10, color: "#64748b" }}>{expandedIdx === i ? "▲" : "▼"}</span>
+                  )}
+                </div>
               </div>
               <p style={styles.entryText}>{entry.text}</p>
+              {/* Expanded battle rounds */}
+              {expandedIdx === i && entry.rounds && (
+                <div style={styles.roundsContainer}>
+                  {entry.rounds.map((r, ri) => (
+                    <div key={ri} style={styles.roundRow}>
+                      <span style={styles.roundPhase}>{r.phase}</span>
+                      <span style={{ color: "#ef4444", fontSize: 11 }}>攻+{r.attackerDelta}</span>
+                      <span style={{ color: "#3b82f6", fontSize: 11 }}>守+{r.defenderDelta}</span>
+                      {r.note && <span style={styles.roundNote}>{r.note}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -214,5 +259,33 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#cbd5e1",
     margin: 0,
     lineHeight: 1.5,
+  },
+  roundsContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTop: "1px solid #334155",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  roundRow: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+    fontSize: 12,
+    padding: "2px 6px",
+    backgroundColor: "#0f172a",
+    borderRadius: 4,
+  },
+  roundPhase: {
+    color: "#e2e8f0",
+    fontWeight: 600,
+    width: 72,
+    flexShrink: 0,
+  },
+  roundNote: {
+    color: "#94a3b8",
+    fontSize: 11,
+    marginLeft: "auto",
   },
 };

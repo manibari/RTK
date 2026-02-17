@@ -17,6 +17,7 @@ export interface CharacterNode {
   charm: number;
   skills?: CharacterSkills;
   role?: CharacterRole;
+  bornTick?: number;
 }
 
 export interface RelationshipEdge {

@@ -4,23 +4,24 @@ import type { CharacterNode, RelationshipEdge, PlaceNode } from "./types/graph.j
 const S0 = { leadership: 0, tactics: 0, commerce: 0, espionage: 0 };
 
 const characters: CharacterNode[] = [
-  { id: "liu_bei", name: "劉備", traits: ["benevolent", "ambitious", "charismatic"], cityId: "taipei", military: 1, intelligence: 1, charm: 5, skills: { ...S0, leadership: 3 } },
-  { id: "guan_yu", name: "關羽", traits: ["loyal", "brave", "proud"], cityId: "taipei", military: 4, intelligence: 1, charm: 0, skills: { ...S0, tactics: 2 } },
-  { id: "zhang_fei", name: "張飛", traits: ["brave", "impulsive", "loyal"], cityId: "taoyuan", military: 4, intelligence: 0, charm: 1, skills: { ...S0, tactics: 1 } },
-  { id: "zhuge_liang", name: "諸葛亮", traits: ["wise", "cautious", "strategic"], cityId: "hsinchu", military: 1, intelligence: 5, charm: 0, skills: { ...S0, espionage: 2, commerce: 1 } },
-  { id: "cao_cao", name: "曹操", traits: ["ambitious", "cunning", "charismatic"], cityId: "taichung", military: 1, intelligence: 3, charm: 3, skills: { ...S0, leadership: 2, commerce: 1 } },
-  { id: "sun_quan", name: "孫權", traits: ["cautious", "diplomatic", "ambitious"], cityId: "tainan", military: 1, intelligence: 3, charm: 3, skills: { ...S0, commerce: 2, leadership: 1 } },
-  { id: "zhao_yun", name: "趙雲", traits: ["loyal", "brave", "humble"], cityId: "taipei", military: 3, intelligence: 1, charm: 2, skills: { ...S0, tactics: 2 } },
-  { id: "lu_bu", name: "呂布", traits: ["brave", "treacherous", "impulsive"], cityId: "kaohsiung", military: 4, intelligence: 0, charm: 0, skills: { ...S0, tactics: 3 } },
-  { id: "diao_chan", name: "貂蟬", traits: ["charismatic", "cunning", "diplomatic"], cityId: "kaohsiung", military: 0, intelligence: 3, charm: 5, skills: { ...S0, espionage: 2, leadership: 1 } },
-  { id: "zhou_yu", name: "周瑜", traits: ["strategic", "proud", "ambitious"], cityId: "tainan", military: 2, intelligence: 3, charm: 0, skills: { ...S0, tactics: 2, espionage: 1 } },
+  // bornTick: negative value = born before game start. Age = (currentTick - bornTick) / 16 years
+  { id: "liu_bei", name: "劉備", traits: ["benevolent", "ambitious", "charismatic"], cityId: "taipei", military: 1, intelligence: 1, charm: 5, skills: { ...S0, leadership: 3 }, bornTick: -480 },
+  { id: "guan_yu", name: "關羽", traits: ["loyal", "brave", "proud"], cityId: "taipei", military: 4, intelligence: 1, charm: 0, skills: { ...S0, tactics: 2 }, bornTick: -512 },
+  { id: "zhang_fei", name: "張飛", traits: ["brave", "impulsive", "loyal"], cityId: "taoyuan", military: 4, intelligence: 0, charm: 1, skills: { ...S0, tactics: 1 }, bornTick: -416 },
+  { id: "zhuge_liang", name: "諸葛亮", traits: ["wise", "cautious", "strategic"], cityId: "hsinchu", military: 1, intelligence: 5, charm: 0, skills: { ...S0, espionage: 2, commerce: 1 }, bornTick: -352 },
+  { id: "cao_cao", name: "曹操", traits: ["ambitious", "cunning", "charismatic"], cityId: "taichung", military: 1, intelligence: 3, charm: 3, skills: { ...S0, leadership: 2, commerce: 1 }, bornTick: -576 },
+  { id: "sun_quan", name: "孫權", traits: ["cautious", "diplomatic", "ambitious"], cityId: "tainan", military: 1, intelligence: 3, charm: 3, skills: { ...S0, commerce: 2, leadership: 1 }, bornTick: -320 },
+  { id: "zhao_yun", name: "趙雲", traits: ["loyal", "brave", "humble"], cityId: "taipei", military: 3, intelligence: 1, charm: 2, skills: { ...S0, tactics: 2 }, bornTick: -400 },
+  { id: "lu_bu", name: "呂布", traits: ["brave", "treacherous", "impulsive"], cityId: "kaohsiung", military: 4, intelligence: 0, charm: 0, skills: { ...S0, tactics: 3 }, bornTick: -560 },
+  { id: "diao_chan", name: "貂蟬", traits: ["charismatic", "cunning", "diplomatic"], cityId: "kaohsiung", military: 0, intelligence: 3, charm: 5, skills: { ...S0, espionage: 2, leadership: 1 }, bornTick: -320 },
+  { id: "zhou_yu", name: "周瑜", traits: ["strategic", "proud", "ambitious"], cityId: "tainan", military: 2, intelligence: 3, charm: 0, skills: { ...S0, tactics: 2, espionage: 1 }, bornTick: -384 },
   // Neutral (unaffiliated) characters
-  { id: "xu_shu", name: "徐庶", traits: ["wise", "loyal", "humble"], cityId: "chiayi", military: 1, intelligence: 4, charm: 2, skills: { ...S0, tactics: 1, espionage: 1 } },
-  { id: "pang_tong", name: "龐統", traits: ["wise", "strategic", "cunning"], cityId: "hualien", military: 0, intelligence: 5, charm: 1, skills: { ...S0, tactics: 2, commerce: 1 } },
-  { id: "huang_zhong", name: "黃忠", traits: ["brave", "loyal", "proud"], cityId: "chiayi", military: 5, intelligence: 0, charm: 1, skills: { ...S0, tactics: 3 } },
-  { id: "ma_chao", name: "馬超", traits: ["brave", "impulsive", "ambitious"], cityId: "pingtung", military: 4, intelligence: 1, charm: 2, skills: { ...S0, tactics: 2, leadership: 1 } },
-  { id: "gan_ning", name: "甘寧", traits: ["brave", "impulsive", "charismatic"], cityId: "keelung", military: 3, intelligence: 1, charm: 2, skills: { ...S0, tactics: 1, commerce: 1 } },
-  { id: "xu_huang", name: "徐晃", traits: ["loyal", "brave", "cautious"], cityId: "pingtung", military: 3, intelligence: 2, charm: 1, skills: { ...S0, tactics: 2 } },
+  { id: "xu_shu", name: "徐庶", traits: ["wise", "loyal", "humble"], cityId: "chiayi", military: 1, intelligence: 4, charm: 2, skills: { ...S0, tactics: 1, espionage: 1 }, bornTick: -448 },
+  { id: "pang_tong", name: "龐統", traits: ["wise", "strategic", "cunning"], cityId: "hualien", military: 0, intelligence: 5, charm: 1, skills: { ...S0, tactics: 2, commerce: 1 }, bornTick: -416 },
+  { id: "huang_zhong", name: "黃忠", traits: ["brave", "loyal", "proud"], cityId: "chiayi", military: 5, intelligence: 0, charm: 1, skills: { ...S0, tactics: 3 }, bornTick: -800 },
+  { id: "ma_chao", name: "馬超", traits: ["brave", "impulsive", "ambitious"], cityId: "pingtung", military: 4, intelligence: 1, charm: 2, skills: { ...S0, tactics: 2, leadership: 1 }, bornTick: -352 },
+  { id: "gan_ning", name: "甘寧", traits: ["brave", "impulsive", "charismatic"], cityId: "keelung", military: 3, intelligence: 1, charm: 2, skills: { ...S0, tactics: 1, commerce: 1 }, bornTick: -400 },
+  { id: "xu_huang", name: "徐晃", traits: ["loyal", "brave", "cautious"], cityId: "pingtung", military: 3, intelligence: 2, charm: 1, skills: { ...S0, tactics: 2 }, bornTick: -448 },
 ];
 
 const cities: PlaceNode[] = [

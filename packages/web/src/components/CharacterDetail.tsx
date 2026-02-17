@@ -22,6 +22,7 @@ interface CharacterInfo {
   charm: number;
   skills?: CharacterSkills;
   role?: CharacterRole;
+  bornTick?: number;
 }
 
 const ROLE_LABELS: Record<CharacterRole, { label: string; color: string }> = {
@@ -61,6 +62,7 @@ interface CharacterDetailProps {
   factionColor?: string;
   cityName?: string;
   isPlayerFaction?: boolean;
+  currentTick?: number;
   onClose: () => void;
   onCharacterClick?: (id: string) => void;
   onAssignRole?: (characterId: string, role: CharacterRole) => void;
@@ -85,6 +87,7 @@ export function CharacterDetail({
   factionColor,
   cityName,
   isPlayerFaction,
+  currentTick,
   onClose,
   onCharacterClick,
   onAssignRole,
@@ -137,7 +140,14 @@ export function CharacterDetail({
         {/* Header */}
         <div style={styles.header}>
           <div>
-            <h2 style={styles.name}>{character.name}</h2>
+            <h2 style={styles.name}>
+              {character.name}
+              {character.bornTick != null && currentTick != null && (
+                <span style={{ fontSize: 13, color: "#94a3b8", fontWeight: 400, marginLeft: 8 }}>
+                  {Math.floor((currentTick - character.bornTick) / 16)}歲
+                </span>
+              )}
+            </h2>
             <div style={styles.meta}>
               {factionName && (
                 <span style={{ ...styles.factionTag, backgroundColor: factionColor ?? "#64748b" }}>
