@@ -1,6 +1,7 @@
 export type { IGraphRepository } from "./types/repository.js";
 export type {
   CharacterNode,
+  CharacterRole,
   RelationshipEdge,
   EventNode,
   PlaceNode,

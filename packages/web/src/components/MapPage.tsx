@@ -51,6 +51,7 @@ interface CharacterOnMap {
   name: string;
   traits: string[];
   cityId: string;
+  role?: string;
 }
 
 interface Movement {
@@ -169,6 +170,17 @@ export function MapPage({
     return mapData.characters.filter((c) => c.cityId === selectedCity.id);
   }, [selectedCity, mapData]);
 
+  // Identify which characters are neutral (not in any faction)
+  const neutralCharIds = useMemo(() => {
+    const allFactionMembers = new Set<string>();
+    for (const f of factions) {
+      for (const m of f.members) allFactionMembers.add(m);
+    }
+    return new Set(
+      (mapData?.characters ?? []).filter((c) => !allFactionMembers.has(c.id)).map((c) => c.id),
+    );
+  }, [factions, mapData]);
+
   // Fetch battle prediction when attacker and target are selected
   useEffect(() => {
     if (!selectedChar || !selectedCity || selectedCity.status === "allied") {
@@ -227,6 +239,35 @@ export function MapPage({
         type,
         characterId: selectedChar,
         targetCityId: selectedCity.id,
+      });
+      setCommandCount((c) => c + 1);
+    } catch {
+      // silently fail
+    }
+  };
+
+  const handleHireNeutral = async (targetCharId: string) => {
+    if (!selectedCity) return;
+    try {
+      await trpc.simulation.queueCommand.mutate({
+        type: "hire_neutral",
+        characterId: "liu_bei",
+        targetCityId: selectedCity.id,
+        targetCharacterId: targetCharId,
+      });
+      setCommandCount((c) => c + 1);
+    } catch {
+      // silently fail
+    }
+  };
+
+  const handleAssignRole = async (charId: string, role: string) => {
+    try {
+      await trpc.simulation.queueCommand.mutate({
+        type: "assign_role",
+        characterId: charId,
+        targetCityId: selectedCity?.id ?? "",
+        role: role as "general" | "governor" | "diplomat" | "spymaster",
       });
       setCommandCount((c) => c + 1);
     } catch {
@@ -459,31 +500,47 @@ export function MapPage({
               <p style={styles.emptyText}>無駐軍</p>
             ) : (
               <div style={styles.charList}>
-                {charsInCity.map((c) => (
-                  <div
-                    key={c.id}
-                    style={{
-                      ...styles.charItem,
-                      border: selectedChar === c.id ? "1px solid #f59e0b" : "1px solid transparent",
-                      cursor: "pointer",
-                    }}
-                    onClick={() => setSelectedChar(selectedChar === c.id ? null : c.id)}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={styles.charName}>{c.name}</span>
-                      <button
-                        style={styles.detailBtn}
-                        onClick={(e) => { e.stopPropagation(); setDetailCharId(c.id); }}
-                      >
-                        詳情
-                      </button>
+                {charsInCity.map((c) => {
+                  const isNeutral = neutralCharIds.has(c.id);
+                  return (
+                    <div
+                      key={c.id}
+                      style={{
+                        ...styles.charItem,
+                        border: selectedChar === c.id ? "1px solid #f59e0b" : isNeutral ? "1px solid #64748b" : "1px solid transparent",
+                        cursor: "pointer",
+                      }}
+                      onClick={() => !isNeutral && setSelectedChar(selectedChar === c.id ? null : c.id)}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={styles.charName}>
+                          {c.name}
+                          {isNeutral && <span style={styles.neutralTag}>在野</span>}
+                        </span>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {isNeutral && selectedCity?.status === "allied" && (
+                            <button
+                              style={styles.hireBtn}
+                              onClick={(e) => { e.stopPropagation(); handleHireNeutral(c.id); }}
+                            >
+                              招募(200金)
+                            </button>
+                          )}
+                          <button
+                            style={styles.detailBtn}
+                            onClick={(e) => { e.stopPropagation(); setDetailCharId(c.id); }}
+                          >
+                            詳情
+                          </button>
+                        </div>
+                      </div>
+                      <span style={styles.charTraits}>{c.traits.join("、")}</span>
+                      {selectedChar === c.id && (
+                        <span style={styles.selectedTag}>已選取</span>
+                      )}
                     </div>
-                    <span style={styles.charTraits}>{c.traits.join("、")}</span>
-                    {selectedChar === c.id && (
-                      <span style={styles.selectedTag}>已選取</span>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -548,8 +605,10 @@ export function MapPage({
           factionName={factions.find((f) => f.members.includes(detailCharId))?.leaderName}
           factionColor={factionColors.get(detailCharId)}
           cityName={mapData?.cities.find((c) => c.id === mapData?.characters.find((ch) => ch.id === detailCharId)?.cityId)?.name}
+          isPlayerFaction={factions.find((f) => f.id === "shu")?.members.includes(detailCharId)}
           onClose={() => setDetailCharId(null)}
           onCharacterClick={(id) => setDetailCharId(id)}
+          onAssignRole={(charId, role) => handleAssignRole(charId, role)}
         />
       )}
     </div>
@@ -621,4 +680,6 @@ const styles: Record<string, React.CSSProperties> = {
   battleItem: { padding: "6px 10px", backgroundColor: "#0f172a", borderRadius: 6, borderLeft: "3px solid #ef4444" },
   battleDay: { fontSize: 11, color: "#f59e0b", fontWeight: 600 },
   battleText: { fontSize: 13, color: "#cbd5e1", margin: "4px 0 0", lineHeight: 1.4 },
+  neutralTag: { fontSize: 10, color: "#94a3b8", marginLeft: 6, fontWeight: 400, fontStyle: "italic" },
+  hireBtn: { fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "none", backgroundColor: "#f59e0b", color: "#0f172a", fontWeight: 700, cursor: "pointer" },
 };

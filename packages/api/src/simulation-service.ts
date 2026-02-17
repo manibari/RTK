@@ -1,5 +1,5 @@
 import { Engine } from "@rtk/simulation";
-import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode, SpyMission, SpyMissionType, CharacterSkills } from "@rtk/graph-db";
+import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode, SpyMission, SpyMissionType, CharacterSkills, CharacterRole } from "@rtk/graph-db";
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
 import { NarrativeService } from "./narrative/narrative-service.js";
 import { evaluateNPCDecisions } from "./ai/npc-ai.js";
@@ -87,11 +87,51 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage";
+  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "hire_neutral" | "assign_role" | "start_research";
   characterId: string;
   targetCityId: string;
-  targetCharacterId?: string; // for recruit
+  targetCharacterId?: string; // for recruit / hire_neutral
+  role?: CharacterRole; // for assign_role
+  techId?: string; // for start_research
 }
+
+// ── Technology system ──
+export interface Technology {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  turns: number;
+}
+
+export const TECHNOLOGIES: Technology[] = [
+  { id: "iron_working", name: "鍛鐵術", description: "鍛冶場效果+50%", cost: 500, turns: 5 },
+  { id: "archery", name: "弓術", description: "全員智力+1", cost: 400, turns: 4 },
+  { id: "logistics", name: "兵站學", description: "移動速度+1", cost: 600, turns: 6 },
+  { id: "spy_network", name: "諜報網", description: "諜報成功率+20%", cost: 450, turns: 4 },
+  { id: "divine_strategy", name: "神算", description: "全員戰術+1", cost: 700, turns: 8 },
+];
+
+export interface FactionResearch {
+  techId: string;
+  startTick: number;
+}
+
+export interface FactionTechState {
+  completed: string[];
+  current: FactionResearch | null;
+}
+
+// Neutral characters — IDs not in any faction
+const NEUTRAL_IDS = ["xu_shu", "pang_tong", "huang_zhong", "ma_chao", "gan_ning", "xu_huang"];
+
+// Role bonuses
+const ROLE_LABELS: Record<CharacterRole, string> = {
+  general: "將軍",
+  governor: "太守",
+  diplomat: "外交官",
+  spymaster: "間諜頭子",
+};
 
 export interface SpyReport {
   tick: number;
@@ -231,6 +271,7 @@ export class SimulationService {
   private pendingCard: PendingEventCard | null = null;
   private spyMissions: SpyMission[] = [];
   private spyCounter = 0;
+  private factionTech = new Map<string, FactionTechState>();
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -261,6 +302,7 @@ export class SimulationService {
     this.factionHistory.clear();
     this.spyMissions = [];
     this.spyCounter = 0;
+    this.factionTech.clear();
     FACTIONS = createDefaultFactions();
 
     // Re-initialize
@@ -349,6 +391,54 @@ export class SimulationService {
     return [...this.alliances].map((a) => a.split(":"));
   }
 
+  // ── Neutral character helpers ──
+  isNeutral(characterId: string): boolean {
+    return !FACTIONS.some((f) => f.members.includes(characterId));
+  }
+
+  // ── Technology helpers ──
+  private getFactionTech(factionId: string): FactionTechState {
+    if (!this.factionTech.has(factionId)) {
+      this.factionTech.set(factionId, { completed: [], current: null });
+    }
+    return this.factionTech.get(factionId)!;
+  }
+
+  hasTech(factionId: string, techId: string): boolean {
+    return this.getFactionTech(factionId).completed.includes(techId);
+  }
+
+  getFactionTechs(): Record<string, FactionTechState> {
+    const result: Record<string, FactionTechState> = {};
+    for (const f of FACTIONS) {
+      result[f.id] = this.getFactionTech(f.id);
+    }
+    return result;
+  }
+
+  // ── Role bonus helpers ──
+  private roleAttackBonus(char: CharacterNode): number {
+    return char.role === "general" ? 0.2 : 0;
+  }
+
+  private roleGoldBonus(chars: CharacterNode[]): number {
+    const governor = chars.find((c) => c.role === "governor");
+    return governor ? 0.2 : 0;
+  }
+
+  private roleSpyBonus(char: CharacterNode): number {
+    return char.role === "spymaster" ? 0.2 : 0;
+  }
+
+  private travelTimeFor(charId: string, originCity: PlaceNode | undefined, baseTravelTime: number): number {
+    const faction = this.getFactionOf(charId);
+    let time = originCity?.specialty === "harbor" ? 1 : baseTravelTime;
+    time += SEASON_TRAVEL_PENALTY[getSeason(this.currentTick)];
+    // Logistics tech: -1 travel time (min 1)
+    if (faction && this.hasTech(faction, "logistics")) time = Math.max(1, time - 1);
+    return time;
+  }
+
   async advanceDay(): Promise<AdvanceDayResult> {
     // Prevent advancing after game ends
     if (this.gameState.status !== "ongoing") {
@@ -427,6 +517,12 @@ export class SimulationService {
 
     // Betrayal: disloyal characters may defect
     const betrayalEvents = await this.processBetrayals();
+
+    // Process technology research
+    await this.processResearch();
+
+    // NPC hire neutral characters
+    await this.npcHireNeutrals();
 
     // Draw event card (30% chance)
     const drawnCard = drawEventCard();
@@ -575,10 +671,9 @@ export class SimulationService {
       if (!char?.cityId || char.cityId === decision.targetCityId) continue;
 
       this.commandedThisTick.add(decision.characterId);
-      // Harbor specialty: travel time = 1 from harbor cities
       const originCity = cities.find((c) => c.id === char.cityId);
       const baseTravelTime = decision.action === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
-      const travelTime = (originCity?.specialty === "harbor" ? 1 : baseTravelTime) + SEASON_TRAVEL_PENALTY[getSeason(this.currentTick)];
+      const travelTime = this.travelTimeFor(decision.characterId, originCity, baseTravelTime);
 
       await this.repo.addMovement({
         characterId: decision.characterId,
@@ -632,6 +727,56 @@ export class SimulationService {
         continue;
       }
 
+      // Hire neutral character: costs 200 gold from the city
+      if (cmd.type === "hire_neutral" && cmd.targetCharacterId) {
+        const target = await this.repo.getCharacter(cmd.targetCharacterId);
+        if (!target || !this.isNeutral(cmd.targetCharacterId)) continue;
+        const city = await this.repo.getPlace(cmd.targetCityId);
+        if (!city || city.gold < 200) continue;
+        // Recruiter is the faction leader
+        const recruiter = await this.repo.getCharacter(cmd.characterId);
+        if (!recruiter) continue;
+        const faction = this.getFactionOf(cmd.characterId);
+        if (!faction) continue;
+        // Success chance: 50% + charm*5% + leadership*5%
+        const chance = Math.min(0.95, 0.5 + recruiter.charm * 0.05 + getSkills(recruiter).leadership * 0.05);
+        const success = Math.random() < chance;
+        await this.repo.updatePlace(city.id, { gold: city.gold - 200 });
+        if (success) {
+          const factionObj = FACTIONS.find((f) => f.id === faction);
+          if (factionObj) factionObj.members.push(cmd.targetCharacterId);
+        }
+        continue;
+      }
+
+      // Assign role to character
+      if (cmd.type === "assign_role" && cmd.role) {
+        const char = await this.repo.getCharacter(cmd.characterId);
+        if (!char) continue;
+        await this.repo.createCharacter({ ...char, role: cmd.role });
+        continue;
+      }
+
+      // Start research for player faction
+      if (cmd.type === "start_research" && cmd.techId) {
+        const tech = TECHNOLOGIES.find((t) => t.id === cmd.techId);
+        if (!tech) continue;
+        const factionId = "shu";
+        const state = this.getFactionTech(factionId);
+        if (state.current || state.completed.includes(tech.id)) continue;
+        // Deduct cost from richest allied city
+        const allCities = await this.repo.getAllPlaces();
+        const shuFaction = FACTIONS.find((f) => f.id === factionId);
+        if (!shuFaction) continue;
+        const alliedCities = allCities
+          .filter((c) => c.controllerId && shuFaction.members.includes(c.controllerId))
+          .sort((a, b) => b.gold - a.gold);
+        if (alliedCities.length === 0 || alliedCities[0].gold < tech.cost) continue;
+        await this.repo.updatePlace(alliedCities[0].id, { gold: alliedCities[0].gold - tech.cost });
+        state.current = { techId: tech.id, startTick: this.currentTick };
+        continue;
+      }
+
       // Spy/Sabotage: send spy on covert mission (costs 100 gold from any allied city)
       if (cmd.type === "spy" || cmd.type === "sabotage") {
         const spyChar = await this.repo.getCharacter(cmd.characterId);
@@ -659,10 +804,9 @@ export class SimulationService {
       if (char.cityId === cmd.targetCityId) continue;
 
       this.commandedThisTick.add(cmd.characterId);
-      // Harbor specialty: travel time = 1 from harbor cities
       const originCity = cities.find((c) => c.id === char.cityId);
       const baseTravelTime = cmd.type === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
-      const travelTime = (originCity?.specialty === "harbor" ? 1 : baseTravelTime) + SEASON_TRAVEL_PENALTY[getSeason(this.currentTick)];
+      const travelTime = this.travelTimeFor(cmd.characterId, originCity, baseTravelTime);
 
       await this.repo.addMovement({
         characterId: cmd.characterId,
@@ -692,9 +836,8 @@ export class SimulationService {
       if (destinations.length === 0) continue;
 
       const destId = destinations[Math.floor(Math.random() * destinations.length)];
-      // Harbor specialty: travel time = 1 from harbor cities
       const originCity = cities.find((c) => c.id === char.cityId);
-      const travelTime = (originCity?.specialty === "harbor" ? 1 : 1 + Math.floor(Math.random() * 3)) + SEASON_TRAVEL_PENALTY[getSeason(this.currentTick)];
+      const travelTime = this.travelTimeFor(char.id, originCity, 1 + Math.floor(Math.random() * 3));
 
       await this.repo.addMovement({
         characterId: char.id,
@@ -751,6 +894,96 @@ export class SimulationService {
     }
   }
 
+  private async processResearch(): Promise<void> {
+    for (const faction of FACTIONS) {
+      const state = this.getFactionTech(faction.id);
+      if (!state.current) continue;
+      const tech = TECHNOLOGIES.find((t) => t.id === state.current!.techId);
+      if (!tech) continue;
+      const elapsed = this.currentTick - state.current.startTick;
+      if (elapsed < tech.turns) continue;
+
+      // Research complete
+      state.completed.push(tech.id);
+      state.current = null;
+
+      // Apply one-time tech effects
+      if (tech.id === "archery") {
+        // +1 intelligence to all faction characters
+        const allChars = await this.repo.getAllCharacters();
+        for (const ch of allChars) {
+          if (faction.members.includes(ch.id) && ch.intelligence < 10) {
+            await this.repo.createCharacter({ ...ch, intelligence: ch.intelligence + 1 });
+          }
+        }
+      }
+      if (tech.id === "divine_strategy") {
+        // +1 tactics skill to all faction characters
+        const allChars = await this.repo.getAllCharacters();
+        for (const ch of allChars) {
+          if (faction.members.includes(ch.id)) {
+            await this.repo.createCharacter({ ...ch, skills: gainSkill(ch, "tactics") });
+          }
+        }
+      }
+    }
+
+    // NPC factions auto-research
+    for (const faction of FACTIONS) {
+      if (faction.id === "shu") continue;
+      const state = this.getFactionTech(faction.id);
+      if (state.current) continue;
+
+      // Pick first available tech not yet completed
+      const nextTech = TECHNOLOGIES.find((t) => !state.completed.includes(t.id));
+      if (!nextTech) continue;
+
+      // Check if faction can afford
+      const cities = await this.repo.getAllPlaces();
+      const factionCities = cities
+        .filter((c) => c.controllerId && faction.members.includes(c.controllerId))
+        .sort((a, b) => b.gold - a.gold);
+      if (factionCities.length === 0 || factionCities[0].gold < nextTech.cost) continue;
+
+      await this.repo.updatePlace(factionCities[0].id, { gold: factionCities[0].gold - nextTech.cost });
+      state.current = { techId: nextTech.id, startTick: this.currentTick };
+    }
+  }
+
+  private async npcHireNeutrals(): Promise<void> {
+    const allChars = await this.repo.getAllCharacters();
+    const cities = await this.repo.getAllPlaces();
+
+    for (const faction of FACTIONS) {
+      if (faction.id === "shu") continue; // Player hires manually
+      if (Math.random() > 0.1) continue; // 10% chance per turn
+
+      const leader = allChars.find((c) => c.id === faction.leaderId);
+      if (!leader) continue;
+
+      // Find neutral characters in cities controlled by this faction
+      const factionCities = cities.filter(
+        (c) => c.controllerId && faction.members.includes(c.controllerId),
+      );
+
+      for (const city of factionCities) {
+        if (city.gold < 200) continue;
+        const neutralsHere = allChars.filter(
+          (c) => c.cityId === city.id && this.isNeutral(c.id),
+        );
+        if (neutralsHere.length === 0) continue;
+
+        const target = neutralsHere[0];
+        const chance = Math.min(0.9, 0.5 + leader.charm * 0.05 + getSkills(leader).leadership * 0.05);
+        if (Math.random() >= chance) continue;
+
+        await this.repo.updatePlace(city.id, { gold: city.gold - 200 });
+        faction.members.push(target.id);
+        break; // One hire per turn max
+      }
+    }
+  }
+
   private async processSpyMissions(): Promise<SpyReport[]> {
     const reports: SpyReport[] = [];
     const remaining: SpyMission[] = [];
@@ -770,12 +1003,20 @@ export class SimulationService {
       // Base success rate: 40% for intel, 30% for sabotage
       // Intelligence bonus: +5% per point, espionage skill: +8% per level
       const spySkill = getSkills(spy).espionage;
+      const spyFaction = this.getFactionOf(spy.id);
       const baseRate = mission.missionType === "intel" ? 0.4 : 0.3;
-      const successRate = Math.min(0.9, baseRate + spy.intelligence * 0.05 + spySkill * 0.08);
+      let successRate = baseRate + spy.intelligence * 0.05 + spySkill * 0.08;
+      // Spymaster role: +20% success
+      successRate += this.roleSpyBonus(spy);
+      // Spy network tech: +20% success
+      if (spyFaction && this.hasTech(spyFaction, "spy_network")) successRate += 0.2;
+      successRate = Math.min(0.95, successRate);
       const success = Math.random() < successRate;
 
       // Caught chance: 50% base, -5% per intelligence, -8% per espionage skill
-      const caughtRate = Math.max(0.1, 0.5 - spy.intelligence * 0.05 - spySkill * 0.08);
+      let caughtRate = 0.5 - spy.intelligence * 0.05 - spySkill * 0.08;
+      if (spy.role === "spymaster") caughtRate -= 0.1;
+      caughtRate = Math.max(0.05, caughtRate);
       const caught = !success && Math.random() < caughtRate;
 
       const report: SpyReport = {
@@ -924,6 +1165,8 @@ export class SimulationService {
       const charsHere = characters.filter((c) => c.cityId === city.id);
       const bestCommerce = Math.max(0, ...charsHere.map((c) => getSkills(c).commerce));
       multiplier += bestCommerce * 0.1;
+      // Governor role bonus: +20% income
+      multiplier += this.roleGoldBonus(charsHere);
       const income = Math.round(baseIncome * multiplier * seasonMult);
       await this.repo.updatePlace(city.id, { gold: city.gold + income });
     }
@@ -974,7 +1217,11 @@ export class SimulationService {
       let garrisonPower = city.garrison;
       // Forge specialty: garrison defense x1.5 (x2 with improvement)
       if (city.specialty === "forge") {
-        garrisonPower = Math.round(garrisonPower * (city.improvement ? 2 : 1.5));
+        let forgeMult = city.improvement ? 2 : 1.5;
+        // Iron working tech: +50% forge effect
+        const defenderFaction = city.controllerId ? this.getFactionOf(city.controllerId) : null;
+        if (defenderFaction && this.hasTech(defenderFaction, "iron_working")) forgeMult *= 1.5;
+        garrisonPower = Math.round(garrisonPower * forgeMult);
       }
       let defensePower = garrisonPower + tierBonus + seasonDefBonus + Math.random() * 2;
       for (const d of defenders) {
@@ -988,9 +1235,14 @@ export class SimulationService {
         for (const id of attackerIds) {
           const c = await this.repo.getCharacter(id);
           if (c) {
-            attackPower += c.military + c.intelligence * 0.5 + getSkills(c).tactics * 0.5 + Math.random() * 2;
+            const base = c.military + c.intelligence * 0.5 + getSkills(c).tactics * 0.5 + Math.random() * 2;
+            attackPower += base * (1 + this.roleAttackBonus(c));
             attackChars.push(c);
           }
+        }
+        // Logistics tech bonus: extra attack momentum
+        if (this.hasTech(attackFaction, "logistics")) {
+          attackPower += 1;
         }
 
         const attackerWins = attackPower > defensePower;
@@ -1423,6 +1675,7 @@ export class SimulationService {
       dailySummaries: [...this.dailySummaries.entries()],
       factionHistory: [...this.factionHistory.entries()].map(([k, v]) => [k, [...v]]),
       initialRelationships: this.initialRelationships.map((r) => ({ ...r })),
+      factionTech: [...this.factionTech.entries()].map(([k, v]) => [k, { ...v, completed: [...v.completed] }]),
       savedAt: new Date().toISOString(),
     };
 
@@ -1483,6 +1736,7 @@ export class SimulationService {
     this.initialRelationships = data.initialRelationships.map((r) => ({ ...r }));
     this.commandQueue = [];
     this.commandedThisTick.clear();
+    this.factionTech = new Map((data.factionTech ?? []).map(([k, v]) => [k, { ...v, completed: [...v.completed] }]));
 
     // Re-init narrative service
     const characters = await this.repo.getAllCharacters();
@@ -1618,6 +1872,7 @@ interface SaveData {
   dailySummaries: [number, string][];
   factionHistory: [string, FactionHistoryEntry[]][];
   initialRelationships: RelationshipEdge[];
+  factionTech: [string, FactionTechState][];
   savedAt: string;
 }
 

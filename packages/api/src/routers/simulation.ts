@@ -50,10 +50,12 @@ export const simulationRouter = router({
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
-      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage"]),
+      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "hire_neutral", "assign_role", "start_research"]),
       characterId: z.string(),
       targetCityId: z.string(),
       targetCharacterId: z.string().optional(),
+      role: z.enum(["general", "governor", "diplomat", "spymaster"]).optional(),
+      techId: z.string().optional(),
     }))
     .mutation(({ ctx, input }) => {
       ctx.simulation.queueCommand(input);
@@ -119,6 +121,18 @@ export const simulationRouter = router({
   getSpyMissions: publicProcedure.query(({ ctx }) => {
     return ctx.simulation.getSpyMissions();
   }),
+
+  // Technology
+  getFactionTechs: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getFactionTechs();
+  }),
+
+  // Neutral check
+  isNeutral: publicProcedure
+    .input(z.object({ characterId: z.string() }))
+    .query(({ ctx, input }) => {
+      return { neutral: ctx.simulation.isNeutral(input.characterId) };
+    }),
 
   // Event cards
   resolveEventCard: publicProcedure

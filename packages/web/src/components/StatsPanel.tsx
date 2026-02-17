@@ -15,6 +15,27 @@ interface FactionStat {
 
 type AlliancePair = [string, string];
 
+interface Technology {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  turns: number;
+}
+
+const TECHNOLOGIES: Technology[] = [
+  { id: "iron_working", name: "鍛鐵術", description: "鍛冶場效果+50%", cost: 500, turns: 5 },
+  { id: "archery", name: "弓術", description: "全員智力+1", cost: 400, turns: 4 },
+  { id: "logistics", name: "兵站學", description: "移動速度+1", cost: 600, turns: 6 },
+  { id: "spy_network", name: "諜報網", description: "諜報成功率+20%", cost: 450, turns: 4 },
+  { id: "divine_strategy", name: "神算", description: "全員戰術+1", cost: 700, turns: 8 },
+];
+
+interface FactionTechState {
+  completed: string[];
+  current: { techId: string; startTick: number } | null;
+}
+
 interface StatsPanelProps {
   currentTick: number;
   onMessage?: (text: string, color: string) => void;
@@ -24,18 +45,21 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
   const [stats, setStats] = useState<FactionStat[]>([]);
   const [alliances, setAlliances] = useState<AlliancePair[]>([]);
   const [history, setHistory] = useState<Record<string, { tick: number; power: number }[]>>({});
+  const [techs, setTechs] = useState<Record<string, FactionTechState>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchStats = useCallback(async () => {
     try {
-      const [s, a, h] = await Promise.all([
+      const [s, a, h, t] = await Promise.all([
         trpc.simulation.getFactionStats.query(),
         trpc.simulation.getAlliances.query(),
         trpc.simulation.getFactionHistory.query(),
+        trpc.simulation.getFactionTechs.query(),
       ]);
       setStats(s as FactionStat[]);
       setAlliances(a as unknown as AlliancePair[]);
       setHistory(h as Record<string, { tick: number; power: number }[]>);
+      setTechs(t as Record<string, FactionTechState>);
     } catch {
       // silently fail
     } finally {
@@ -61,6 +85,21 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
       fetchStats();
     }
     onMessage?.(result.reason, result.success ? "#f59e0b" : "#ef4444");
+  };
+
+  const handleResearch = async (techId: string) => {
+    try {
+      await trpc.simulation.queueCommand.mutate({
+        type: "start_research",
+        characterId: "liu_bei",
+        targetCityId: "",
+        techId,
+      });
+      onMessage?.(`開始研發 ${TECHNOLOGIES.find((t) => t.id === techId)?.name ?? techId}`, "#3b82f6");
+      fetchStats();
+    } catch {
+      onMessage?.("研發指令失敗", "#ef4444");
+    }
   };
 
   if (loading) {
@@ -142,6 +181,41 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
                     提議結盟
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* Technology */}
+            {techs[f.id] && (
+              <div style={styles.techSection}>
+                <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>科技</span>
+                <div style={styles.techList}>
+                  {TECHNOLOGIES.map((tech) => {
+                    const state = techs[f.id];
+                    const completed = state.completed.includes(tech.id);
+                    const researching = state.current?.techId === tech.id;
+                    const progress = researching ? Math.min(1, (currentTick - state.current!.startTick) / tech.turns) : 0;
+                    return (
+                      <div key={tech.id} style={styles.techItem}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 12, color: completed ? "#22c55e" : researching ? "#f59e0b" : "#64748b", fontWeight: 600 }}>
+                            {completed ? "✓ " : ""}{tech.name}
+                          </span>
+                          {f.id === "shu" && !completed && !researching && !state.current && (
+                            <button style={styles.researchBtn} onClick={() => handleResearch(tech.id)}>
+                              研發({tech.cost}金/{tech.turns}天)
+                            </button>
+                          )}
+                        </div>
+                        {researching && (
+                          <div style={styles.techBar}>
+                            <div style={{ ...styles.techFill, width: `${progress * 100}%` }} />
+                          </div>
+                        )}
+                        <span style={{ fontSize: 10, color: "#64748b" }}>{tech.description}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -347,5 +421,43 @@ const styles: Record<string, React.CSSProperties> = {
   allianceArrow: {
     color: "#64748b",
     fontSize: 16,
+  },
+  techSection: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTop: "1px solid #334155",
+  },
+  techList: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 6,
+    marginTop: 6,
+  },
+  techItem: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 2,
+  },
+  techBar: {
+    height: 4,
+    backgroundColor: "#0f172a",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  techFill: {
+    height: "100%",
+    backgroundColor: "#f59e0b",
+    borderRadius: 2,
+    transition: "width 0.3s",
+  },
+  researchBtn: {
+    fontSize: 10,
+    padding: "2px 6px",
+    borderRadius: 4,
+    border: "none",
+    backgroundColor: "#3b82f6",
+    color: "#fff",
+    fontWeight: 600,
+    cursor: "pointer",
   },
 };

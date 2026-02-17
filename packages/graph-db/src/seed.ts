@@ -14,6 +14,13 @@ const characters: CharacterNode[] = [
   { id: "lu_bu", name: "呂布", traits: ["brave", "treacherous", "impulsive"], cityId: "kaohsiung", military: 4, intelligence: 0, charm: 0, skills: { ...S0, tactics: 3 } },
   { id: "diao_chan", name: "貂蟬", traits: ["charismatic", "cunning", "diplomatic"], cityId: "kaohsiung", military: 0, intelligence: 3, charm: 5, skills: { ...S0, espionage: 2, leadership: 1 } },
   { id: "zhou_yu", name: "周瑜", traits: ["strategic", "proud", "ambitious"], cityId: "tainan", military: 2, intelligence: 3, charm: 0, skills: { ...S0, tactics: 2, espionage: 1 } },
+  // Neutral (unaffiliated) characters
+  { id: "xu_shu", name: "徐庶", traits: ["wise", "loyal", "humble"], cityId: "chiayi", military: 1, intelligence: 4, charm: 2, skills: { ...S0, tactics: 1, espionage: 1 } },
+  { id: "pang_tong", name: "龐統", traits: ["wise", "strategic", "cunning"], cityId: "hualien", military: 0, intelligence: 5, charm: 1, skills: { ...S0, tactics: 2, commerce: 1 } },
+  { id: "huang_zhong", name: "黃忠", traits: ["brave", "loyal", "proud"], cityId: "chiayi", military: 5, intelligence: 0, charm: 1, skills: { ...S0, tactics: 3 } },
+  { id: "ma_chao", name: "馬超", traits: ["brave", "impulsive", "ambitious"], cityId: "pingtung", military: 4, intelligence: 1, charm: 2, skills: { ...S0, tactics: 2, leadership: 1 } },
+  { id: "gan_ning", name: "甘寧", traits: ["brave", "impulsive", "charismatic"], cityId: "keelung", military: 3, intelligence: 1, charm: 2, skills: { ...S0, tactics: 1, commerce: 1 } },
+  { id: "xu_huang", name: "徐晃", traits: ["loyal", "brave", "cautious"], cityId: "pingtung", military: 3, intelligence: 2, charm: 1, skills: { ...S0, tactics: 2 } },
 ];
 
 const cities: PlaceNode[] = [

@@ -5,6 +5,8 @@ export interface CharacterSkills {
   espionage: number;   // spy mission success rate
 }
 
+export type CharacterRole = "general" | "governor" | "diplomat" | "spymaster";
+
 export interface CharacterNode {
   id: string;
   name: string;
@@ -14,6 +16,7 @@ export interface CharacterNode {
   intelligence: number;
   charm: number;
   skills?: CharacterSkills;
+  role?: CharacterRole;
 }
 
 export interface RelationshipEdge {

@@ -10,6 +10,8 @@ interface CharacterSkills {
   espionage: number;
 }
 
+type CharacterRole = "general" | "governor" | "diplomat" | "spymaster";
+
 interface CharacterInfo {
   id: string;
   name: string;
@@ -19,7 +21,15 @@ interface CharacterInfo {
   intelligence: number;
   charm: number;
   skills?: CharacterSkills;
+  role?: CharacterRole;
 }
+
+const ROLE_LABELS: Record<CharacterRole, { label: string; color: string }> = {
+  general: { label: "將軍", color: "#ef4444" },
+  governor: { label: "太守", color: "#22c55e" },
+  diplomat: { label: "外交官", color: "#3b82f6" },
+  spymaster: { label: "間諜頭子", color: "#a855f7" },
+};
 
 const SKILL_LABELS: Record<string, { label: string; color: string }> = {
   leadership: { label: "統率", color: "#f59e0b" },
@@ -50,8 +60,10 @@ interface CharacterDetailProps {
   factionName?: string;
   factionColor?: string;
   cityName?: string;
+  isPlayerFaction?: boolean;
   onClose: () => void;
   onCharacterClick?: (id: string) => void;
+  onAssignRole?: (characterId: string, role: CharacterRole) => void;
 }
 
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
@@ -65,8 +77,10 @@ export function CharacterDetail({
   factionName,
   factionColor,
   cityName,
+  isPlayerFaction,
   onClose,
   onCharacterClick,
+  onAssignRole,
 }: CharacterDetailProps) {
   const [character, setCharacter] = useState<CharacterInfo | null>(null);
   const [relationships, setRelationships] = useState<RelationshipInfo[]>([]);
@@ -115,7 +129,28 @@ export function CharacterDetail({
                 </span>
               )}
               {cityName && <span style={styles.cityTag}>{cityName}</span>}
+              {character.role && (() => {
+                const ri = ROLE_LABELS[character.role];
+                return <span style={{ ...styles.roleTag, backgroundColor: ri.color }}>{ri.label}</span>;
+              })()}
             </div>
+            {isPlayerFaction && onAssignRole && (
+              <div style={styles.roleSelect}>
+                <select
+                  style={styles.roleDropdown}
+                  value={character.role ?? ""}
+                  onChange={(e) => {
+                    if (e.target.value) onAssignRole(characterId, e.target.value as CharacterRole);
+                  }}
+                >
+                  <option value="">指派職務</option>
+                  <option value="general">將軍（攻擊+20%）</option>
+                  <option value="governor">太守（收入+20%）</option>
+                  <option value="diplomat">外交官（結盟+15%）</option>
+                  <option value="spymaster">間諜頭子（諜報+20%）</option>
+                </select>
+              </div>
+            )}
           </div>
           <button style={styles.closeBtn} onClick={onClose}>✕</button>
         </div>
@@ -324,4 +359,21 @@ const styles: Record<string, React.CSSProperties> = {
   eventDay: { color: "#f59e0b", fontWeight: 600, minWidth: 48 },
   eventDelta: { fontWeight: 700, minWidth: 30 },
   eventOther: { color: "#94a3b8" },
+  roleTag: {
+    fontSize: 11,
+    padding: "2px 8px",
+    borderRadius: 10,
+    color: "#fff",
+    fontWeight: 700,
+  },
+  roleSelect: { marginTop: 4 },
+  roleDropdown: {
+    fontSize: 12,
+    padding: "3px 8px",
+    borderRadius: 4,
+    border: "1px solid #334155",
+    backgroundColor: "#0f172a",
+    color: "#e2e8f0",
+    cursor: "pointer",
+  },
 };
