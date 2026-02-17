@@ -274,7 +274,31 @@ export interface FactionHistoryEntry {
   cities: number;
   gold: number;
   characters: number;
+  morale?: number;
 }
+
+// ── Morale system ──
+const MORALE_INITIAL = 70;
+const MORALE_MIN = 0;
+const MORALE_MAX = 100;
+
+function clampMorale(v: number): number {
+  return Math.max(MORALE_MIN, Math.min(MORALE_MAX, Math.round(v)));
+}
+
+// ── Prestige achievements ──
+export interface CharacterAchievement {
+  id: string;
+  label: string;
+  description: string;
+}
+
+const ACHIEVEMENTS: CharacterAchievement[] = [
+  { id: "veteran", label: "百戰老將", description: "參與 5 場戰鬥" },
+  { id: "conqueror", label: "攻城略地", description: "攻陷 3 座城" },
+  { id: "spymaster_ace", label: "暗影之手", description: "完成 3 次諜報" },
+  { id: "diplomat_star", label: "縱橫家", description: "促成 2 次結盟" },
+];
 
 const DEFAULT_SKILLS: CharacterSkills = { leadership: 0, tactics: 0, commerce: 0, espionage: 0 };
 
@@ -307,6 +331,14 @@ export class SimulationService {
   private tradeCounter = 0;
   private deadCharacters = new Set<string>();
   private pendingTactics = new Map<string, BattleTactic>(); // characterId -> tactic for next battle
+  private factionMorale = new Map<string, number>(); // factionId -> morale (0-100)
+  private characterPrestige = new Map<string, number>(); // characterId -> prestige score
+  private characterBattleCount = new Map<string, number>(); // for achievements
+  private characterConquerCount = new Map<string, number>();
+  private characterSpyCount = new Map<string, number>();
+  private characterDiploCount = new Map<string, number>();
+  private characterAchievements = new Map<string, string[]>(); // characterId -> achievement ids
+  private legacyBonuses = new Map<string, number>(); // factionId -> cumulative legacy bonus from dead prestigious chars
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -342,6 +374,14 @@ export class SimulationService {
     this.tradeCounter = 0;
     this.deadCharacters.clear();
     this.pendingTactics.clear();
+    this.factionMorale.clear();
+    this.characterPrestige.clear();
+    this.characterBattleCount.clear();
+    this.characterConquerCount.clear();
+    this.characterSpyCount.clear();
+    this.characterDiploCount.clear();
+    this.characterAchievements.clear();
+    this.legacyBonuses.clear();
     FACTIONS = createDefaultFactions();
 
     // Re-initialize
@@ -496,6 +536,226 @@ export class SimulationService {
     return this.tradeRoutes.filter((r) => r.cityA === cityId || r.cityB === cityId);
   }
 
+  // ── Morale API ──
+  getMorale(factionId: string): number {
+    return this.factionMorale.get(factionId) ?? MORALE_INITIAL;
+  }
+
+  getAllMorale(): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const f of FACTIONS) {
+      result[f.id] = this.getMorale(f.id);
+    }
+    return result;
+  }
+
+  private adjustMorale(factionId: string, delta: number): void {
+    const current = this.getMorale(factionId);
+    this.factionMorale.set(factionId, clampMorale(current + delta));
+  }
+
+  private applyMoraleFromBattles(battleResults: BattleResult[]): void {
+    for (const b of battleResults) {
+      const attackerFaction = this.getFactionOf(b.attackerId);
+      const defenderFaction = b.defenderId ? this.getFactionOf(b.defenderId) : null;
+
+      if (b.winner === "attacker") {
+        if (attackerFaction) this.adjustMorale(attackerFaction, b.captured ? 8 : 3);
+        if (defenderFaction) this.adjustMorale(defenderFaction, b.captured ? -10 : -3);
+      } else {
+        if (defenderFaction) this.adjustMorale(defenderFaction, 5);
+        if (attackerFaction) this.adjustMorale(attackerFaction, -5);
+      }
+    }
+  }
+
+  private applyMoraleFromDeaths(deathEvents: DeathEvent[]): void {
+    for (const d of deathEvents) {
+      this.adjustMorale(d.factionId, d.wasLeader ? -15 : -5);
+    }
+  }
+
+  private applyMoraleFromDiplomacy(diplomacyEvents: DiplomacyEvent[]): void {
+    for (const d of diplomacyEvents) {
+      if (d.type === "alliance_formed") {
+        this.adjustMorale(d.factionA, 5);
+        this.adjustMorale(d.factionB, 5);
+      } else if (d.type === "alliance_broken") {
+        this.adjustMorale(d.factionA, -3);
+        this.adjustMorale(d.factionB, -3);
+      }
+    }
+  }
+
+  private applyMoraleFromBetrayals(betrayalEvents: BetrayalEvent[]): void {
+    for (const b of betrayalEvents) {
+      this.adjustMorale(b.oldFaction, -8);
+      this.adjustMorale(b.newFaction, 3);
+    }
+  }
+
+  // Passive morale drift: slowly moves toward 50
+  private moraleDrift(): void {
+    for (const f of FACTIONS) {
+      const current = this.getMorale(f.id);
+      if (current > 55) this.adjustMorale(f.id, -1);
+      else if (current < 45) this.adjustMorale(f.id, 1);
+    }
+  }
+
+  // ── Prestige API ──
+  getPrestige(characterId: string): number {
+    return this.characterPrestige.get(characterId) ?? 0;
+  }
+
+  getAllPrestige(): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const [id, val] of this.characterPrestige) {
+      result[id] = val;
+    }
+    return result;
+  }
+
+  getAchievements(characterId: string): string[] {
+    return this.characterAchievements.get(characterId) ?? [];
+  }
+
+  getLegacyBonus(factionId: string): number {
+    return this.legacyBonuses.get(factionId) ?? 0;
+  }
+
+  private addPrestige(charId: string, amount: number): void {
+    const current = this.characterPrestige.get(charId) ?? 0;
+    this.characterPrestige.set(charId, current + amount);
+  }
+
+  private trackBattle(charId: string): void {
+    const count = (this.characterBattleCount.get(charId) ?? 0) + 1;
+    this.characterBattleCount.set(charId, count);
+    if (count >= 5) this.grantAchievement(charId, "veteran");
+  }
+
+  private trackConquer(charId: string): void {
+    const count = (this.characterConquerCount.get(charId) ?? 0) + 1;
+    this.characterConquerCount.set(charId, count);
+    if (count >= 3) this.grantAchievement(charId, "conqueror");
+  }
+
+  private trackSpy(charId: string): void {
+    const count = (this.characterSpyCount.get(charId) ?? 0) + 1;
+    this.characterSpyCount.set(charId, count);
+    if (count >= 3) this.grantAchievement(charId, "spymaster_ace");
+  }
+
+  private trackDiplomacy(charId: string): void {
+    const count = (this.characterDiploCount.get(charId) ?? 0) + 1;
+    this.characterDiploCount.set(charId, count);
+    if (count >= 2) this.grantAchievement(charId, "diplomat_star");
+  }
+
+  private grantAchievement(charId: string, achievementId: string): void {
+    const existing = this.characterAchievements.get(charId) ?? [];
+    if (existing.includes(achievementId)) return;
+    existing.push(achievementId);
+    this.characterAchievements.set(charId, existing);
+    this.addPrestige(charId, 10); // achievement grants prestige
+  }
+
+  private updatePrestigeFromBattles(battleResults: BattleResult[]): void {
+    for (const b of battleResults) {
+      this.trackBattle(b.attackerId);
+      if (b.defenderId) this.trackBattle(b.defenderId);
+      if (b.winner === "attacker") {
+        this.addPrestige(b.attackerId, b.captured ? 5 : 2);
+        if (b.captured) this.trackConquer(b.attackerId);
+      } else if (b.defenderId) {
+        this.addPrestige(b.defenderId, 3);
+      }
+    }
+  }
+
+  private updatePrestigeFromSpyReports(spyReports: SpyReport[]): void {
+    for (const s of spyReports) {
+      if (s.success) {
+        this.addPrestige(s.characterId, 2);
+        this.trackSpy(s.characterId);
+      }
+    }
+  }
+
+  private applyDeathLegacy(deathEvents: DeathEvent[]): void {
+    for (const d of deathEvents) {
+      const prestige = this.getPrestige(d.characterId);
+      if (prestige >= 10) {
+        // Legacy bonus: 1 point per 10 prestige, added to faction
+        const bonus = Math.floor(prestige / 10);
+        const current = this.legacyBonuses.get(d.factionId) ?? 0;
+        this.legacyBonuses.set(d.factionId, current + bonus);
+      }
+    }
+  }
+
+  // ── Supply line system ──
+  // Cities are "supplied" if connected to faction capital via trade routes or same city
+  async computeSupplyStatus(): Promise<Record<string, boolean>> {
+    const cities = await this.repo.getAllPlaces();
+    const result: Record<string, boolean> = {};
+
+    for (const f of FACTIONS) {
+      // Find capital city (city where leader is stationed)
+      const leaderChar = (await this.repo.getAllCharacters()).find((c) => c.id === f.leaderId);
+      const capitalCityId = leaderChar?.cityId;
+      const factionCityIds = new Set(
+        cities
+          .filter((c) => c.controllerId && f.members.includes(c.controllerId) && !c.siegedBy)
+          .map((c) => c.id),
+      );
+
+      if (!capitalCityId || !factionCityIds.has(capitalCityId)) {
+        // No capital — all cities unsupplied
+        for (const cid of factionCityIds) result[cid] = false;
+        continue;
+      }
+
+      // BFS from capital through trade routes within faction
+      const supplied = new Set<string>([capitalCityId]);
+      const queue = [capitalCityId];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        for (const route of this.tradeRoutes) {
+          if (route.factionId !== f.id) continue;
+          let neighbor: string | null = null;
+          if (route.cityA === current && factionCityIds.has(route.cityB)) neighbor = route.cityB;
+          if (route.cityB === current && factionCityIds.has(route.cityA)) neighbor = route.cityA;
+          if (neighbor && !supplied.has(neighbor)) {
+            supplied.add(neighbor);
+            queue.push(neighbor);
+          }
+        }
+      }
+
+      for (const cid of factionCityIds) {
+        result[cid] = supplied.has(cid);
+      }
+    }
+
+    return result;
+  }
+
+  private async applySupplyEffects(): Promise<void> {
+    const supplyStatus = await this.computeSupplyStatus();
+    const cities = await this.repo.getAllPlaces();
+
+    for (const city of cities) {
+      if (supplyStatus[city.id] === false && city.controllerId) {
+        // Unsupplied: garrison decays every 3 ticks
+        if (this.currentTick % 3 === 0 && city.garrison > 0) {
+          await this.repo.createPlace({ ...city, garrison: Math.max(0, city.garrison - 1) });
+        }
+      }
+    }
+  }
+
   private travelTimeFor(charId: string, originCity: PlaceNode | undefined, baseTravelTime: number): number {
     const faction = this.getFactionOf(charId);
     let time = originCity?.specialty === "harbor" ? 1 : baseTravelTime;
@@ -597,6 +857,21 @@ export class SimulationService {
     // Clean up invalid trade routes and NPC establish new ones
     await this.cleanupTradeRoutes();
     await this.npcEstablishTrades();
+
+    // Supply line effects (unsupplied cities decay)
+    await this.applySupplyEffects();
+
+    // Update morale from this turn's events
+    this.applyMoraleFromBattles(battleResults);
+    this.applyMoraleFromDeaths(deathEvents);
+    this.applyMoraleFromDiplomacy(diplomacyEvents);
+    this.applyMoraleFromBetrayals(betrayalEvents);
+    this.moraleDrift();
+
+    // Update prestige from this turn's events
+    this.updatePrestigeFromBattles(battleResults);
+    this.updatePrestigeFromSpyReports(spyReports);
+    this.applyDeathLegacy(deathEvents);
 
     // Draw event card (30% chance)
     const drawnCard = drawEventCard();
@@ -1258,12 +1533,15 @@ export class SimulationService {
     const characters = await this.repo.getAllCharacters();
     const season = getSeason(this.currentTick);
     const seasonMult = SEASON_GOLD_MULTIPLIER[season];
+    const supplyStatus = await this.computeSupplyStatus();
     for (const city of cities) {
       if (city.status === "dead" || !city.controllerId) continue;
       // Sieged cities produce no gold
       if (city.siegedBy) continue;
       const baseIncome = city.tier === "major" ? 100 : 50;
       let multiplier = 1 + city.development * 0.3;
+      // Unsupplied cities: -30% gold production
+      if (supplyStatus[city.id] === false) multiplier *= 0.7;
       // Market specialty: +50% income (doubled with improvement)
       if (city.specialty === "market") {
         multiplier += city.improvement ? 1.0 : 0.5;
@@ -1360,6 +1638,13 @@ export class SimulationService {
         if (this.hasTech(attackFaction, "logistics")) {
           attackPower += 1;
         }
+        // Morale bonus/penalty: high morale (80+) = +10% attack, low (<30) = -10%
+        const attackerMorale = attackFaction ? this.getMorale(attackFaction) : 50;
+        if (attackerMorale >= 80) attackPower *= 1.10;
+        else if (attackerMorale < 30) attackPower *= 0.90;
+        // Legacy bonus from prestigious dead characters
+        const attackerLegacy = attackFaction ? this.getLegacyBonus(attackFaction) : 0;
+        if (attackerLegacy > 0) attackPower += Math.min(attackerLegacy, 5);
 
         const attackerWins = attackPower > effectiveDefense;
         const leadAttacker = attackChars[0];
@@ -1693,6 +1978,11 @@ export class SimulationService {
         // "treacherous" trait: double chance
         if (char.traits.includes("treacherous")) chance *= 2;
 
+        // Low morale increases betrayal chance
+        const morale = this.getMorale(faction.id);
+        if (morale < 30) chance += 0.08;
+        else if (morale < 50) chance += 0.03;
+
         // Faction at disadvantage (fewer cities) increases chance
         const factionCities = cities.filter(
           (c) => c.controllerId && faction.members.includes(c.controllerId),
@@ -1773,6 +2063,9 @@ export class SimulationService {
     if (intimacy < 40) return { success: false, reason: `親密度不足（${intimacy}/40）` };
 
     this.alliances.add(key);
+    // Track diplomacy achievement for player leader
+    this.trackDiplomacy(playerLeader);
+    this.addPrestige(playerLeader, 3);
     return { success: true, reason: `與 ${targetLeader} 結盟成功` };
   }
 
@@ -1816,7 +2109,7 @@ export class SimulationService {
     return { success: true, reason: "Alliance broken" };
   }
 
-  async getFactionStats(): Promise<{ id: string; name: string; color: string; gold: number; cities: number; characters: number; power: number; }[]> {
+  async getFactionStats(): Promise<{ id: string; name: string; color: string; gold: number; cities: number; characters: number; power: number; morale: number; legacy: number }[]> {
     const characters = await this.repo.getAllCharacters();
     const cities = await this.repo.getAllPlaces();
     const charMap = new Map(characters.map((c) => [c.id, c]));
@@ -1838,6 +2131,8 @@ export class SimulationService {
         cities: factionCities.length,
         characters: f.members.length,
         power: totalPower,
+        morale: this.getMorale(f.id),
+        legacy: this.getLegacyBonus(f.id),
       };
     });
   }
@@ -1889,7 +2184,7 @@ export class SimulationService {
     const stats = await this.getFactionStats();
     for (const s of stats) {
       const list = this.factionHistory.get(s.id) ?? [];
-      list.push({ tick: this.currentTick, power: s.power, cities: s.cities, gold: s.gold, characters: s.characters });
+      list.push({ tick: this.currentTick, power: s.power, cities: s.cities, gold: s.gold, characters: s.characters, morale: s.morale });
       this.factionHistory.set(s.id, list);
     }
   }
@@ -1926,6 +2221,14 @@ export class SimulationService {
       factionTech: [...this.factionTech.entries()].map(([k, v]) => [k, { ...v, completed: [...v.completed] }]),
       tradeRoutes: [...this.tradeRoutes],
       deadCharacters: [...this.deadCharacters],
+      factionMorale: [...this.factionMorale.entries()],
+      characterPrestige: [...this.characterPrestige.entries()],
+      characterBattleCount: [...this.characterBattleCount.entries()],
+      characterConquerCount: [...this.characterConquerCount.entries()],
+      characterSpyCount: [...this.characterSpyCount.entries()],
+      characterDiploCount: [...this.characterDiploCount.entries()],
+      characterAchievements: [...this.characterAchievements.entries()],
+      legacyBonuses: [...this.legacyBonuses.entries()],
       savedAt: new Date().toISOString(),
     };
 
@@ -1990,6 +2293,14 @@ export class SimulationService {
     this.tradeRoutes = data.tradeRoutes ?? [];
     this.deadCharacters = new Set(data.deadCharacters ?? []);
     this.pendingTactics.clear();
+    this.factionMorale = new Map(data.factionMorale ?? []);
+    this.characterPrestige = new Map(data.characterPrestige ?? []);
+    this.characterBattleCount = new Map(data.characterBattleCount ?? []);
+    this.characterConquerCount = new Map(data.characterConquerCount ?? []);
+    this.characterSpyCount = new Map(data.characterSpyCount ?? []);
+    this.characterDiploCount = new Map(data.characterDiploCount ?? []);
+    this.characterAchievements = new Map((data.characterAchievements ?? []).map(([k, v]) => [k, [...v]]));
+    this.legacyBonuses = new Map(data.legacyBonuses ?? []);
 
     // Re-init narrative service
     const characters = await this.repo.getAllCharacters();
@@ -2128,6 +2439,14 @@ interface SaveData {
   factionTech: [string, FactionTechState][];
   tradeRoutes: TradeRoute[];
   deadCharacters: string[];
+  factionMorale: [string, number][];
+  characterPrestige: [string, number][];
+  characterBattleCount: [string, number][];
+  characterConquerCount: [string, number][];
+  characterSpyCount: [string, number][];
+  characterDiploCount: [string, number][];
+  characterAchievements: [string, string[]][];
+  legacyBonuses: [string, number][];
   savedAt: string;
 }
 

@@ -119,16 +119,19 @@ export function MapPage({
   const [detailCharId, setDetailCharId] = useState<string | null>(null);
   const [prediction, setPrediction] = useState<{ winRate: number; attackPower: number; defensePower: number } | null>(null);
   const [tactic, setTactic] = useState<"aggressive" | "defensive" | "balanced">("balanced");
+  const [supplyStatus, setSupplyStatus] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchMapData = useCallback(async (tick: number) => {
     try {
-      const [data, facs] = await Promise.all([
+      const [data, facs, supply] = await Promise.all([
         trpc.map.getMapData.query({ tick }),
         trpc.simulation.getFactions.query(),
+        trpc.simulation.getSupplyStatus.query(),
       ]);
       setMapData(data as MapData);
       setFactions(facs as FactionInfo[]);
+      setSupplyStatus(supply as Record<string, boolean>);
     } catch {
       // silently fail
     } finally {
@@ -441,6 +444,14 @@ export function MapPage({
                 <div style={{ ...styles.infoRow, color: "#ef4444" }}>
                   <span style={styles.infoLabel}>圍城中</span>
                   <span style={{ fontWeight: 700 }}>{selectedCity.siegedBy}</span>
+                </div>
+              )}
+              {selectedCity.controllerId && supplyStatus[selectedCity.id] !== undefined && (
+                <div style={styles.infoRow}>
+                  <span style={styles.infoLabel}>補給</span>
+                  <span style={{ color: supplyStatus[selectedCity.id] ? "#22c55e" : "#ef4444", fontWeight: 600 }}>
+                    {supplyStatus[selectedCity.id] ? "已補給" : "補給中斷 (-30%金)"}
+                  </span>
                 </div>
               )}
             </div>

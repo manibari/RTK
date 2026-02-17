@@ -72,6 +72,13 @@ const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   neutral: { label: "中立", color: "#9ca3af" },
 };
 
+const ACHIEVEMENT_LABELS: Record<string, string> = {
+  veteran: "百戰老將",
+  conqueror: "攻城略地",
+  spymaster_ace: "暗影之手",
+  diplomat_star: "縱橫家",
+};
+
 export function CharacterDetail({
   characterId,
   factionName,
@@ -86,6 +93,8 @@ export function CharacterDetail({
   const [relationships, setRelationships] = useState<RelationshipInfo[]>([]);
   const [allChars, setAllChars] = useState<Map<string, CharacterInfo>>(new Map());
   const [recentEvents, setRecentEvents] = useState<PairEvent[]>([]);
+  const [prestige, setPrestige] = useState(0);
+  const [achievements, setAchievements] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -95,11 +104,15 @@ export function CharacterDetail({
       trpc.character.getRelationships.query({ characterId }),
       trpc.character.getAll.query(),
       trpc.simulation.getEventLog.query({ characterId }),
-    ]).then(([char, rels, chars, events]) => {
+      trpc.simulation.getCharacterAchievements.query({ characterId }),
+    ]).then(([char, rels, chars, events, achievementData]) => {
       setCharacter(char as CharacterInfo | null);
       setRelationships(rels as RelationshipInfo[]);
       setAllChars(new Map((chars as CharacterInfo[]).map((c) => [c.id, c])));
       setRecentEvents((events as PairEvent[]).slice(-10).reverse());
+      const ad = achievementData as { prestige: number; achievements: string[] };
+      setPrestige(ad.prestige);
+      setAchievements(ad.achievements);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [characterId]);
 
@@ -193,6 +206,24 @@ export function CharacterDetail({
                   </div>
                 );
               })}
+            </div>
+          )}
+          {/* Prestige & Achievements */}
+          {prestige > 0 && (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #334155" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 13, color: "#a855f7", fontWeight: 700 }}>威望</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0" }}>{prestige}</span>
+              </div>
+              {achievements.length > 0 && (
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+                  {achievements.map((a) => (
+                    <span key={a} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 8, backgroundColor: "#a855f7", color: "#fff", fontWeight: 600 }}>
+                      {ACHIEVEMENT_LABELS[a] ?? a}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

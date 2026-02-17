@@ -11,6 +11,8 @@ interface FactionStat {
   cities: number;
   characters: number;
   power: number;
+  morale: number;
+  legacy: number;
 }
 
 type AlliancePair = [string, string];
@@ -160,6 +162,20 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
               </div>
               <span style={styles.statValue}>{f.gold}</span>
             </div>
+
+            <div style={styles.statRow}>
+              <span style={styles.statLabel}>士氣</span>
+              <div style={styles.barWrap}>
+                <div style={{ ...styles.bar, width: `${f.morale}%`, backgroundColor: f.morale >= 60 ? "#22c55e" : f.morale >= 30 ? "#f59e0b" : "#ef4444" }} />
+              </div>
+              <span style={styles.statValue}>{f.morale}</span>
+            </div>
+
+            {f.legacy > 0 && (
+              <div style={{ fontSize: 11, color: "#a855f7", marginTop: 2 }}>
+                遺產加成: +{f.legacy}
+              </div>
+            )}
 
             {/* Power trend sparkline */}
             {history[f.id] && history[f.id].length > 1 && (

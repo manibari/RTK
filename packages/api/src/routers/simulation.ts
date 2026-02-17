@@ -146,6 +146,27 @@ export const simulationRouter = router({
     return ctx.simulation.getDeadCharacters();
   }),
 
+  // Morale
+  getAllMorale: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getAllMorale();
+  }),
+
+  // Prestige & Achievements
+  getAllPrestige: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getAllPrestige();
+  }),
+
+  getCharacterAchievements: publicProcedure
+    .input(z.object({ characterId: z.string() }))
+    .query(({ ctx, input }) => {
+      return { achievements: ctx.simulation.getAchievements(input.characterId), prestige: ctx.simulation.getPrestige(input.characterId) };
+    }),
+
+  // Supply status
+  getSupplyStatus: publicProcedure.query(async ({ ctx }) => {
+    return ctx.simulation.computeSupplyStatus();
+  }),
+
   // Event cards
   resolveEventCard: publicProcedure
     .input(z.object({ choiceIndex: z.number().min(0).max(3) }))
