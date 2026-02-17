@@ -32,6 +32,7 @@ interface PlaceNode {
   specialty?: string;
   improvement?: string;
   districts?: District[];
+  food?: number;
 }
 
 const DISTRICT_LABELS: Record<string, string> = {
@@ -423,6 +424,10 @@ export function MapPage({
               <div style={styles.infoRow}>
                 <span style={styles.infoLabel}>開發</span>
                 <span style={{ color: "#a855f7", fontWeight: 600 }}>Lv.{selectedCity.development ?? 0}/5</span>
+              </div>
+              <div style={styles.infoRow}>
+                <span style={styles.infoLabel}>糧食</span>
+                <span style={{ color: (selectedCity.food ?? 100) < 30 ? "#ef4444" : (selectedCity.food ?? 100) < 60 ? "#f59e0b" : "#22c55e", fontWeight: 600 }}>{selectedCity.food ?? 100}</span>
               </div>
               {(() => {
                 // Check if this is the last city for its faction

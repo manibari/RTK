@@ -13,6 +13,7 @@ interface FactionStat {
   power: number;
   morale: number;
   legacy: number;
+  exhaustion: number;
 }
 
 type AlliancePair = [string, string];
@@ -169,6 +170,14 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
                 <div style={{ ...styles.bar, width: `${f.morale}%`, backgroundColor: f.morale >= 60 ? "#22c55e" : f.morale >= 30 ? "#f59e0b" : "#ef4444" }} />
               </div>
               <span style={styles.statValue}>{f.morale}</span>
+            </div>
+
+            <div style={styles.statRow}>
+              <span style={styles.statLabel}>疲乏</span>
+              <div style={styles.barWrap}>
+                <div style={{ ...styles.bar, width: `${f.exhaustion}%`, backgroundColor: f.exhaustion >= 70 ? "#ef4444" : f.exhaustion >= 40 ? "#f59e0b" : "#64748b" }} />
+              </div>
+              <span style={styles.statValue}>{f.exhaustion}</span>
             </div>
 
             {f.legacy > 0 && (

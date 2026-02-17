@@ -7,6 +7,7 @@ import { MapPage } from "./MapPage";
 import { GameLog } from "./GameLog";
 import { StatsPanel } from "./StatsPanel";
 import { ToastStack, createToastId, type ToastMessage } from "./ToastStack";
+import { VictoryScreen } from "./VictoryScreen";
 import type { TimelineMarker } from "./Timeline";
 
 type ViewTab = "graph" | "map" | "log" | "stats";
@@ -308,20 +309,11 @@ export function AppShell() {
     return markers;
   }, [allBattles, allDiplomacy]);
 
-  const statusBanner = gameStatus === "victory"
-    ? { text: "勝利！你統一了天下！", color: "#22c55e" }
-    : gameStatus === "defeat"
-      ? { text: "戰敗...你的勢力已被消滅", color: "#ef4444" }
-      : null;
-
   return (
     <div style={styles.root}>
-      {/* Game over banner */}
-      {statusBanner && (
-        <div style={{ ...styles.banner, backgroundColor: statusBanner.color }}>
-          {statusBanner.text}
-          <button style={styles.resetBtn} onClick={handleReset}>重新開始</button>
-        </div>
+      {/* Victory / Defeat screen */}
+      {gameStatus !== "ongoing" && (
+        <VictoryScreen status={gameStatus as "victory" | "defeat"} onRestart={handleReset} />
       )}
 
       {/* Tab bar + auto-sim controls */}

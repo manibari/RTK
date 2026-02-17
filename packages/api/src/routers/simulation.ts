@@ -180,6 +180,16 @@ export const simulationRouter = router({
     return ctx.simulation.getMentorPairs();
   }),
 
+  // War exhaustion
+  getWarExhaustion: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getWarExhaustion();
+  }),
+
+  // Victory stats (for victory screen)
+  getVictoryStats: publicProcedure.query(async ({ ctx }) => {
+    return ctx.simulation.getVictoryStats();
+  }),
+
   // Event cards
   resolveEventCard: publicProcedure
     .input(z.object({ choiceIndex: z.number().min(0).max(3) }))

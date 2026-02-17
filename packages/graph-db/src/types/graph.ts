@@ -60,6 +60,7 @@ export interface PlaceNode {
   specialty?: CitySpecialty;
   improvement?: string;
   districts?: District[];
+  food?: number;
 }
 
 export interface Movement {

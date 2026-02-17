@@ -108,9 +108,12 @@ const SEASON_TRAVEL_PENALTY: Record<Season, number> = {
   winter: 1,
 };
 
+export type WinType = "conquest" | "diplomacy" | "economy";
+
 export interface GameState {
   status: GameStatus;
   winnerFaction?: string;
+  winType?: WinType;
   tick: number;
 }
 
@@ -360,6 +363,9 @@ export class SimulationService {
   private legacyBonuses = new Map<string, number>(); // factionId -> cumulative legacy bonus from dead prestigious chars
   private characterFavorability = new Map<string, number>(); // characterId -> favorability toward leader (0-100)
   private mentorPairs: MentorPair[] = [];
+  private warExhaustion = new Map<string, number>(); // factionId -> 0-100
+  private diplomaticVictoryTicks = 0; // consecutive ticks with all surviving factions allied
+  private economicVictoryTicks = 0;  // consecutive ticks with >80% total gold
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -405,6 +411,9 @@ export class SimulationService {
     this.legacyBonuses.clear();
     this.characterFavorability.clear();
     this.mentorPairs = [];
+    this.warExhaustion.clear();
+    this.diplomaticVictoryTicks = 0;
+    this.economicVictoryTicks = 0;
     FACTIONS = createDefaultFactions();
 
     // Re-initialize
@@ -869,6 +878,89 @@ export class SimulationService {
     return (city.districts ?? []).length;
   }
 
+  // ── War Exhaustion API ──
+  getWarExhaustion(): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const f of FACTIONS) {
+      result[f.id] = this.warExhaustion.get(f.id) ?? 0;
+    }
+    return result;
+  }
+
+  private adjustExhaustion(factionId: string, delta: number): void {
+    const cur = this.warExhaustion.get(factionId) ?? 0;
+    this.warExhaustion.set(factionId, Math.max(0, Math.min(100, Math.round(cur + delta))));
+  }
+
+  private applyWarExhaustion(battleResults: BattleResult[]): void {
+    if (battleResults.length === 0) {
+      // Natural recovery: -2 per tick without battles
+      for (const f of FACTIONS) this.adjustExhaustion(f.id, -2);
+      return;
+    }
+    for (const b of battleResults) {
+      const aFaction = this.getFactionOf(b.attackerId);
+      const dFaction = b.defenderId ? this.getFactionOf(b.defenderId) : null;
+      if (aFaction) this.adjustExhaustion(aFaction, b.captured ? 8 : 4);
+      if (dFaction) this.adjustExhaustion(dFaction, b.captured ? 12 : 3);
+    }
+  }
+
+  private evaluateCeasefires(): DiplomacyEvent[] {
+    const events: DiplomacyEvent[] = [];
+    for (const faction of FACTIONS) {
+      if (faction.id === "shu") continue;
+      if (faction.members.length === 0) continue;
+      const exhaustion = this.warExhaustion.get(faction.id) ?? 0;
+      const morale = this.getMorale(faction.id);
+      if (exhaustion >= 70 && morale < 40 && Math.random() < 0.3) {
+        // Propose ceasefire with shu if both sides exhausted
+        const allianceKey = ["shu", faction.id].sort().join(":");
+        if (this.alliances.has(allianceKey)) continue;
+        const shuExhaustion = this.warExhaustion.get("shu") ?? 0;
+        if (shuExhaustion >= 40) {
+          this.alliances.add(allianceKey);
+          this.adjustMorale("shu", 5);
+          this.adjustMorale(faction.id, 10);
+          this.adjustExhaustion("shu", -20);
+          this.adjustExhaustion(faction.id, -20);
+          events.push({
+            tick: this.currentTick,
+            type: "alliance_formed",
+            factionA: "shu",
+            factionB: faction.id,
+            description: `${faction.id} 因戰爭疲乏提議停戰，雙方達成休戰協議`,
+          });
+        }
+      }
+    }
+    return events;
+  }
+
+  // ── Food system ──
+  private async produceFood(): Promise<void> {
+    const cities = await this.repo.getAllPlaces();
+    const season = getSeason(this.currentTick);
+    for (const city of cities) {
+      if (city.status === "dead" || !city.controllerId) continue;
+      let foodIncome = city.tier === "major" ? 30 : 15;
+      // Granary specialty: +100% (tripled with improvement)
+      if (city.specialty === "granary") foodIncome *= city.improvement ? 3 : 2;
+      // Agriculture district: +60%
+      if (this.hasDistrict(city, "agriculture")) foodIncome = Math.round(foodIncome * 1.6);
+      // Winter: -40% food production
+      if (season === "winter") foodIncome = Math.round(foodIncome * 0.6);
+      // Consumption: garrison * 5 per tick, doubled during siege
+      const consumption = city.garrison * 5 * (city.siegedBy ? 2 : 1);
+      const newFood = Math.max(0, (city.food ?? 100) + foodIncome - consumption);
+      await this.repo.updatePlace(city.id, { food: newFood });
+      // Starvation: food = 0 → garrison decays
+      if (newFood === 0 && city.garrison > 0) {
+        await this.repo.updatePlace(city.id, { garrison: Math.max(0, city.garrison - 1) });
+      }
+    }
+  }
+
   private travelTimeFor(charId: string, originCity: PlaceNode | undefined, baseTravelTime: number): number {
     const faction = this.getFactionOf(charId);
     let time = originCity?.specialty === "harbor" ? 1 : baseTravelTime;
@@ -922,8 +1014,9 @@ export class SimulationService {
       await this.repo.setRelationship(rel);
     }
 
-    // City economy: produce gold
+    // City economy: produce gold and food
     await this.produceGold();
+    await this.produceFood();
 
     // Execute player commands
     await this.executeCommands();
@@ -980,6 +1073,11 @@ export class SimulationService {
     this.applyMoraleFromDiplomacy(diplomacyEvents);
     this.applyMoraleFromBetrayals(betrayalEvents);
     this.moraleDrift();
+
+    // War exhaustion
+    this.applyWarExhaustion(battleResults);
+    const ceasefireEvents = this.evaluateCeasefires();
+    diplomacyEvents.push(...ceasefireEvents);
 
     // Update prestige from this turn's events
     this.updatePrestigeFromBattles(battleResults);
@@ -1711,6 +1809,9 @@ export class SimulationService {
       multiplier += this.roleGoldBonus(charsHere);
       // Commerce district: +80% income
       if (this.hasDistrict(city, "commerce")) multiplier += 0.8;
+      // War exhaustion >50: -20% income
+      const factionId = this.getFactionOf(city.controllerId);
+      if (factionId && (this.warExhaustion.get(factionId) ?? 0) > 50) multiplier *= 0.8;
       const income = Math.round(baseIncome * multiplier * seasonMult);
       // Trade route bonus: +10 gold per active route
       const tradeBonus = this.tradeRoutesForCity(city.id).length * 10;
@@ -2275,7 +2376,7 @@ export class SimulationService {
     return { success: true, reason: "Alliance broken" };
   }
 
-  async getFactionStats(): Promise<{ id: string; name: string; color: string; gold: number; cities: number; characters: number; power: number; morale: number; legacy: number }[]> {
+  async getFactionStats(): Promise<{ id: string; name: string; color: string; gold: number; cities: number; characters: number; power: number; morale: number; legacy: number; exhaustion: number }[]> {
     const characters = await this.repo.getAllCharacters();
     const cities = await this.repo.getAllPlaces();
     const charMap = new Map(characters.map((c) => [c.id, c]));
@@ -2299,6 +2400,7 @@ export class SimulationService {
         power: totalPower,
         morale: this.getMorale(f.id),
         legacy: this.getLegacyBonus(f.id),
+        exhaustion: this.warExhaustion.get(f.id) ?? 0,
       };
     });
   }
@@ -2335,6 +2437,31 @@ export class SimulationService {
       winRate: Math.round(wins),
       attackPower: Math.round((totalAtk / 100) * 10) / 10,
       defensePower: Math.round((totalDef / 100) * 10) / 10,
+    };
+  }
+
+  async getVictoryStats(): Promise<{
+    winType: WinType;
+    tick: number;
+    topCharacters: { id: string; name: string; prestige: number; achievements: string[] }[];
+    factionStats: { id: string; cities: number; gold: number; characters: number }[];
+  }> {
+    const stats = await this.getFactionStats();
+    // Top 3 characters by prestige
+    const allPrestige = [...this.characterPrestige.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const allChars = await this.repo.getAllCharacters();
+    const charMap = new Map(allChars.map((c) => [c.id, c]));
+    const topCharacters = allPrestige.map(([id, prestige]) => ({
+      id,
+      name: charMap.get(id)?.name ?? id,
+      prestige,
+      achievements: this.characterAchievements.get(id) ?? [],
+    }));
+    return {
+      winType: this.gameState.winType ?? "conquest",
+      tick: this.currentTick,
+      topCharacters,
+      factionStats: stats.map((s) => ({ id: s.id, cities: s.cities, gold: s.gold, characters: s.characters })),
     };
   }
 
@@ -2397,6 +2524,9 @@ export class SimulationService {
       legacyBonuses: [...this.legacyBonuses.entries()],
       characterFavorability: [...this.characterFavorability.entries()],
       mentorPairs: [...this.mentorPairs],
+      warExhaustion: [...this.warExhaustion.entries()],
+      diplomaticVictoryTicks: this.diplomaticVictoryTicks,
+      economicVictoryTicks: this.economicVictoryTicks,
       savedAt: new Date().toISOString(),
     };
 
@@ -2471,6 +2601,9 @@ export class SimulationService {
     this.legacyBonuses = new Map(data.legacyBonuses ?? []);
     this.characterFavorability = new Map(data.characterFavorability ?? []);
     this.mentorPairs = data.mentorPairs ?? [];
+    this.warExhaustion = new Map(data.warExhaustion ?? []);
+    this.diplomaticVictoryTicks = data.diplomaticVictoryTicks ?? 0;
+    this.economicVictoryTicks = data.economicVictoryTicks ?? 0;
 
     // Re-init narrative service
     const characters = await this.repo.getAllCharacters();
@@ -2567,10 +2700,46 @@ export class SimulationService {
         this.gameState = {
           status: factionId === "shu" ? "victory" : "defeat",
           winnerFaction: factionId,
+          winType: "conquest",
           tick: this.currentTick,
         };
         return this.gameState.status;
       }
+    }
+
+    // Diplomatic victory: shu allied with ALL surviving factions for 10 consecutive ticks
+    const survivingFactions = FACTIONS.filter((f) => f.id !== "shu" && f.members.length > 0);
+    const allAllied = survivingFactions.length > 0 && survivingFactions.every((f) => {
+      const key = ["shu", f.id].sort().join(":");
+      return this.alliances.has(key);
+    });
+    if (allAllied) {
+      this.diplomaticVictoryTicks++;
+      if (this.diplomaticVictoryTicks >= 10) {
+        this.gameState = { status: "victory", winnerFaction: "shu", tick: this.currentTick, winType: "diplomacy" };
+        return "victory";
+      }
+    } else {
+      this.diplomaticVictoryTicks = 0;
+    }
+
+    // Economic victory: shu's total gold > 80% of all factions' combined gold for 5 ticks
+    const allCities = cities;
+    let shuGold = 0;
+    let totalGold = 0;
+    for (const city of allCities) {
+      if (!city.controllerId) continue;
+      totalGold += city.gold;
+      if (FACTIONS[0].members.includes(city.controllerId)) shuGold += city.gold;
+    }
+    if (totalGold > 0 && shuGold / totalGold >= 0.8) {
+      this.economicVictoryTicks++;
+      if (this.economicVictoryTicks >= 5) {
+        this.gameState = { status: "victory", winnerFaction: "shu", tick: this.currentTick, winType: "economy" };
+        return "victory";
+      }
+    } else {
+      this.economicVictoryTicks = 0;
     }
 
     // Defeat: player faction has no cities at all
@@ -2619,6 +2788,9 @@ interface SaveData {
   legacyBonuses: [string, number][];
   characterFavorability: [string, number][];
   mentorPairs: MentorPair[];
+  warExhaustion: [string, number][];
+  diplomaticVictoryTicks: number;
+  economicVictoryTicks: number;
   savedAt: string;
 }
 
