@@ -40,6 +40,7 @@ interface PlaceNode {
   districts?: District[];
   food?: number;
   units?: UnitComposition;
+  path?: string;
 }
 
 const DISTRICT_LABELS: Record<string, string> = {
@@ -148,18 +149,21 @@ export function MapPage({
   const [prediction, setPrediction] = useState<{ winRate: number; attackPower: number; defensePower: number } | null>(null);
   const [tactic, setTactic] = useState<"aggressive" | "defensive" | "balanced">("balanced");
   const [supplyStatus, setSupplyStatus] = useState<Record<string, boolean>>({});
+  const [tradeRoutes, setTradeRoutes] = useState<{ cityA: string; cityB: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchMapData = useCallback(async (tick: number) => {
     try {
-      const [data, facs, supply] = await Promise.all([
+      const [data, facs, supply, trades] = await Promise.all([
         trpc.map.getMapData.query({ tick }),
         trpc.simulation.getFactions.query(),
         trpc.simulation.getSupplyStatus.query(),
+        trpc.simulation.getTradeRoutes.query(),
       ]);
       setMapData(data as MapData);
       setFactions(facs as FactionInfo[]);
       setSupplyStatus(supply as Record<string, boolean>);
+      setTradeRoutes((trades as { cityA: string; cityB: string }[]) ?? []);
     } catch {
       // silently fail
     } finally {
@@ -264,7 +268,7 @@ export function MapPage({
     }
   };
 
-  const handleSpy = async (type: "spy" | "sabotage") => {
+  const handleSpy = async (type: "spy" | "sabotage" | "blockade") => {
     if (!selectedChar || !selectedCity) return;
     try {
       await trpc.simulation.queueCommand.mutate({
@@ -395,6 +399,7 @@ export function MapPage({
             data={mapData}
             viewTick={viewTick}
             factionColors={factionColors}
+            tradeRoutes={tradeRoutes}
             onCityClick={handleCityClick}
           />
         )}
@@ -538,6 +543,9 @@ export function MapPage({
                     </button>
                     <button style={styles.sabotageBtn} onClick={() => handleSpy("sabotage")}>
                       破壞（100金）
+                    </button>
+                    <button style={{ ...styles.sabotageBtn, backgroundColor: "#059669" }} onClick={() => handleSpy("blockade")}>
+                      封鎖（100金）
                     </button>
                   </div>
                 )}
@@ -706,6 +714,35 @@ export function MapPage({
                         )
                       ))}
                     </div>
+                  </div>
+                )}
+                {/* City specialization path */}
+                {selectedCity.development >= 3 && (
+                  <div style={{ marginTop: 8 }}>
+                    <p style={{ ...styles.cmdLabel, marginBottom: 4 }}>
+                      城市路線{selectedCity.path ? `：${{ fortress: "要塞", trade_hub: "商都", cultural: "文化", breadbasket: "糧倉" }[selectedCity.path] ?? selectedCity.path}` : "（未選擇）"}
+                    </p>
+                    {!selectedCity.path && (selectedCity.gold ?? 0) >= 400 && (
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {([["fortress", "要塞", "防禦+20%"], ["trade_hub", "商都", "收入+50%"], ["cultural", "文化", "士氣+5,聲望+2"], ["breadbasket", "糧倉", "糧食+50%"]] as const).map(([path, label, desc]) => (
+                          <button
+                            key={path}
+                            style={{ ...styles.reinforceBtn, fontSize: 10, flex: 1, backgroundColor: "#7c3aed" }}
+                            title={desc}
+                            onClick={() => {
+                              trpc.simulation.queueCommand.mutate({
+                                type: "set_path",
+                                characterId: "liu_bei",
+                                targetCityId: selectedCity.id,
+                                cityPath: path,
+                              }).then(() => setCommandCount((c) => c + 1));
+                            }}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

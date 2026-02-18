@@ -1,5 +1,5 @@
 import { Engine } from "@rtk/simulation";
-import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode, SpyMission, SpyMissionType, CharacterSkills, CharacterRole, DistrictType, District, UnitType, UnitComposition } from "@rtk/graph-db";
+import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode, SpyMission, SpyMissionType, CharacterSkills, CharacterRole, DistrictType, District, UnitType, UnitComposition, CityPath } from "@rtk/graph-db";
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
 import { NarrativeService } from "./narrative/narrative-service.js";
 import { evaluateNPCDecisions } from "./ai/npc-ai.js";
@@ -29,6 +29,8 @@ export interface DeathEvent {
   wasLeader: boolean;
   successorId?: string;
   successorName?: string;
+  heirId?: string;
+  heirName?: string;
 }
 
 export interface TradeRoute {
@@ -173,7 +175,7 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade" | "build_district" | "assign_mentor" | "build_siege" | "demand" | "sow_discord" | "train_unit";
+  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "blockade" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade" | "build_district" | "assign_mentor" | "build_siege" | "demand" | "sow_discord" | "train_unit" | "set_path";
   characterId: string;
   targetCityId: string;
   targetCharacterId?: string; // for recruit / hire_neutral / assign_mentor (apprentice)
@@ -186,6 +188,7 @@ export interface PlayerCommand {
   demandAmount?: number; // for tribute demand (gold amount)
   targetFactionId?: string; // for sow_discord
   unitType?: UnitType; // for train_unit
+  cityPath?: CityPath; // for set_path
 }
 
 // ── District system ──
@@ -432,6 +435,7 @@ export class SimulationService {
   private mentorPairs: MentorPair[] = [];
   private warExhaustion = new Map<string, number>(); // factionId -> 0-100
   private droughtCities = new Map<string, number>(); // cityId -> drought expires at tick
+  private heirCounter = 0;
   private factionTrust = new Map<string, number>(); // "fA:fB" sorted key -> trust 0-100
   private diplomaticVictoryTicks = 0; // consecutive ticks with all surviving factions allied
   private economicVictoryTicks = 0;  // consecutive ticks with >80% total gold
@@ -483,6 +487,7 @@ export class SimulationService {
     this.warExhaustion.clear();
     this.droughtCities.clear();
     this.factionTrust.clear();
+    this.heirCounter = 0;
     this.diplomaticVictoryTicks = 0;
     this.economicVictoryTicks = 0;
     FACTIONS = createDefaultFactions();
@@ -988,6 +993,9 @@ export class SimulationService {
               successorName = successor?.name;
             }
 
+            // Spawn heir for notable characters
+            const heir = await this.spawnHeir(ch, factionId);
+
             deathEvents.push({
               tick: this.currentTick,
               characterId: ch.id,
@@ -997,12 +1005,75 @@ export class SimulationService {
               wasLeader,
               successorId,
               successorName,
+              heirId: heir?.id,
+              heirName: heir?.name,
             });
           }
         }
       }
     }
     return deathEvents;
+  }
+
+  // ── Heir spawning ──
+  private readonly HEIR_SURNAMES: Record<string, string> = {
+    liu_bei: "劉", guan_yu: "關", zhang_fei: "張", zhuge_liang: "諸葛",
+    cao_cao: "曹", sun_quan: "孫", zhao_yun: "趙", lu_bu: "呂",
+    zhou_yu: "周", xu_shu: "徐", pang_tong: "龐", huang_zhong: "黃",
+    ma_chao: "馬", gan_ning: "甘", xu_huang: "徐", diao_chan: "貂",
+  };
+
+  private readonly HEIR_GIVEN_NAMES = ["禪", "封", "統", "延", "霸", "恪", "瑁", "安", "平", "興", "昭", "琮", "瓚", "虎", "彪", "雄"];
+
+  private async spawnHeir(parent: CharacterNode, factionId: string): Promise<CharacterNode | null> {
+    const prestige = this.getPrestige(parent.id);
+    if (prestige < 5) return null; // only notable characters spawn heirs
+    if (Math.random() > 0.6) return null; // 60% chance
+
+    this.heirCounter++;
+    const heirId = `heir_${parent.id}_${this.heirCounter}`;
+
+    // Inherit 1-2 traits from parent, add 1 random new trait
+    const inheritCount = Math.random() < 0.5 ? 1 : 2;
+    const inheritedTraits = [...parent.traits].sort(() => Math.random() - 0.5).slice(0, inheritCount);
+    const allTraits = ["brave", "wise", "loyal", "cunning", "ambitious", "cautious", "charismatic", "strategic", "humble", "diplomatic", "impulsive", "proud"];
+    const newTrait = allTraits.filter((t) => !inheritedTraits.includes(t))[Math.floor(Math.random() * (allTraits.length - inheritedTraits.length))];
+    const traits = [...inheritedTraits, newTrait];
+
+    // Stats: 60-80% of parent, min 0
+    const mil = Math.max(0, Math.floor(parent.military * (0.6 + Math.random() * 0.2)));
+    const int = Math.max(0, Math.floor(parent.intelligence * (0.6 + Math.random() * 0.2)));
+    const cha = Math.max(0, Math.floor(parent.charm * (0.6 + Math.random() * 0.2)));
+
+    // Name: surname + random given name
+    const rootId = parent.parentId ? parent.id.replace(/^heir_/, "").split("_")[0] : parent.id;
+    const surname = this.HEIR_SURNAMES[rootId] ?? parent.name.charAt(0);
+    const given = this.HEIR_GIVEN_NAMES[Math.floor(Math.random() * this.HEIR_GIVEN_NAMES.length)];
+    const name = `${surname}${given}`;
+
+    const heir: CharacterNode = {
+      id: heirId,
+      name,
+      traits,
+      cityId: parent.cityId,
+      military: mil,
+      intelligence: int,
+      charm: cha,
+      skills: { leadership: 0, tactics: 0, commerce: 0, espionage: 0 },
+      bornTick: this.currentTick,
+      parentId: parent.id,
+    };
+
+    await this.repo.createCharacter(heir);
+
+    // Add heir to faction
+    const faction = FACTIONS.find((f) => f.id === factionId);
+    if (faction) faction.members.push(heirId);
+
+    // Inherit some prestige
+    this.addPrestige(heirId, Math.floor(prestige * 0.3));
+
+    return heir;
   }
 
   // ── District helpers ──
@@ -1190,6 +1261,8 @@ export class SimulationService {
       if (city.specialty === "granary") foodIncome *= city.improvement ? 3 : 2;
       // Agriculture district: +60%
       if (this.hasDistrict(city, "agriculture")) foodIncome = Math.round(foodIncome * 1.6);
+      // Breadbasket path: +50% food
+      if (city.path === "breadbasket") foodIncome = Math.round(foodIncome * 1.5);
       // Winter: -40% food production
       if (season === "winter") foodIncome = Math.round(foodIncome * 0.6);
       // Drought: -50% food production
@@ -1460,6 +1533,9 @@ export class SimulationService {
     this.updatePrestigeFromBattles(battleResults);
     this.updatePrestigeFromSpyReports(spyReports);
     this.applyDeathLegacy(deathEvents);
+
+    // City path bonuses: cultural path grants prestige and morale
+    await this.applyCityPathBonuses();
 
     // Update favorability
     await this.updateFavorability(battleResults, betrayalEvents);
@@ -1806,6 +1882,17 @@ export class SimulationService {
         continue;
       }
 
+      // Set city specialization path: costs 400 gold, requires dev >= 3
+      if (cmd.type === "set_path" && cmd.cityPath) {
+        const city = await this.repo.getPlace(cmd.targetCityId);
+        if (!city || !city.controllerId) continue;
+        const faction = this.getFactionOf(cmd.characterId);
+        if (!faction || this.getFactionOf(city.controllerId) !== faction) continue;
+        if (city.development < 3 || city.gold < 400) continue;
+        await this.repo.updatePlace(city.id, { gold: city.gold - 400, path: cmd.cityPath } as Partial<PlaceNode>);
+        continue;
+      }
+
       // Store tactic for attack commands
       if (cmd.type === "attack" && cmd.tactic) {
         this.pendingTactics.set(cmd.characterId, cmd.tactic);
@@ -1832,7 +1919,7 @@ export class SimulationService {
       }
 
       // Spy/Sabotage: send spy on covert mission (costs 100 gold from any allied city)
-      if (cmd.type === "spy" || cmd.type === "sabotage") {
+      if (cmd.type === "spy" || cmd.type === "sabotage" || cmd.type === "blockade") {
         const spyChar = await this.repo.getCharacter(cmd.characterId);
         if (!spyChar) continue;
         // Deduct 100 gold from spy's current city
@@ -1844,7 +1931,7 @@ export class SimulationService {
           id: `spy-${this.spyCounter}`,
           characterId: cmd.characterId,
           targetCityId: cmd.targetCityId,
-          missionType: cmd.type === "spy" ? "intel" : "sabotage",
+          missionType: cmd.type === "spy" ? "intel" : cmd.type === "blockade" ? "blockade" : "sabotage",
           departureTick: this.currentTick,
           arrivalTick: this.currentTick + 2,
           status: "traveling",
@@ -2103,6 +2190,20 @@ export class SimulationService {
         report.sabotageEffect = `守備-${garrisonLoss}、金幣-${goldLoss}`;
       }
 
+      if (success && mission.missionType === "blockade") {
+        // Cut a random trade route involving the target city for 3 ticks
+        const targetRoutes = this.tradeRoutes.filter(
+          (r) => r.cityA === targetCity.id || r.cityB === targetCity.id,
+        );
+        if (targetRoutes.length > 0) {
+          const route = targetRoutes[Math.floor(Math.random() * targetRoutes.length)];
+          this.tradeRoutes = this.tradeRoutes.filter((r) => r.id !== route.id);
+          report.sabotageEffect = `封鎖 ${route.cityA}↔${route.cityB} 貿易路線`;
+        } else {
+          report.sabotageEffect = `目標城市無貿易路線可封鎖`;
+        }
+      }
+
       if (success) {
         // Espionage skill gain on success
         await this.repo.createCharacter({ ...spy, skills: gainSkill(spy, "espionage") });
@@ -2156,6 +2257,22 @@ export class SimulationService {
           if (ch.intelligence < 10) {
             await this.repo.createCharacter({ ...ch, intelligence: Math.min(10, ch.intelligence + gain) });
           }
+        }
+      }
+    }
+  }
+
+  private async applyCityPathBonuses(): Promise<void> {
+    const cities = await this.repo.getAllPlaces();
+    for (const city of cities) {
+      if (city.status === "dead" || !city.controllerId || city.path !== "cultural") continue;
+      // Cultural path: controller gets +2 prestige, faction morale +5 (every 4 ticks)
+      if (this.currentTick % 4 === 0 && this.currentTick > 0) {
+        this.addPrestige(city.controllerId, 2);
+        const factionId = this.getFactionOf(city.controllerId);
+        if (factionId) {
+          const current = this.factionMorale.get(factionId) ?? 50;
+          this.factionMorale.set(factionId, Math.min(100, current + 5));
         }
       }
     }
@@ -2260,6 +2377,8 @@ export class SimulationService {
       multiplier += this.roleGoldBonus(charsHere);
       // Commerce district: +80% income
       if (this.hasDistrict(city, "commerce")) multiplier += 0.8;
+      // Trade hub path: +50% income
+      if (city.path === "trade_hub") multiplier += 0.5;
       // War exhaustion >50: -20% income
       const factionId = this.getFactionOf(city.controllerId);
       if (factionId && (this.warExhaustion.get(factionId) ?? 0) > 50) multiplier *= 0.8;
@@ -2323,6 +2442,8 @@ export class SimulationService {
       }
       // Defense district: +2 garrison bonus
       if (this.hasDistrict(city, "defense")) garrisonPower += 2;
+      // Fortress path: +20% garrison defense
+      if (city.path === "fortress") garrisonPower = Math.round(garrisonPower * 1.2);
       let defensePower = garrisonPower + tierBonus + seasonDefBonus + Math.random() * 2;
       for (const d of defenders) {
         defensePower += d.military + d.intelligence * 0.5 + getSkills(d).tactics * 0.5 + Math.random() * 2;
@@ -2500,6 +2621,9 @@ export class SimulationService {
         }
       }
 
+      // Spawn heir for notable characters
+      const heir = await this.spawnHeir(loser, factionId);
+
       events.push({
         tick: this.currentTick,
         characterId: loserId,
@@ -2509,6 +2633,8 @@ export class SimulationService {
         wasLeader,
         successorId,
         successorName,
+        heirId: heir?.id,
+        heirName: heir?.name,
       });
     }
 
@@ -3045,6 +3171,7 @@ export class SimulationService {
       warExhaustion: [...this.warExhaustion.entries()],
       droughtCities: [...this.droughtCities.entries()],
       factionTrust: [...this.factionTrust.entries()],
+      heirCounter: this.heirCounter,
       diplomaticVictoryTicks: this.diplomaticVictoryTicks,
       economicVictoryTicks: this.economicVictoryTicks,
       savedAt: new Date().toISOString(),
@@ -3124,6 +3251,7 @@ export class SimulationService {
     this.warExhaustion = new Map(data.warExhaustion ?? []);
     this.droughtCities = new Map(data.droughtCities ?? []);
     this.factionTrust = new Map(data.factionTrust ?? []);
+    this.heirCounter = data.heirCounter ?? 0;
     this.diplomaticVictoryTicks = data.diplomaticVictoryTicks ?? 0;
     this.economicVictoryTicks = data.economicVictoryTicks ?? 0;
 
@@ -3313,6 +3441,7 @@ interface SaveData {
   warExhaustion: [string, number][];
   droughtCities: [string, number][];
   factionTrust: [string, number][];
+  heirCounter: number;
   diplomaticVictoryTicks: number;
   economicVictoryTicks: number;
   savedAt: string;

@@ -50,7 +50,7 @@ export const simulationRouter = router({
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
-      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "hire_neutral", "assign_role", "start_research", "establish_trade", "build_district", "assign_mentor", "build_siege", "demand", "sow_discord", "train_unit"]),
+      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "blockade", "hire_neutral", "assign_role", "start_research", "establish_trade", "build_district", "assign_mentor", "build_siege", "demand", "sow_discord", "train_unit", "set_path"]),
       characterId: z.string(),
       targetCityId: z.string(),
       targetCharacterId: z.string().optional(),
@@ -63,6 +63,7 @@ export const simulationRouter = router({
       demandAmount: z.number().optional(),
       targetFactionId: z.string().optional(),
       unitType: z.enum(["infantry", "cavalry", "archers"]).optional(),
+      cityPath: z.enum(["fortress", "trade_hub", "cultural", "breadbasket"]).optional(),
     }))
     .mutation(({ ctx, input }) => {
       ctx.simulation.queueCommand(input);

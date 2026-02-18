@@ -35,10 +35,16 @@ interface MapData {
   movements: Movement[];
 }
 
+interface TradeRouteDisplay {
+  cityA: string;
+  cityB: string;
+}
+
 interface StrategicMapProps {
   data: MapData | null;
   viewTick: number;
   factionColors?: Map<string, string>; // controllerId -> faction color
+  tradeRoutes?: TradeRouteDisplay[];
   onCityClick?: (cityId: string) => void;
 }
 
@@ -52,7 +58,7 @@ const FALLBACK_COLORS: Record<string, string> = {
 const TAIWAN_CENTER: [number, number] = [23.7, 120.96];
 const TAIWAN_ZOOM = 8;
 
-export function StrategicMap({ data, viewTick, factionColors, onCityClick }: StrategicMapProps) {
+export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, onCityClick }: StrategicMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layersRef = useRef<L.LayerGroup | null>(null);
@@ -187,7 +193,25 @@ export function StrategicMap({ data, viewTick, factionColors, onCityClick }: Str
 
       unitMarker.addTo(layers);
     }
-  }, [data, viewTick, onCityClick]);
+
+    // Draw trade routes as green dashed lines
+    if (tradeRoutes) {
+      for (const route of tradeRoutes) {
+        const a = cityCoords.get(route.cityA);
+        const b = cityCoords.get(route.cityB);
+        if (!a || !b) continue;
+
+        const tradeLine = L.polyline([a, b], {
+          color: "#22c55e",
+          weight: 2,
+          dashArray: "4 6",
+          opacity: 0.5,
+        });
+        tradeLine.bindTooltip("貿易路線", { permanent: false, className: "dark-tooltip" });
+        tradeLine.addTo(layers);
+      }
+    }
+  }, [data, viewTick, onCityClick, tradeRoutes]);
 
   return (
     <div ref={containerRef} style={styles.container} />

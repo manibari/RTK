@@ -18,6 +18,7 @@ export interface CharacterNode {
   skills?: CharacterSkills;
   role?: CharacterRole;
   bornTick?: number;
+  parentId?: string;
 }
 
 export interface RelationshipEdge {
@@ -53,6 +54,8 @@ export interface UnitComposition {
   archers: number;
 }
 
+export type CityPath = "fortress" | "trade_hub" | "cultural" | "breadbasket";
+
 export interface PlaceNode {
   id: string;
   name: string;
@@ -71,6 +74,7 @@ export interface PlaceNode {
   districts?: District[];
   food?: number;
   units?: UnitComposition;
+  path?: CityPath;
 }
 
 export interface Movement {
@@ -87,7 +91,7 @@ export interface CharacterGraph {
   relationships: RelationshipEdge[];
 }
 
-export type SpyMissionType = "intel" | "sabotage";
+export type SpyMissionType = "intel" | "sabotage" | "blockade";
 export type SpyMissionStatus = "traveling" | "infiltrated" | "success" | "caught";
 
 export interface SpyMission {

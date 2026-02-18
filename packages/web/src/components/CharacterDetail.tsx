@@ -23,6 +23,7 @@ interface CharacterInfo {
   skills?: CharacterSkills;
   role?: CharacterRole;
   bornTick?: number;
+  parentId?: string;
 }
 
 const ROLE_LABELS: Record<CharacterRole, { label: string; color: string }> = {
@@ -155,6 +156,11 @@ export function CharacterDetail({
                 </span>
               )}
               {cityName && <span style={styles.cityTag}>{cityName}</span>}
+              {character.parentId && (
+                <span style={{ ...styles.cityTag, backgroundColor: "#6366f1", color: "#fff", cursor: "pointer" }} onClick={() => onCharacterClick?.(character.parentId!)}>
+                  之後
+                </span>
+              )}
               {character.role && (() => {
                 const ri = ROLE_LABELS[character.role];
                 return <span style={{ ...styles.roleTag, backgroundColor: ri.color }}>{ri.label}</span>;

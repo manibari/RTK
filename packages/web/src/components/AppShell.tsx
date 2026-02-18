@@ -198,8 +198,9 @@ export function AppShell() {
       if (result.deathEvents?.length > 0) {
         for (const d of result.deathEvents) {
           const suffix = d.wasLeader && d.successorName ? `，${d.successorName} 繼任` : "";
+          const heirSuffix = d.heirName ? `｜後嗣 ${d.heirName} 加入` : "";
           const causeText = d.cause === "old_age" ? "壽終正寢" : "戰死";
-          addToast(`${d.characterName} ${causeText}${suffix}`, d.cause === "old_age" ? "#64748b" : "#991b1b");
+          addToast(`${d.characterName} ${causeText}${suffix}${heirSuffix}`, d.cause === "old_age" ? "#64748b" : "#991b1b");
         }
       }
       if (result.worldEvents?.length > 0) {
