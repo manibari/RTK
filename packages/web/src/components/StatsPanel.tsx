@@ -242,6 +242,28 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
                   >
                     離間計
                   </button>
+                  <button
+                    style={{ ...styles.breakBtn, backgroundColor: "#0891b2", borderColor: "#0891b2", fontSize: 10 }}
+                    onClick={async () => {
+                      try {
+                        await trpc.simulation.queueCommand.mutate({ type: "propose_nap", characterId: "liu_bei", targetCityId: "", targetFactionId: f.id });
+                        onMessage?.(`向 ${f.id} 提議互不侵犯條約`, "#0891b2");
+                      } catch { onMessage?.("指令失敗", "#ef4444"); }
+                    }}
+                  >
+                    互不侵犯
+                  </button>
+                  <button
+                    style={{ ...styles.breakBtn, backgroundColor: "#059669", borderColor: "#059669", fontSize: 10 }}
+                    onClick={async () => {
+                      try {
+                        await trpc.simulation.queueCommand.mutate({ type: "propose_defense_pact", characterId: "liu_bei", targetCityId: "", targetFactionId: f.id });
+                        onMessage?.(`向 ${f.id} 提議互助防禦條約`, "#059669");
+                      } catch { onMessage?.("指令失敗", "#ef4444"); }
+                    }}
+                  >
+                    互助防禦
+                  </button>
                 </div>
               </div>
               );

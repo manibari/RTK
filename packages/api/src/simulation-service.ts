@@ -192,6 +192,23 @@ const TRADITION_DESCRIPTIONS: Record<FactionTradition, string> = {
   spycraft_experts: "間諜成功率+15%",
 };
 
+// ── Diplomatic treaties ──
+export type TreatyType = "non_aggression" | "mutual_defense";
+
+export interface Treaty {
+  id: string;
+  type: TreatyType;
+  factionA: string;
+  factionB: string;
+  establishedTick: number;
+  expiryTick: number; // NAP expires after 10 ticks; mutual defense after 20
+}
+
+const TREATY_LABELS: Record<TreatyType, string> = {
+  non_aggression: "互不侵犯",
+  mutual_defense: "互助防禦",
+};
+
 export type WinType = "conquest" | "diplomacy" | "economy";
 
 export interface GameState {
@@ -202,7 +219,7 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "blockade" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade" | "build_district" | "assign_mentor" | "build_siege" | "demand" | "sow_discord" | "train_unit" | "set_path";
+  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "blockade" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade" | "build_district" | "assign_mentor" | "build_siege" | "demand" | "sow_discord" | "train_unit" | "set_path" | "propose_nap" | "propose_defense_pact" | "designate_heir";
   characterId: string;
   targetCityId: string;
   targetCharacterId?: string; // for recruit / hire_neutral / assign_mentor (apprentice)
@@ -470,6 +487,9 @@ export class SimulationService {
   private factionTraditions = new Map<string, FactionTradition>(); // factionId -> active tradition
   private factionBattleCount = new Map<string, number>(); // factionId -> total battles
   private factionSpySuccessCount = new Map<string, number>(); // factionId -> successful spy missions
+  private treaties: Treaty[] = [];
+  private treatyCounter = 0;
+  private designatedHeir: string | null = null; // characterId of designated heir for player faction
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -525,6 +545,9 @@ export class SimulationService {
     this.factionTraditions.clear();
     this.factionBattleCount.clear();
     this.factionSpySuccessCount.clear();
+    this.treaties = [];
+    this.treatyCounter = 0;
+    this.designatedHeir = null;
     FACTIONS = createDefaultFactions();
 
     // Re-initialize
@@ -666,12 +689,15 @@ export class SimulationService {
     if (!faction) return;
     faction.members = faction.members.filter((m) => m !== charId);
 
-    // If leader died, succession to highest military member
+    // If leader died, succession: designated heir first, then first member (placeholder)
     if (faction.leaderId === charId) {
       const remaining = faction.members.filter((m) => m !== charId);
       if (remaining.length === 0) return;
-      // Will be resolved asynchronously — set sync for now
-      faction.leaderId = remaining[0]; // placeholder, actual pick done in processDeaths
+      if (factionId === "shu" && this.designatedHeir && remaining.includes(this.designatedHeir)) {
+        faction.leaderId = this.designatedHeir;
+      } else {
+        faction.leaderId = remaining[0]; // placeholder, actual pick done in processDeaths
+      }
     }
   }
 
@@ -1499,6 +1525,10 @@ export class SimulationService {
     // Process ongoing sieges (garrison attrition)
     await this.processSieges();
 
+    // Process diplomatic treaties
+    this.processExpiredTreaties();
+    await this.applyMutualDefense();
+
     // Generate random movements for remaining idle characters (10%)
     await this.generateMovements();
 
@@ -1959,6 +1989,19 @@ export class SimulationService {
         if (alliedCities.length === 0 || alliedCities[0].gold < tech.cost) continue;
         await this.repo.updatePlace(alliedCities[0].id, { gold: alliedCities[0].gold - tech.cost });
         state.current = { techId: tech.id, startTick: this.currentTick };
+        continue;
+      }
+
+      // Propose NAP or mutual defense pact
+      if ((cmd.type === "propose_nap" || cmd.type === "propose_defense_pact") && cmd.targetFactionId) {
+        const type: TreatyType = cmd.type === "propose_nap" ? "non_aggression" : "mutual_defense";
+        this.proposeTreaty(cmd.targetFactionId, type);
+        continue;
+      }
+
+      // Designate heir for player faction
+      if (cmd.type === "designate_heir" && cmd.targetCharacterId) {
+        this.designateHeir(cmd.targetCharacterId);
         continue;
       }
 
@@ -2610,9 +2653,14 @@ export class SimulationService {
         const faction = this.getFactionOf(a.characterId);
         if (!faction) continue;
         const controllerFaction = city.controllerId ? this.getFactionOf(city.controllerId) : null;
-        // Skip if same faction or allied
+        // Skip if same faction, allied, or NAP
         if (faction === controllerFaction) continue;
         if (controllerFaction && this.areAllied(faction, controllerFaction)) continue;
+        if (controllerFaction && this.hasTreaty(faction, controllerFaction, "non_aggression")) {
+          // NAP violation: break treaty, trust -30
+          this.treaties = this.treaties.filter((t) => !(t.type === "non_aggression" && ((t.factionA === faction && t.factionB === controllerFaction) || (t.factionA === controllerFaction && t.factionB === faction))));
+          this.adjustTrust(faction, controllerFaction, -30);
+        }
         const list = attackersByFaction.get(faction) ?? [];
         list.push(a.characterId);
         attackersByFaction.set(faction, list);
@@ -2809,17 +2857,26 @@ export class SimulationService {
       let successorId: string | undefined;
       let successorName: string | undefined;
 
-      // Succession: pick highest military member
+      // Succession: designated heir first, then highest military member
       if (wasLeader && faction.members.length > 0) {
         const allChars = await this.repo.getAllCharacters();
-        const best = faction.members
-          .map((id) => allChars.find((c) => c.id === id))
-          .filter(Boolean)
-          .sort((a, b) => (b!.military + b!.intelligence) - (a!.military + a!.intelligence))[0];
-        if (best) {
-          faction.leaderId = best.id;
-          successorId = best.id;
-          successorName = best.name;
+        let successor: CharacterNode | undefined;
+        // Check designated heir first (player faction only)
+        if (factionId === "shu" && this.designatedHeir && faction.members.includes(this.designatedHeir)) {
+          successor = allChars.find((c) => c.id === this.designatedHeir);
+          if (successor) this.addPrestige(successor.id, 5); // bonus for designated heir
+          this.designatedHeir = null;
+        }
+        if (!successor) {
+          successor = faction.members
+            .map((id) => allChars.find((c) => c.id === id))
+            .filter(Boolean)
+            .sort((a, b) => (b!.military + b!.intelligence) - (a!.military + a!.intelligence))[0] as CharacterNode | undefined;
+        }
+        if (successor) {
+          faction.leaderId = successor.id;
+          successorId = successor.id;
+          successorName = successor.name;
         }
       }
 
@@ -3222,6 +3279,139 @@ export class SimulationService {
     return { success: true, reason: `Alliance broken（信任度 -20 → ${this.getTrust(playerFaction, factionId)}）` };
   }
 
+  // ── Diplomatic Treaties ──
+  proposeTreaty(factionId: string, type: TreatyType): { success: boolean; reason: string } {
+    const playerFaction = "shu";
+    if (factionId === playerFaction) return { success: false, reason: "Cannot sign treaty with yourself" };
+    // Check existing treaty of same type
+    const existing = this.treaties.find(
+      (t) => t.type === type && ((t.factionA === playerFaction && t.factionB === factionId) || (t.factionA === factionId && t.factionB === playerFaction)),
+    );
+    if (existing) return { success: false, reason: `已有${TREATY_LABELS[type]}條約` };
+    const trust = this.getTrust(playerFaction, factionId);
+    const threshold = type === "non_aggression" ? 30 : 50;
+    if (trust < threshold) return { success: false, reason: `信任度不足（${trust}/${threshold}）` };
+    // Success chance based on trust
+    const chance = 0.4 + (trust - threshold) / 100;
+    if (Math.random() > Math.min(0.9, chance)) return { success: false, reason: `${factionId} 拒絕${TREATY_LABELS[type]}條約` };
+    this.treatyCounter++;
+    const duration = type === "non_aggression" ? 10 : 20;
+    this.treaties.push({
+      id: `treaty-${this.treatyCounter}`,
+      type,
+      factionA: playerFaction,
+      factionB: factionId,
+      establishedTick: this.currentTick,
+      expiryTick: this.currentTick + duration,
+    });
+    this.adjustTrust(playerFaction, factionId, 5);
+    return { success: true, reason: `${TREATY_LABELS[type]}條約簽訂成功（${duration}天）` };
+  }
+
+  getTreaties(): Treaty[] {
+    return this.treaties.filter((t) => t.expiryTick > this.currentTick);
+  }
+
+  hasTreaty(factionA: string, factionB: string, type: TreatyType): boolean {
+    return this.treaties.some(
+      (t) => t.type === type && t.expiryTick > this.currentTick &&
+        ((t.factionA === factionA && t.factionB === factionB) || (t.factionA === factionB && t.factionB === factionA)),
+    );
+  }
+
+  private processExpiredTreaties(): void {
+    this.treaties = this.treaties.filter((t) => t.expiryTick > this.currentTick);
+  }
+
+  private async applyMutualDefense(): Promise<void> {
+    const cities = await this.repo.getAllPlaces();
+    for (const city of cities) {
+      if (!city.siegedBy || !city.controllerId) continue;
+      const defenderFaction = this.getFactionOf(city.controllerId);
+      if (!defenderFaction) continue;
+      // Check if any faction has a mutual defense pact with the defender
+      for (const treaty of this.treaties) {
+        if (treaty.type !== "mutual_defense" || treaty.expiryTick <= this.currentTick) continue;
+        const allyFaction = treaty.factionA === defenderFaction ? treaty.factionB : treaty.factionB === defenderFaction ? treaty.factionA : null;
+        if (!allyFaction) continue;
+        // Ally sends +1 garrison
+        await this.repo.updatePlace(city.id, { garrison: city.garrison + 1 });
+        break; // only one reinforcement per tick
+      }
+    }
+  }
+
+  // ── Heir Designation ──
+  designateHeir(characterId: string): { success: boolean; reason: string } {
+    const playerFaction = FACTIONS.find((f) => f.id === "shu");
+    if (!playerFaction) return { success: false, reason: "Faction not found" };
+    if (!playerFaction.members.includes(characterId)) return { success: false, reason: "Not a faction member" };
+    if (characterId === playerFaction.leaderId) return { success: false, reason: "Cannot designate leader as heir" };
+    this.designatedHeir = characterId;
+    this.addPrestige(characterId, 3);
+    return { success: true, reason: `已指定繼承人，聲望+3` };
+  }
+
+  getDesignatedHeir(): string | null {
+    return this.designatedHeir;
+  }
+
+  // ── Hero Hall: all characters with achievements/prestige (living + dead) ──
+  async getHeroHall(): Promise<{ id: string; name: string; alive: boolean; factionId: string | null; prestige: number; achievements: string[]; legacy: boolean }[]> {
+    const characters = await this.repo.getAllCharacters();
+    const heroes: { id: string; name: string; alive: boolean; factionId: string | null; prestige: number; achievements: string[]; legacy: boolean }[] = [];
+    // Living characters with any prestige or achievements
+    for (const c of characters) {
+      const prestige = this.getPrestige(c.id);
+      const achievements = this.getAchievements(c.id);
+      if (prestige > 0 || achievements.length > 0) {
+        heroes.push({ id: c.id, name: c.name, alive: !this.deadCharacters.has(c.id), factionId: this.getFactionOf(c.id), prestige, achievements, legacy: false });
+      }
+    }
+    // Dead characters that contributed to legacy
+    for (const deadId of this.deadCharacters) {
+      if (heroes.some((h) => h.id === deadId)) continue;
+      const prestige = this.getPrestige(deadId);
+      const achievements = this.getAchievements(deadId);
+      if (prestige > 0 || achievements.length > 0) {
+        heroes.push({ id: deadId, name: deadId, alive: false, factionId: null, prestige, achievements, legacy: true });
+      }
+    }
+    return heroes.sort((a, b) => b.prestige - a.prestige);
+  }
+
+  // ── City vulnerability assessment ──
+  async getCityVulnerability(): Promise<Record<string, { score: number; level: "strong" | "moderate" | "weak" }>> {
+    const cities = await this.repo.getAllPlaces();
+    const characters = await this.repo.getAllCharacters();
+    const result: Record<string, { score: number; level: "strong" | "moderate" | "weak" }> = {};
+    for (const city of cities) {
+      if (city.status === "dead" || !city.controllerId) continue;
+      let score = 0;
+      // Garrison strength
+      score += city.garrison * 5;
+      // Defender military
+      const defenders = characters.filter((c) => c.cityId === city.id);
+      score += defenders.reduce((s, c) => s + c.military + c.intelligence * 0.3, 0);
+      // Tier bonus
+      score += city.tier === "major" ? 10 : 3;
+      // Forge specialty
+      if (city.specialty === "forge") score += 5;
+      // Defense district
+      if (this.hasDistrict(city, "defense")) score += 5;
+      // Fortress path
+      if (city.path === "fortress") score += 8;
+      // Low loyalty penalty
+      const loyalty = this.cityLoyalty.get(city.id) ?? 50;
+      if (loyalty < 30) score -= 10;
+      // Low food penalty
+      if ((city.food ?? 100) < 20) score -= 5;
+      const level = score >= 30 ? "strong" : score >= 15 ? "moderate" : "weak";
+      result[city.id] = { score, level };
+    }
+    return result;
+  }
+
   async getFactionStats(): Promise<{ id: string; name: string; color: string; gold: number; cities: number; characters: number; power: number; morale: number; legacy: number; exhaustion: number }[]> {
     const characters = await this.repo.getAllCharacters();
     const cities = await this.repo.getAllPlaces();
@@ -3380,6 +3570,9 @@ export class SimulationService {
       factionTraditions: [...this.factionTraditions.entries()],
       factionBattleCount: [...this.factionBattleCount.entries()],
       factionSpySuccessCount: [...this.factionSpySuccessCount.entries()],
+      treaties: [...this.treaties],
+      treatyCounter: this.treatyCounter,
+      designatedHeir: this.designatedHeir,
       savedAt: new Date().toISOString(),
     };
 
@@ -3464,6 +3657,9 @@ export class SimulationService {
     this.factionTraditions = new Map(data.factionTraditions ?? []);
     this.factionBattleCount = new Map(data.factionBattleCount ?? []);
     this.factionSpySuccessCount = new Map(data.factionSpySuccessCount ?? []);
+    this.treaties = data.treaties ?? [];
+    this.treatyCounter = data.treatyCounter ?? 0;
+    this.designatedHeir = data.designatedHeir ?? null;
 
     // Re-init narrative service
     const characters = await this.repo.getAllCharacters();
@@ -3658,6 +3854,9 @@ interface SaveData {
   factionTraditions: [string, FactionTradition][];
   factionBattleCount: [string, number][];
   factionSpySuccessCount: [string, number][];
+  treaties: Treaty[];
+  treatyCounter: number;
+  designatedHeir: string | null;
   savedAt: string;
 }
 

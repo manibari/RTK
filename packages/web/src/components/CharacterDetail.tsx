@@ -183,6 +183,18 @@ export function CharacterDetail({
                 </select>
               </div>
             )}
+            {isPlayerFaction && character.role !== undefined && (
+              <button
+                style={{ marginTop: 4, padding: "2px 8px", fontSize: 11, backgroundColor: "#7c3aed", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+                onClick={async () => {
+                  try {
+                    await trpc.simulation.queueCommand.mutate({ type: "designate_heir", characterId: "liu_bei", targetCityId: "", targetCharacterId: characterId });
+                  } catch { /* ignore */ }
+                }}
+              >
+                指定繼承人
+              </button>
+            )}
           </div>
           <button style={styles.closeBtn} onClick={onClose}>✕</button>
         </div>

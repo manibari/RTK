@@ -151,22 +151,25 @@ export function MapPage({
   const [supplyStatus, setSupplyStatus] = useState<Record<string, boolean>>({});
   const [tradeRoutes, setTradeRoutes] = useState<{ cityA: string; cityB: string }[]>([]);
   const [cityLoyalty, setCityLoyalty] = useState<Record<string, number>>({});
+  const [vulnerability, setVulnerability] = useState<Record<string, { score: number; level: string }>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchMapData = useCallback(async (tick: number) => {
     try {
-      const [data, facs, supply, trades, loyalty] = await Promise.all([
+      const [data, facs, supply, trades, loyalty, vuln] = await Promise.all([
         trpc.map.getMapData.query({ tick }),
         trpc.simulation.getFactions.query(),
         trpc.simulation.getSupplyStatus.query(),
         trpc.simulation.getTradeRoutes.query(),
         trpc.simulation.getCityLoyalty.query(),
+        trpc.simulation.getCityVulnerability.query(),
       ]);
       setMapData(data as MapData);
       setFactions(facs as FactionInfo[]);
       setSupplyStatus(supply as Record<string, boolean>);
       setTradeRoutes((trades as { cityA: string; cityB: string }[]) ?? []);
       setCityLoyalty(loyalty as Record<string, number>);
+      setVulnerability(vuln as Record<string, { score: number; level: string }>);
     } catch {
       // silently fail
     } finally {
@@ -452,6 +455,18 @@ export function MapPage({
                   <div style={styles.infoRow}>
                     <span style={styles.infoLabel}>忠誠</span>
                     <span style={{ color, fontWeight: 600 }}>{Math.round(loyalty)}</span>
+                  </div>
+                );
+              })()}
+              {/* Vulnerability indicator */}
+              {vulnerability[selectedCity.id] && (() => {
+                const v = vulnerability[selectedCity.id];
+                const colors: Record<string, string> = { strong: "#22c55e", moderate: "#f59e0b", weak: "#ef4444" };
+                const labels: Record<string, string> = { strong: "堅固", moderate: "普通", weak: "脆弱" };
+                return (
+                  <div style={styles.infoRow}>
+                    <span style={styles.infoLabel}>防禦</span>
+                    <span style={{ color: colors[v.level] ?? "#94a3b8", fontWeight: 600 }}>{labels[v.level] ?? v.level}（{v.score}）</span>
                   </div>
                 );
               })()}

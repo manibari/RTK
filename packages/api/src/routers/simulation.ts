@@ -50,7 +50,7 @@ export const simulationRouter = router({
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
-      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "blockade", "hire_neutral", "assign_role", "start_research", "establish_trade", "build_district", "assign_mentor", "build_siege", "demand", "sow_discord", "train_unit", "set_path"]),
+      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "blockade", "hire_neutral", "assign_role", "start_research", "establish_trade", "build_district", "assign_mentor", "build_siege", "demand", "sow_discord", "train_unit", "set_path", "propose_nap", "propose_defense_pact", "designate_heir"]),
       characterId: z.string(),
       targetCityId: z.string(),
       targetCharacterId: z.string().optional(),
@@ -232,6 +232,26 @@ export const simulationRouter = router({
   // Faction traditions
   getFactionTraditions: publicProcedure.query(({ ctx }) => {
     return ctx.simulation.getFactionTraditions();
+  }),
+
+  // Treaties
+  getTreaties: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getTreaties();
+  }),
+
+  // Designated heir
+  getDesignatedHeir: publicProcedure.query(({ ctx }) => {
+    return { heirId: ctx.simulation.getDesignatedHeir() };
+  }),
+
+  // Hero hall
+  getHeroHall: publicProcedure.query(async ({ ctx }) => {
+    return ctx.simulation.getHeroHall();
+  }),
+
+  // City vulnerability
+  getCityVulnerability: publicProcedure.query(async ({ ctx }) => {
+    return ctx.simulation.getCityVulnerability();
   }),
 
   // Reset
