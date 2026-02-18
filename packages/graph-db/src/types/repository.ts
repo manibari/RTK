@@ -1,4 +1,4 @@
-import type { CharacterNode, RelationshipEdge, CharacterGraph, PlaceNode, Movement, MapData } from "./graph.js";
+import type { CharacterNode, RelationshipEdge, CharacterGraph, PlaceNode, Movement, MapData, RoadEdge } from "./graph.js";
 
 /**
  * Abstract interface for graph data access.
@@ -20,6 +20,11 @@ export interface IGraphRepository {
   getPlace(id: string): Promise<PlaceNode | null>;
   getAllPlaces(): Promise<PlaceNode[]>;
   updatePlace(id: string, updates: Partial<Omit<PlaceNode, "id">>): Promise<void>;
+
+  // Road operations (static — no update/delete)
+  createRoad(road: RoadEdge): Promise<void>;
+  getRoadsFrom(cityId: string): Promise<RoadEdge[]>;
+  getAllRoads(): Promise<RoadEdge[]>;
 
   // Movement operations
   addMovement(movement: Movement): Promise<void>;

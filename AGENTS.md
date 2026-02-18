@@ -2,18 +2,20 @@
 
 ## Project Overview
 
-RTK — A character relationship simulation game inspired by Romance of the Three Kingdoms 13.
-Core feature: radial relationship graph (bond map) with event sourcing for replay.
+RTK — A grand strategy simulation game inspired by Romance of the Three Kingdoms 13.
+Core features: tick-based simulation with combat, diplomacy, espionage, economy systems;
+radial relationship graph with event sourcing for replay; AI-powered narrative generation.
 
 ## Tech Stack
 
 - **Language**: TypeScript (strict mode)
 - **Monorepo**: pnpm workspaces + Turborepo
-- **Simulation**: Custom ECS-style engine in TypeScript
-- **Graph DB**: Neo4j (dev) behind `IGraphRepository` abstraction for future swap to embedded DB
+- **Simulation**: Custom tick-based ECS-style engine in TypeScript
+- **Graph DB**: Neo4j (dev) / In-Memory (prod), behind `IGraphRepository` abstraction
 - **Event Store**: SQLite (append-only event sourcing)
 - **API**: tRPC
-- **Frontend**: Next.js + Cytoscape.js
+- **Frontend**: Next.js + Leaflet (strategic map) + Cytoscape.js (relationship graph)
+- **AI Narrative**: Anthropic Claude API (daily summaries, event narratives)
 - **Package**: Electron or Tauri (future — local desktop game, no cloud deploy)
 
 ## Build & Run
@@ -31,10 +33,10 @@ pnpm lint             # lint all packages
 
 ```
 packages/
-  simulation/   # ECS engine — tick-based character interaction simulation
-  graph-db/     # Graph database abstraction + Neo4j implementation
-  api/          # tRPC API server — bridges simulation ↔ frontend
-  web/          # Next.js frontend — radial graph, timeline, sidebar
+  simulation/   # ECS engine — tick-based simulation (combat, economy, diplomacy, espionage, AI, events)
+  graph-db/     # Graph database abstraction + Neo4j / In-Memory implementations
+  api/          # tRPC API server — 55+ endpoints bridging simulation ↔ frontend
+  web/          # Next.js frontend — strategic map, relationship graph, stats dashboard, game log, hero hall
 ```
 
 ## Operating Principles

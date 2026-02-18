@@ -1,5 +1,6 @@
 import type { CharacterNode, PlaceNode, RelationshipEdge, SpyMissionType } from "@rtk/graph-db";
 import type { BattleTactic } from "../simulation-service.js";
+import { getReachableNeighbors, type AdjacencyMap } from "../roads.js";
 
 interface FactionDef {
   id: string;
@@ -105,10 +106,12 @@ export function evaluateNPCDecisions(
   playerFactionId: string,
   alliances: Set<string> = new Set(),
   relationships: RelationshipEdge[] = [],
+  adjacency?: AdjacencyMap,
+  extCityMap?: Map<string, PlaceNode>,
 ): AIDecision[] {
   const decisions: AIDecision[] = [];
   const charMap = new Map(characters.map((c) => [c.id, c]));
-  const cityMap = new Map(cities.map((c) => [c.id, c]));
+  const cityMap = extCityMap ?? new Map(cities.map((c) => [c.id, c]));
 
   const charToFaction = new Map<string, string>();
   for (const f of factions) {
@@ -165,6 +168,7 @@ export function evaluateNPCDecisions(
         relationships,
         intent,
         focusTarget,
+        adjacency,
       );
       decisions.push(decision);
     }
@@ -261,12 +265,19 @@ function decideForCharacter(
   relationships: RelationshipEdge[],
   intent: StrategicIntent,
   focusTarget: PlaceNode | null,
+  adjacency?: AdjacencyMap,
 ): AIDecision {
   const currentCity = cityMap.get(char.cityId);
   const isLeader = char.id === faction.leaderId;
   const { aggression, caution } = personalityWeight(char);
 
+  // Compute reachable neighbors for adjacency filtering
+  const reachableSet = adjacency
+    ? new Set(getReachableNeighbors(char.cityId, adjacency, cityMap))
+    : null;
+
   const viableEnemyCities = enemyCities.filter((c) => {
+    if (reachableSet && !reachableSet.has(c.id)) return false;
     if (!c.controllerId) return true;
     const intimacy = getIntimacyWith(char.id, c.controllerId, relationships);
     return intimacy < 70;
@@ -274,9 +285,9 @@ function decideForCharacter(
 
   // ── DEFEND intent: leaders stay, non-leaders reinforce weakest cities ──
   if (intent === "defend") {
-    // Reinforce the weakest garrison faction city
+    // Reinforce the weakest garrison faction city (reachable only)
     const weakest = factionCities
-      .filter((c) => c.id !== char.cityId)
+      .filter((c) => c.id !== char.cityId && (!reachableSet || reachableSet.has(c.id)))
       .sort((a, b) => a.garrison - b.garrison)[0];
     if (weakest && weakest.garrison <= 2 && !isLeader) {
       return {
@@ -309,18 +320,21 @@ function decideForCharacter(
 
   // ── EXPAND intent: coordinated offensive ──
 
+  // Filter focus target by reachability
+  const reachableFocusTarget = focusTarget && (!reachableSet || reachableSet.has(focusTarget.id)) ? focusTarget : null;
+
   // Leaders: attack the focus target if safe
   if (isLeader) {
     const homeDefenders = defendersPerCity.get(char.cityId)?.length ?? 0;
     const leaderThreshold = Math.max(1, 2 - Math.floor(aggression / 3));
-    if (focusTarget && homeDefenders > leaderThreshold) {
+    if (reachableFocusTarget && homeDefenders > leaderThreshold) {
       const tactic = pickTactic(char, false);
       return {
         characterId: char.id,
         action: "attack",
-        targetCityId: focusTarget.id,
+        targetCityId: reachableFocusTarget.id,
         tactic,
-        reason: `[Expand] Leader leads assault on ${focusTarget.name}`,
+        reason: `[Expand] Leader leads assault on ${reachableFocusTarget.name}`,
       };
     }
     return { characterId: char.id, action: "stay", reason: "[Expand] Leader holds capital" };
@@ -330,14 +344,14 @@ function decideForCharacter(
   const myDefenders = defendersPerCity.get(char.cityId)?.length ?? 0;
 
   // Priority 1: Join the coordinated attack on the focus target
-  if (focusTarget && myDefenders > 1) {
+  if (reachableFocusTarget && myDefenders > 1) {
     const tactic = pickTactic(char, false);
     return {
       characterId: char.id,
       action: "attack",
-      targetCityId: focusTarget.id,
+      targetCityId: reachableFocusTarget.id,
       tactic,
-      reason: `[Expand] Coordinated assault on ${focusTarget.name}`,
+      reason: `[Expand] Coordinated assault on ${reachableFocusTarget.name}`,
     };
   }
 
@@ -357,9 +371,9 @@ function decideForCharacter(
     }
   }
 
-  // Priority 3: Reinforce an allied city that has no defenders
+  // Priority 3: Reinforce an allied city that has no defenders (reachable only)
   const emptyAlliedCity = factionCities.find(
-    (c) => c.id !== char.cityId && (defendersPerCity.get(c.id)?.length ?? 0) === 0,
+    (c) => c.id !== char.cityId && (!reachableSet || reachableSet.has(c.id)) && (defendersPerCity.get(c.id)?.length ?? 0) === 0,
   );
   if (emptyAlliedCity) {
     return {

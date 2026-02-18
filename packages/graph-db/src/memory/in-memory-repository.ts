@@ -1,11 +1,12 @@
 import type { IGraphRepository } from "../types/repository.js";
-import type { CharacterNode, RelationshipEdge, CharacterGraph, PlaceNode, Movement, MapData } from "../types/graph.js";
+import type { CharacterNode, RelationshipEdge, CharacterGraph, PlaceNode, Movement, MapData, RoadEdge } from "../types/graph.js";
 
 export class InMemoryGraphRepository implements IGraphRepository {
   private characters = new Map<string, CharacterNode>();
   private relationships = new Map<string, RelationshipEdge>(); // key: "sourceId->targetId"
   private places = new Map<string, PlaceNode>();
   private movements: Movement[] = [];
+  private roads: RoadEdge[] = [];
 
   private edgeKey(sourceId: string, targetId: string): string {
     return `${sourceId}->${targetId}`;
@@ -20,6 +21,7 @@ export class InMemoryGraphRepository implements IGraphRepository {
     this.relationships.clear();
     this.places.clear();
     this.movements = [];
+    this.roads = [];
   }
 
   async createCharacter(character: CharacterNode): Promise<void> {
@@ -68,6 +70,26 @@ export class InMemoryGraphRepository implements IGraphRepository {
     }
   }
 
+  // Road operations
+  private roadKey(a: string, b: string, type: string): string {
+    return [a, b].sort().join("|") + ":" + type;
+  }
+
+  async createRoad(road: RoadEdge): Promise<void> {
+    const key = this.roadKey(road.fromCityId, road.toCityId, road.type);
+    if (!this.roads.some((r) => this.roadKey(r.fromCityId, r.toCityId, r.type) === key)) {
+      this.roads.push({ ...road });
+    }
+  }
+
+  async getRoadsFrom(cityId: string): Promise<RoadEdge[]> {
+    return this.roads.filter((r) => r.fromCityId === cityId || r.toCityId === cityId);
+  }
+
+  async getAllRoads(): Promise<RoadEdge[]> {
+    return [...this.roads];
+  }
+
   // Movement operations
   async addMovement(movement: Movement): Promise<void> {
     this.movements.push({ ...movement });
@@ -84,6 +106,7 @@ export class InMemoryGraphRepository implements IGraphRepository {
     const allCities = await this.getAllPlaces();
     const allChars = await this.getAllCharacters();
     const activeMovements = await this.getActiveMovements(tick);
+    const roads = await this.getAllRoads();
 
     const charsWithCity = allChars
       .filter((c) => c.cityId)
@@ -93,6 +116,7 @@ export class InMemoryGraphRepository implements IGraphRepository {
       cities: allCities,
       characters: charsWithCity,
       movements: activeMovements,
+      roads,
     };
   }
 

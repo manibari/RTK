@@ -17,4 +17,8 @@ export const mapRouter = router({
     .query(async ({ ctx, input }) => {
       return ctx.repo.getPlace(input.id);
     }),
+
+  getAllRoads: publicProcedure.query(async ({ ctx }) => {
+    return ctx.repo.getAllRoads();
+  }),
 });

@@ -18,6 +18,8 @@ export type {
   UnitType,
   UnitComposition,
   CityPath,
+  RoadType,
+  RoadEdge,
 } from "./types/graph.js";
 export { Neo4jGraphRepository } from "./neo4j/neo4j-repository.js";
 export type { Neo4jConfig } from "./neo4j/connection.js";

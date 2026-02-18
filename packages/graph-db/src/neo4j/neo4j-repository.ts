@@ -1,7 +1,8 @@
 import type { Driver } from "neo4j-driver";
 import type { IGraphRepository } from "../types/repository.js";
-import type { CharacterNode, RelationshipEdge, CharacterGraph, PlaceNode, Movement, MapData } from "../types/graph.js";
+import type { CharacterNode, RelationshipEdge, CharacterGraph, PlaceNode, Movement, MapData, RoadEdge } from "../types/graph.js";
 import { createDriver, type Neo4jConfig } from "./connection.js";
+import { CREATE_ROAD, GET_ROADS_FROM, GET_ALL_ROADS } from "./queries/roads.js";
 
 export class Neo4jGraphRepository implements IGraphRepository {
   private driver: Driver | null = null;
@@ -201,6 +202,53 @@ export class Neo4jGraphRepository implements IGraphRepository {
     }
   }
 
+  // Road operations
+  async createRoad(road: RoadEdge): Promise<void> {
+    const session = this.getDriver().session();
+    try {
+      const key = [road.fromCityId, road.toCityId].sort().join("|") + ":" + road.type;
+      await session.run(CREATE_ROAD, {
+        fromCityId: road.fromCityId,
+        toCityId: road.toCityId,
+        key,
+        type: road.type,
+        travelTime: road.travelTime,
+      });
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getRoadsFrom(cityId: string): Promise<RoadEdge[]> {
+    const session = this.getDriver().session();
+    try {
+      const result = await session.run(GET_ROADS_FROM, { cityId });
+      return result.records.map((r) => ({
+        fromCityId: r.get("fromCityId"),
+        toCityId: r.get("toCityId"),
+        type: r.get("type"),
+        travelTime: typeof r.get("travelTime") === "object" ? r.get("travelTime").toNumber() : r.get("travelTime"),
+      }));
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getAllRoads(): Promise<RoadEdge[]> {
+    const session = this.getDriver().session();
+    try {
+      const result = await session.run(GET_ALL_ROADS);
+      return result.records.map((r) => ({
+        fromCityId: r.get("fromCityId"),
+        toCityId: r.get("toCityId"),
+        type: r.get("type"),
+        travelTime: typeof r.get("travelTime") === "object" ? r.get("travelTime").toNumber() : r.get("travelTime"),
+      }));
+    } finally {
+      await session.close();
+    }
+  }
+
   // Movement operations — stored in-memory for Neo4j impl (ephemeral per session)
   private movements: Movement[] = [];
 
@@ -216,10 +264,11 @@ export class Neo4jGraphRepository implements IGraphRepository {
     const cities = await this.getAllPlaces();
     const allChars = await this.getAllCharacters();
     const activeMovements = await this.getActiveMovements(tick);
+    const roads = await this.getAllRoads();
     const charsWithCity = allChars
       .filter((c) => c.cityId)
       .map((c) => ({ ...c, cityId: c.cityId! }));
-    return { cities, characters: charsWithCity, movements: activeMovements };
+    return { cities, characters: charsWithCity, movements: activeMovements, roads };
   }
 
   async getCharacterGraph(centerId: string, depth: number): Promise<CharacterGraph> {
