@@ -12,6 +12,7 @@ interface PlaceNode {
   status: "allied" | "hostile" | "neutral" | "dead";
   tier: "major" | "minor";
   controllerId?: string;
+  siegedBy?: string;
 }
 
 interface CharacterOnMap {
@@ -119,9 +120,10 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, onCit
       });
 
       // Tooltip
+      const siegeInfo = city.siegedBy ? `<br/><span style="color:#ef4444">⚔ 被圍城中</span>` : "";
       const tooltipContent = `<div style="font-size:13px">
         <strong>${city.name}</strong><br/>
-        <span style="color:${color}">${statusLabel(city.status)}</span>
+        <span style="color:${color}">${statusLabel(city.status)}</span>${siegeInfo}
         ${charNames ? `<br/><span style="color:#fbbf24">${charNames}</span>` : ""}
       </div>`;
 
@@ -137,6 +139,20 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, onCit
       }
 
       circle.addTo(layers);
+
+      // Siege pulse ring
+      if (city.siegedBy) {
+        const pulseRing = L.circleMarker([city.lat, city.lng], {
+          radius: radius + 6,
+          color: "#ef4444",
+          fillColor: "transparent",
+          fillOpacity: 0,
+          weight: 2,
+          opacity: 0.8,
+          className: "siege-pulse",
+        });
+        pulseRing.addTo(layers);
+      }
 
       // City name label
       const label = L.marker([city.lat, city.lng], {
@@ -214,7 +230,28 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, onCit
   }, [data, viewTick, onCityClick, tradeRoutes]);
 
   return (
-    <div ref={containerRef} style={styles.container} />
+    <>
+      <style>{`
+        .siege-pulse {
+          animation: siege-pulse-anim 1.5s ease-in-out infinite;
+        }
+        @keyframes siege-pulse-anim {
+          0%, 100% { opacity: 0.3; stroke-width: 2; }
+          50% { opacity: 0.9; stroke-width: 4; }
+        }
+        .dark-tooltip {
+          background: #1e293b !important;
+          border: 1px solid #334155 !important;
+          color: #e2e8f0 !important;
+          border-radius: 6px !important;
+          padding: 4px 8px !important;
+        }
+        .dark-tooltip .leaflet-tooltip-tip {
+          border-top-color: #334155 !important;
+        }
+      `}</style>
+      <div ref={containerRef} style={styles.container} />
+    </>
   );
 }
 

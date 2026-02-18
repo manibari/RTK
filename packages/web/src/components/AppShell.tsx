@@ -85,6 +85,8 @@ export function AppShell() {
   const [summaries, setSummaries] = useState<Map<number, string>>(new Map());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [pendingCard, setPendingCard] = useState<PendingEventCard | null>(null);
+  const [headline, setHeadline] = useState<{ text: string; color: string } | null>(null);
+  const headlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoSim, setAutoSim] = useState(false);
   const [simSpeed, setSimSpeed] = useState<SimSpeed>(1);
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -135,6 +137,12 @@ export function AppShell() {
     setToasts((prev) => [...prev, { id: createToastId(), text, color }]);
   }, []);
 
+  const showHeadline = useCallback((text: string, color: string) => {
+    setHeadline({ text, color });
+    if (headlineTimerRef.current) clearTimeout(headlineTimerRef.current);
+    headlineTimerRef.current = setTimeout(() => setHeadline(null), 4000);
+  }, []);
+
   const handleAdvanceDay = useCallback(async () => {
     if (gameStatus !== "ongoing") return undefined;
     setAdvancing(true);
@@ -161,6 +169,7 @@ export function AppShell() {
             ? `${b.attackerName} 攻陷 ${b.cityName}${powerStr}`
             : `${b.attackerName} 未能攻下 ${b.cityName}${powerStr}`;
           addToast(text, b.captured ? "#ef4444" : "#64748b");
+          if (b.captured) showHeadline(`⚔ ${b.attackerName} 攻陷 ${b.cityName}！`, "#ef4444");
         }
       }
       if (result.diplomacyEvents?.length > 0) {
@@ -180,6 +189,7 @@ export function AppShell() {
       if (result.betrayalEvents?.length > 0) {
         for (const b of result.betrayalEvents) {
           addToast(`${b.characterName} 背叛了 ${b.oldFaction}，投奔 ${b.newFaction}`, "#f97316");
+          showHeadline(`${b.characterName} 叛變！投奔 ${b.newFaction}`, "#f97316");
         }
       }
       if (result.spyReports?.length > 0) {
@@ -201,6 +211,7 @@ export function AppShell() {
           const heirSuffix = d.heirName ? `｜後嗣 ${d.heirName} 加入` : "";
           const causeText = d.cause === "old_age" ? "壽終正寢" : "戰死";
           addToast(`${d.characterName} ${causeText}${suffix}${heirSuffix}`, d.cause === "old_age" ? "#64748b" : "#991b1b");
+          if (d.wasLeader) showHeadline(`${d.characterName} ${causeText}${suffix}`, "#991b1b");
         }
       }
       if (result.worldEvents?.length > 0) {
@@ -219,6 +230,7 @@ export function AppShell() {
             ? `${r.cityName} 爆發叛亂，城市脫離控制！`
             : `${r.cityName} 民變！守備-${r.garrisonLost}`;
           addToast(text, "#dc2626");
+          if (r.flippedToNeutral) showHeadline(`${r.cityName} 叛亂！城市失守！`, "#dc2626");
         }
       }
       if (result.dailySummary) {
@@ -401,6 +413,34 @@ export function AppShell() {
           {autoSim && <span style={styles.simIndicator}>模擬中...</span>}
         </div>
       </nav>
+
+      {/* Event headline banner */}
+      {headline && (
+        <div style={{
+          position: "absolute",
+          top: 48,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 1000,
+          padding: "8px 24px",
+          borderRadius: 8,
+          backgroundColor: headline.color,
+          color: "#fff",
+          fontWeight: 700,
+          fontSize: 15,
+          boxShadow: `0 4px 20px ${headline.color}80`,
+          animation: "headline-slide-in 0.3s ease-out",
+          whiteSpace: "nowrap",
+        }}>
+          {headline.text}
+        </div>
+      )}
+      <style>{`
+        @keyframes headline-slide-in {
+          from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+          to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+      `}</style>
 
       {/* Content */}
       <div style={styles.content}>

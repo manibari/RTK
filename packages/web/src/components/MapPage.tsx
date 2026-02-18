@@ -431,42 +431,43 @@ export function MapPage({
                 <span style={styles.infoLabel}>控制者</span>
                 <span>{controllerName(selectedCity.controllerId)}</span>
               </div>
-              <div style={styles.infoRow}>
-                <span style={styles.infoLabel}>金幣</span>
-                <span style={{ color: "#f59e0b", fontWeight: 600 }}>{selectedCity.gold ?? 0}</span>
-              </div>
-              <div style={styles.infoRow}>
-                <span style={styles.infoLabel}>守備</span>
-                <span style={{ color: "#3b82f6", fontWeight: 600 }}>{selectedCity.garrison ?? 0}</span>
-              </div>
-              <div style={styles.infoRow}>
-                <span style={styles.infoLabel}>開發</span>
-                <span style={{ color: "#a855f7", fontWeight: 600 }}>Lv.{selectedCity.development ?? 0}/5</span>
-              </div>
-              <div style={styles.infoRow}>
-                <span style={styles.infoLabel}>糧食</span>
-                <span style={{ color: (selectedCity.food ?? 100) < 30 ? "#ef4444" : (selectedCity.food ?? 100) < 60 ? "#f59e0b" : "#22c55e", fontWeight: 600 }}>{selectedCity.food ?? 100}</span>
-              </div>
-              {/* City loyalty */}
-              {selectedCity.controllerId && (() => {
+              {/* Visual stat bars */}
+              {(() => {
+                const gold = selectedCity.gold ?? 0;
+                const garrison = selectedCity.garrison ?? 0;
+                const dev = selectedCity.development ?? 0;
+                const food = selectedCity.food ?? 100;
                 const loyalty = cityLoyalty[selectedCity.id] ?? 50;
-                const color = loyalty < 20 ? "#ef4444" : loyalty < 40 ? "#f59e0b" : "#22c55e";
-                return (
-                  <div style={styles.infoRow}>
-                    <span style={styles.infoLabel}>忠誠</span>
-                    <span style={{ color, fontWeight: 600 }}>{Math.round(loyalty)}</span>
+                const vuln = vulnerability[selectedCity.id];
+                const StatBar = ({ label, value, max, color, text }: { label: string; value: number; max: number; color: string; text?: string }) => (
+                  <div style={{ marginBottom: 4 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#94a3b8", marginBottom: 2 }}>
+                      <span>{label}</span>
+                      <span style={{ color, fontWeight: 600 }}>{text ?? value}</span>
+                    </div>
+                    <div style={{ height: 6, backgroundColor: "#0f172a", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${Math.min(100, (value / max) * 100)}%`, backgroundColor: color, borderRadius: 3, transition: "width 0.3s ease" }} />
+                    </div>
                   </div>
                 );
-              })()}
-              {/* Vulnerability indicator */}
-              {vulnerability[selectedCity.id] && (() => {
-                const v = vulnerability[selectedCity.id];
-                const colors: Record<string, string> = { strong: "#22c55e", moderate: "#f59e0b", weak: "#ef4444" };
-                const labels: Record<string, string> = { strong: "堅固", moderate: "普通", weak: "脆弱" };
+                const goldColor = gold < 100 ? "#ef4444" : gold < 300 ? "#f59e0b" : "#f59e0b";
+                const foodColor = food < 30 ? "#ef4444" : food < 60 ? "#f59e0b" : "#22c55e";
+                const garrisonColor = garrison < 2 ? "#ef4444" : garrison < 5 ? "#f59e0b" : "#3b82f6";
+                const loyaltyColor = loyalty < 20 ? "#ef4444" : loyalty < 40 ? "#f59e0b" : "#22c55e";
                 return (
-                  <div style={styles.infoRow}>
-                    <span style={styles.infoLabel}>防禦</span>
-                    <span style={{ color: colors[v.level] ?? "#94a3b8", fontWeight: 600 }}>{labels[v.level] ?? v.level}（{v.score}）</span>
+                  <div style={{ marginTop: 4 }}>
+                    <StatBar label="金幣" value={gold} max={800} color={goldColor} />
+                    <StatBar label="守備" value={garrison} max={10} color={garrisonColor} />
+                    <StatBar label="開發" value={dev} max={5} color="#a855f7" text={`Lv.${dev}/5`} />
+                    <StatBar label="糧食" value={food} max={200} color={foodColor} />
+                    {selectedCity.controllerId && (
+                      <StatBar label="忠誠" value={Math.round(loyalty)} max={100} color={loyaltyColor} />
+                    )}
+                    {vuln && (() => {
+                      const colors: Record<string, string> = { strong: "#22c55e", moderate: "#f59e0b", weak: "#ef4444" };
+                      const labels: Record<string, string> = { strong: "堅固", moderate: "普通", weak: "脆弱" };
+                      return <StatBar label="防禦" value={vuln.score} max={50} color={colors[vuln.level] ?? "#94a3b8"} text={`${labels[vuln.level]}(${vuln.score})`} />;
+                    })()}
                   </div>
                 );
               })()}
