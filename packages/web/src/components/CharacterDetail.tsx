@@ -26,6 +26,13 @@ interface CharacterInfo {
   parentId?: string;
 }
 
+interface MentorPair {
+  mentorId: string;
+  apprenticeId: string;
+  factionId: string;
+  startTick: number;
+}
+
 const ROLE_LABELS: Record<CharacterRole, { label: string; color: string }> = {
   general: { label: "將軍", color: "#ef4444" },
   governor: { label: "太守", color: "#22c55e" },
@@ -100,6 +107,7 @@ export function CharacterDetail({
   const [prestige, setPrestige] = useState(0);
   const [achievements, setAchievements] = useState<string[]>([]);
   const [favorability, setFavorability] = useState(60);
+  const [mentorPairs, setMentorPairs] = useState<MentorPair[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -111,7 +119,8 @@ export function CharacterDetail({
       trpc.simulation.getEventLog.query({ characterId }),
       trpc.simulation.getCharacterAchievements.query({ characterId }),
       trpc.simulation.getCharacterFavorability.query({ characterId }),
-    ]).then(([char, rels, chars, events, achievementData, favData]) => {
+      trpc.simulation.getMentorPairs.query(),
+    ]).then(([char, rels, chars, events, achievementData, favData, mentors]) => {
       setCharacter(char as CharacterInfo | null);
       setRelationships(rels as RelationshipInfo[]);
       setAllChars(new Map((chars as CharacterInfo[]).map((c) => [c.id, c])));
@@ -120,6 +129,7 @@ export function CharacterDetail({
       setPrestige(ad.prestige);
       setAchievements(ad.achievements);
       setFavorability((favData as { favorability: number }).favorability);
+      setMentorPairs(mentors as MentorPair[]);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [characterId]);
 
@@ -183,7 +193,7 @@ export function CharacterDetail({
                 </select>
               </div>
             )}
-            {isPlayerFaction && character.role !== undefined && (
+            {isPlayerFaction && characterId !== "liu_bei" && (
               <button
                 style={{ marginTop: 4, padding: "2px 8px", fontSize: 11, backgroundColor: "#7c3aed", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
                 onClick={async () => {
@@ -266,6 +276,74 @@ export function CharacterDetail({
             <span style={{ fontSize: 12, color: "#94a3b8" }}>{favorability}</span>
           </div>
         </div>
+
+        {/* Mentor/Apprentice */}
+        {(() => {
+          const asMentor = mentorPairs.find((p) => p.mentorId === characterId);
+          const asApprentice = mentorPairs.find((p) => p.apprenticeId === characterId);
+          const hasMentorRole = asMentor || asApprentice;
+          // Eligible apprentice targets: same-faction chars in same city, not already in a pair
+          const pairedIds = new Set(mentorPairs.flatMap((p) => [p.mentorId, p.apprenticeId]));
+          const eligibleApprentices = isPlayerFaction && !pairedIds.has(characterId)
+            ? [...allChars.values()].filter((c) =>
+                c.id !== characterId &&
+                c.cityId === character.cityId &&
+                !pairedIds.has(c.id),
+              )
+            : [];
+
+          return (hasMentorRole || (isPlayerFaction && eligibleApprentices.length > 0)) ? (
+            <div style={styles.section}>
+              <h3 style={styles.subtitle}>師徒</h3>
+              {asMentor && (
+                <div style={{ fontSize: 13, color: "#f59e0b", marginBottom: 4 }}>
+                  師父 → 學徒：
+                  <span
+                    style={{ color: "#e2e8f0", cursor: "pointer", fontWeight: 600, marginLeft: 4 }}
+                    onClick={() => onCharacterClick?.(asMentor.apprenticeId)}
+                  >
+                    {allChars.get(asMentor.apprenticeId)?.name ?? asMentor.apprenticeId}
+                  </span>
+                </div>
+              )}
+              {asApprentice && (
+                <div style={{ fontSize: 13, color: "#3b82f6", marginBottom: 4 }}>
+                  學徒 ← 師父：
+                  <span
+                    style={{ color: "#e2e8f0", cursor: "pointer", fontWeight: 600, marginLeft: 4 }}
+                    onClick={() => onCharacterClick?.(asApprentice.mentorId)}
+                  >
+                    {allChars.get(asApprentice.mentorId)?.name ?? asApprentice.mentorId}
+                  </span>
+                </div>
+              )}
+              {isPlayerFaction && !pairedIds.has(characterId) && eligibleApprentices.length > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  <select
+                    style={styles.roleDropdown}
+                    defaultValue=""
+                    onChange={async (e) => {
+                      if (!e.target.value) return;
+                      try {
+                        await trpc.simulation.queueCommand.mutate({
+                          type: "assign_mentor",
+                          characterId: characterId,
+                          targetCityId: character.cityId ?? "",
+                          targetCharacterId: e.target.value,
+                        });
+                      } catch { /* ignore */ }
+                    }}
+                  >
+                    <option value="">指派學徒...</option>
+                    {eligibleApprentices.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          ) : null;
+        })()}
 
         {/* Relationships */}
         <div style={styles.section}>

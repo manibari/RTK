@@ -3284,7 +3284,7 @@ export class SimulationService {
       (c) => c.controllerId && playerFaction.members.includes(c.controllerId),
     );
 
-    const { cityUpdates, charUpdate } = applyEventCardChoice(choice, playerFaction.leaderId, alliedCities, leader);
+    const { cityUpdates, charUpdate, moraleDelta, loyaltyDelta } = applyEventCardChoice(choice, playerFaction.leaderId, alliedCities, leader);
 
     for (const { cityId, updates } of cityUpdates) {
       await this.repo.updatePlace(cityId, updates);
@@ -3292,6 +3292,20 @@ export class SimulationService {
 
     if (charUpdate) {
       await this.repo.createCharacter({ ...leader, ...charUpdate });
+    }
+
+    // Apply morale delta from event card
+    if (moraleDelta !== 0) {
+      const currentMorale = this.factionMorale.get("shu") ?? 50;
+      this.factionMorale.set("shu", Math.max(0, Math.min(100, currentMorale + moraleDelta)));
+    }
+
+    // Apply loyalty delta to all allied cities
+    if (loyaltyDelta !== 0) {
+      for (const city of alliedCities) {
+        const currentLoyalty = this.cityLoyalty.get(city.id) ?? 50;
+        this.cityLoyalty.set(city.id, Math.max(0, Math.min(100, currentLoyalty + loyaltyDelta)));
+      }
     }
 
     this.pendingCard = null;

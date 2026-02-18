@@ -22,6 +22,13 @@ const SEASON_INFO: Record<Season, { label: string; color: string }> = {
   winter: { label: "冬", color: "#3b82f6" },
 };
 
+interface BattleRound {
+  phase: string;
+  attackerDelta: number;
+  defenderDelta: number;
+  note?: string;
+}
+
 interface BattleResult {
   tick: number;
   cityId: string;
@@ -34,6 +41,8 @@ interface BattleResult {
   captured: boolean;
   attackPower?: number;
   defensePower?: number;
+  tactic?: string;
+  rounds?: BattleRound[];
 }
 
 interface DiplomacyEvent {
