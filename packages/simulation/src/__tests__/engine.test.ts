@@ -22,7 +22,7 @@ describe("Engine", () => {
     const engine = new Engine();
     engine.loadCharacters([
       { id: "a", name: "A", traits: ["brave", "loyal"] },
-      { id: "b", name: "B", traits: ["brave", "wise"] },
+      { id: "b", name: "B", traits: ["brave", "loyal"] },
     ]);
     engine.loadRelationships([
       { sourceId: "a", targetId: "b", intimacy: 50, relationshipType: "neutral" },
