@@ -10,6 +10,8 @@ export type CharacterRole = "general" | "governor" | "diplomat" | "spymaster";
 export interface CharacterNode {
   id: string;
   name: string;
+  biography?: string;
+  avatarUrl?: string;
   traits: string[];
   cityId?: string;
   military: number;
@@ -59,6 +61,7 @@ export type CityPath = "fortress" | "trade_hub" | "cultural" | "breadbasket";
 export interface PlaceNode {
   id: string;
   name: string;
+  description?: string;
   lat: number;
   lng: number;
   status: CityStatus;
@@ -104,8 +107,18 @@ export interface SpyMission {
   status: SpyMissionStatus;
 }
 
+export type RoadType = "official" | "mountain" | "waterway";
+
+export interface RoadEdge {
+  fromCityId: string;
+  toCityId: string;
+  type: RoadType;
+  travelTime: number; // official=1, waterway=2, mountain=3
+}
+
 export interface MapData {
   cities: PlaceNode[];
   characters: (CharacterNode & { cityId: string })[];
   movements: Movement[];
+  roads: RoadEdge[];
 }

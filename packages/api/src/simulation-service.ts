@@ -3,6 +3,7 @@ import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode,
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
 import { NarrativeService } from "./narrative/narrative-service.js";
 import { evaluateNPCDecisions, evaluateNPCSpyDecisions } from "./ai/npc-ai.js";
+import { buildAdjacencyMap, findRoad, getReachableNeighbors, type AdjacencyMap } from "./roads.js";
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { drawEventCard, applyEventCardChoice, type EventCard, type PendingEventCard } from "./event-cards.js";
@@ -263,11 +264,11 @@ export interface Technology {
 }
 
 export const TECHNOLOGIES: Technology[] = [
-  { id: "iron_working", name: "鍛鐵術", description: "鍛冶場效果+50%", cost: 500, turns: 5 },
-  { id: "archery", name: "弓術", description: "全員智力+1", cost: 400, turns: 4 },
-  { id: "logistics", name: "兵站學", description: "移動速度+1", cost: 600, turns: 6 },
-  { id: "spy_network", name: "諜報網", description: "諜報成功率+20%", cost: 450, turns: 4 },
-  { id: "divine_strategy", name: "神算", description: "全員戰術+1", cost: 700, turns: 8 },
+  { id: "iron_working", name: "鍛鐵術", description: "鍛冶場效果+50%", cost: 500, turns: 8 },
+  { id: "archery", name: "弓術", description: "全員智力+1", cost: 400, turns: 6 },
+  { id: "logistics", name: "兵站學", description: "移動速度+1", cost: 600, turns: 9 },
+  { id: "spy_network", name: "諜報網", description: "諜報成功率+20%", cost: 450, turns: 6 },
+  { id: "divine_strategy", name: "神算", description: "全員戰術+1", cost: 700, turns: 12 },
 ];
 
 export interface FactionResearch {
@@ -281,7 +282,7 @@ export interface FactionTechState {
 }
 
 // Neutral characters — IDs not in any faction
-const NEUTRAL_IDS = ["xu_shu", "pang_tong", "huang_zhong", "ma_chao", "gan_ning", "xu_huang"];
+const NEUTRAL_IDS = ["xu_shu", "pang_tong", "huang_zhong", "ma_chao", "sima_yi", "yan_liang", "wen_chou", "zhang_jiao", "hua_tuo", "yuan_shao"];
 
 // Role bonuses
 const ROLE_LABELS: Record<CharacterRole, string> = {
@@ -368,9 +369,9 @@ export interface FactionInfo {
 // Faction definitions (mutable - recruitment can change members)
 function createDefaultFactions(): { id: string; leaderId: string; members: string[]; color: string }[] {
   return [
-    { id: "shu", leaderId: "liu_bei", members: ["liu_bei", "guan_yu", "zhang_fei", "zhuge_liang", "zhao_yun"], color: "#3b82f6" },
-    { id: "wei", leaderId: "cao_cao", members: ["cao_cao"], color: "#ef4444" },
-    { id: "wu", leaderId: "sun_quan", members: ["sun_quan", "zhou_yu"], color: "#22c55e" },
+    { id: "shu", leaderId: "liu_bei", members: ["liu_bei", "guan_yu", "zhang_fei", "zhuge_liang", "zhao_yun", "wei_yan", "jiang_wei", "fa_zheng"], color: "#3b82f6" },
+    { id: "wei", leaderId: "cao_cao", members: ["cao_cao", "xu_huang", "xiahou_dun", "xiahou_yuan", "dian_wei", "xun_yu", "guo_jia", "zhang_liao"], color: "#ef4444" },
+    { id: "wu", leaderId: "sun_quan", members: ["sun_quan", "zhou_yu", "gan_ning", "lu_su", "huang_gai", "taishi_ci", "lv_meng"], color: "#22c55e" },
     { id: "lu_bu", leaderId: "lu_bu", members: ["lu_bu", "diao_chan"], color: "#a855f7" },
   ];
 }
@@ -482,7 +483,7 @@ export class SimulationService {
   private heirCounter = 0;
   private factionTrust = new Map<string, number>(); // "fA:fB" sorted key -> trust 0-100
   private diplomaticVictoryTicks = 0; // consecutive ticks with all surviving factions allied
-  private economicVictoryTicks = 0;  // consecutive ticks with >80% total gold
+  private economicVictoryTicks = 0;  // consecutive ticks with >85% total gold
   private cityLoyalty = new Map<string, number>(); // cityId -> loyalty 0-100
   private factionTraditions = new Map<string, FactionTradition>(); // factionId -> active tradition
   private factionBattleCount = new Map<string, number>(); // factionId -> total battles
@@ -979,7 +980,7 @@ export class SimulationService {
   }
 
   private async processMentorship(): Promise<void> {
-    if (this.currentTick % 5 !== 0) return; // every 5 ticks
+    if (this.currentTick % 10 !== 0) return; // every 10 ticks
     const allChars = await this.repo.getAllCharacters();
     const charMap = new Map(allChars.map((c) => [c.id, c]));
 
@@ -1082,6 +1083,12 @@ export class SimulationService {
     cao_cao: "曹", sun_quan: "孫", zhao_yun: "趙", lu_bu: "呂",
     zhou_yu: "周", xu_shu: "徐", pang_tong: "龐", huang_zhong: "黃",
     ma_chao: "馬", gan_ning: "甘", xu_huang: "徐", diao_chan: "貂",
+    wei_yan: "魏", jiang_wei: "姜", fa_zheng: "法",
+    xiahou_dun: "夏侯", xiahou_yuan: "夏侯", dian_wei: "典",
+    xun_yu: "荀", guo_jia: "郭", zhang_liao: "張",
+    lu_su: "魯", huang_gai: "黃", taishi_ci: "太史", lv_meng: "呂",
+    sima_yi: "司馬", yan_liang: "顏", wen_chou: "文",
+    zhang_jiao: "張", hua_tuo: "華", yuan_shao: "袁",
   };
 
   private readonly HEIR_GIVEN_NAMES = ["禪", "封", "統", "延", "霸", "恪", "瑁", "安", "平", "興", "昭", "琮", "瓚", "虎", "彪", "雄"];
@@ -1467,6 +1474,14 @@ export class SimulationService {
     return time;
   }
 
+  private travelTimeForRoad(charId: string, road: import("@rtk/graph-db").RoadEdge): number {
+    const faction = this.getFactionOf(charId);
+    let time = road.travelTime;
+    time += SEASON_TRAVEL_PENALTY[getSeason(this.currentTick)];
+    if (faction && this.hasTech(faction, "logistics")) time = Math.max(1, time - 1);
+    return time;
+  }
+
   async advanceDay(): Promise<AdvanceDayResult> {
     // Prevent advancing after game ends
     if (this.gameState.status !== "ongoing") {
@@ -1764,9 +1779,12 @@ export class SimulationService {
   private async runNPCDecisions(): Promise<void> {
     const characters = await this.repo.getAllCharacters();
     const cities = await this.repo.getAllPlaces();
+    const cityMap = new Map(cities.map((c) => [c.id, c]));
+    const roads = await this.repo.getAllRoads();
+    const adjacency = buildAdjacencyMap(roads);
 
     const rels = this.engine.getRelationships() as import("@rtk/graph-db").RelationshipEdge[];
-    const decisions = evaluateNPCDecisions(FACTIONS, characters, cities, "shu", this.alliances, rels);
+    const decisions = evaluateNPCDecisions(FACTIONS, characters, cities, "shu", this.alliances, rels, adjacency, cityMap);
 
     for (const decision of decisions) {
       if (decision.action === "stay" || !decision.targetCityId) continue;
@@ -1775,10 +1793,12 @@ export class SimulationService {
       const char = await this.repo.getCharacter(decision.characterId);
       if (!char?.cityId || char.cityId === decision.targetCityId) continue;
 
+      // Validate road exists
+      const road = findRoad(adjacency, char.cityId, decision.targetCityId);
+      if (!road) continue;
+
       this.commandedThisTick.add(decision.characterId);
-      const originCity = cities.find((c) => c.id === char.cityId);
-      const baseTravelTime = decision.action === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
-      const travelTime = this.travelTimeFor(decision.characterId, originCity, baseTravelTime);
+      const travelTime = this.travelTimeForRoad(decision.characterId, road);
 
       // Store NPC tactic if attacking
       if (decision.action === "attack" && decision.tactic) {
@@ -2067,10 +2087,22 @@ export class SimulationService {
       if (!char || !char.cityId) continue;
       if (char.cityId === cmd.targetCityId) continue;
 
+      // Road-based movement: require adjacent road connection
+      const roads = await this.repo.getAllRoads();
+      const adjacency = buildAdjacencyMap(roads);
+      const road = findRoad(adjacency, char.cityId, cmd.targetCityId);
+      if (!road) continue; // No road — skip command
+
+      // Waterway check
+      const cityMap = new Map(cities.map((c) => [c.id, c]));
+      if (road.type === "waterway") {
+        const origin = cityMap.get(char.cityId);
+        const dest = cityMap.get(cmd.targetCityId);
+        if (origin?.specialty !== "harbor" && dest?.specialty !== "harbor") continue;
+      }
+
       this.commandedThisTick.add(cmd.characterId);
-      const originCity = cities.find((c) => c.id === char.cityId);
-      const baseTravelTime = cmd.type === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
-      const travelTime = this.travelTimeFor(cmd.characterId, originCity, baseTravelTime);
+      const travelTime = this.travelTimeForRoad(cmd.characterId, road);
 
       await this.repo.addMovement({
         characterId: cmd.characterId,
@@ -2089,19 +2121,22 @@ export class SimulationService {
     const cities = await this.repo.getAllPlaces();
     if (cities.length < 2) return;
 
-    const activeCityIds = cities.filter((c) => c.status !== "dead").map((c) => c.id);
-    if (activeCityIds.length < 2) return;
+    const cityMap = new Map(cities.map((c) => [c.id, c]));
+    const roads = await this.repo.getAllRoads();
+    const adjacency = buildAdjacencyMap(roads);
 
     for (const char of characters) {
       if (!char.cityId || Math.random() > 0.1) continue;
       if (this.commandedThisTick.has(char.id)) continue;
 
-      const destinations = activeCityIds.filter((id) => id !== char.cityId);
-      if (destinations.length === 0) continue;
+      const neighbors = getReachableNeighbors(char.cityId, adjacency, cityMap);
+      if (neighbors.length === 0) continue;
 
-      const destId = destinations[Math.floor(Math.random() * destinations.length)];
-      const originCity = cities.find((c) => c.id === char.cityId);
-      const travelTime = this.travelTimeFor(char.id, originCity, 1 + Math.floor(Math.random() * 3));
+      const destId = neighbors[Math.floor(Math.random() * neighbors.length)];
+      const road = findRoad(adjacency, char.cityId, destId);
+      if (!road) continue;
+
+      const travelTime = this.travelTimeForRoad(char.id, road);
 
       await this.repo.addMovement({
         characterId: char.id,
@@ -2726,7 +2761,7 @@ export class SimulationService {
       if (city.status === "dead" || !city.controllerId) continue;
       // Sieged cities produce no gold
       if (city.siegedBy) continue;
-      const baseIncome = city.tier === "major" ? 100 : 50;
+      const baseIncome = city.tier === "major" ? 60 : 30;
       let multiplier = 1 + city.development * 0.3;
       // Unsupplied cities: -30% gold production
       if (supplyStatus[city.id] === false) multiplier *= 0.7;
@@ -3141,7 +3176,7 @@ export class SimulationService {
             newFaction.members.push(captured.id);
           }
           // Growth: recruiter's charm +1 (cap 10)
-          if (attacker.charm < 10) {
+          if (attacker.charm < 7) {
             await this.repo.createCharacter({ ...attacker, charm: attacker.charm + 1, skills: gainSkill(attacker, "leadership") });
           }
         }
@@ -3671,8 +3706,8 @@ export class SimulationService {
 
     return {
       conquest: { playerCities: playerMajors, totalMajor: majorCities.length },
-      diplomacy: { consecutiveTicks: this.diplomaticVictoryTicks, required: 10, allAllied },
-      economy: { consecutiveTicks: this.economicVictoryTicks, required: 5, goldShare },
+      diplomacy: { consecutiveTicks: this.diplomaticVictoryTicks, required: 20, allAllied },
+      economy: { consecutiveTicks: this.economicVictoryTicks, required: 10, goldShare },
     };
   }
 
@@ -3946,7 +3981,7 @@ export class SimulationService {
     });
     if (allAllied) {
       this.diplomaticVictoryTicks++;
-      if (this.diplomaticVictoryTicks >= 10) {
+      if (this.diplomaticVictoryTicks >= 20) {
         this.gameState = { status: "victory", winnerFaction: "shu", tick: this.currentTick, winType: "diplomacy" };
         return "victory";
       }
@@ -3963,9 +3998,9 @@ export class SimulationService {
       totalGold += city.gold;
       if (FACTIONS[0].members.includes(city.controllerId)) shuGold += city.gold;
     }
-    if (totalGold > 0 && shuGold / totalGold >= 0.8) {
+    if (totalGold > 0 && shuGold / totalGold >= 0.85) {
       this.economicVictoryTicks++;
-      if (this.economicVictoryTicks >= 5) {
+      if (this.economicVictoryTicks >= 10) {
         this.gameState = { status: "victory", winnerFaction: "shu", tick: this.currentTick, winType: "economy" };
         return "victory";
       }

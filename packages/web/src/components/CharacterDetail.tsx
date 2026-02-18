@@ -15,6 +15,8 @@ type CharacterRole = "general" | "governor" | "diplomat" | "spymaster";
 interface CharacterInfo {
   id: string;
   name: string;
+  biography?: string;
+  avatarUrl?: string;
   traits: string[];
   cityId?: string;
   military: number;
@@ -150,6 +152,14 @@ export function CharacterDetail({
       <div style={styles.panel} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div style={styles.header}>
+          {character.avatarUrl && (
+            <img
+              src={character.avatarUrl}
+              alt={character.name}
+              style={styles.avatar}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          )}
           <div>
             <h2 style={styles.name}>
               {character.name}
@@ -217,6 +227,9 @@ export function CharacterDetail({
               <span key={t} style={styles.trait}>{t}</span>
             ))}
           </div>
+          {character.biography && (
+            <p style={styles.biography}>{character.biography}</p>
+          )}
           <div style={styles.ratingGrid}>
             <div style={styles.ratingItem}>
               <span style={{ ...styles.ratingLabel, color: "#ef4444" }}>武</span>
@@ -422,6 +435,22 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#e2e8f0",
   },
   loading: { textAlign: "center", color: "#64748b" },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    objectFit: "cover" as const,
+    marginRight: 12,
+    flexShrink: 0,
+  },
+  biography: {
+    fontSize: 13,
+    color: "#94a3b8",
+    lineHeight: 1.5,
+    marginTop: 8,
+    marginBottom: 8,
+    fontStyle: "italic",
+  },
   header: {
     display: "flex",
     justifyContent: "space-between",

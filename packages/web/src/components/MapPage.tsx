@@ -25,6 +25,7 @@ interface UnitComposition {
 interface PlaceNode {
   id: string;
   name: string;
+  description?: string;
   lat: number;
   lng: number;
   status: "allied" | "hostile" | "neutral" | "dead";
@@ -91,10 +92,18 @@ interface Movement {
   arrivalTick: number;
 }
 
+interface RoadOnMap {
+  fromCityId: string;
+  toCityId: string;
+  type: "official" | "mountain" | "waterway";
+  travelTime: number;
+}
+
 interface MapData {
   cities: PlaceNode[];
   characters: CharacterOnMap[];
   movements: Movement[];
+  roads?: RoadOnMap[];
 }
 
 interface FactionInfo {
@@ -165,28 +174,34 @@ export function MapPage({
   const [cityLoyalty, setCityLoyalty] = useState<Record<string, number>>({});
   const [vulnerability, setVulnerability] = useState<Record<string, { score: number; level: string }>>({});
   const [droughtCities, setDroughtCities] = useState<string[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(true);
 
   const fetchMapData = useCallback(async (tick: number) => {
     try {
-      const [data, facs, supply, trades, loyalty, vuln, drought] = await Promise.all([
+      // Core data: map + factions (must succeed)
+      const [data, facs] = await Promise.all([
         trpc.map.getMapData.query({ tick }),
         trpc.simulation.getFactions.query(),
+      ]);
+      setMapData(data as MapData);
+      setFactions(facs as FactionInfo[]);
+
+      // Supplementary data: fail individually without breaking the map
+      const [supply, trades, loyalty, vuln, drought] = await Promise.allSettled([
         trpc.simulation.getSupplyStatus.query(),
         trpc.simulation.getTradeRoutes.query(),
         trpc.simulation.getCityLoyalty.query(),
         trpc.simulation.getCityVulnerability.query(),
         trpc.simulation.getDroughtCities.query(),
       ]);
-      setMapData(data as MapData);
-      setFactions(facs as FactionInfo[]);
-      setSupplyStatus(supply as Record<string, boolean>);
-      setTradeRoutes((trades as { cityA: string; cityB: string }[]) ?? []);
-      setCityLoyalty(loyalty as Record<string, number>);
-      setVulnerability(vuln as Record<string, { score: number; level: string }>);
-      setDroughtCities(drought as string[]);
-    } catch {
-      // silently fail
+      if (supply.status === "fulfilled") setSupplyStatus(supply.value as Record<string, boolean>);
+      if (trades.status === "fulfilled") setTradeRoutes((trades.value as { cityA: string; cityB: string }[]) ?? []);
+      if (loyalty.status === "fulfilled") setCityLoyalty(loyalty.value as Record<string, number>);
+      if (vuln.status === "fulfilled") setVulnerability(vuln.value as Record<string, { score: number; level: string }>);
+      if (drought.status === "fulfilled") setDroughtCities(drought.value as string[]);
+    } catch (err) {
+      console.error("[MapPage] fetchMapData failed:", err);
     } finally {
       setLoading(false);
     }
@@ -237,6 +252,35 @@ export function MapPage({
       (mapData?.characters ?? []).filter((c) => !allFactionMembers.has(c.id)).map((c) => c.id),
     );
   }, [factions, mapData]);
+
+  // Compute reachable neighbor cities for selected character
+  const reachableCityIds = useMemo(() => {
+    if (!selectedChar || !mapData?.roads) return new Set<string>();
+    const char = mapData.characters.find((c) => c.id === selectedChar);
+    if (!char?.cityId) return new Set<string>();
+
+    const cityMap = new Map(mapData.cities.map((c) => [c.id, c]));
+    const neighbors = new Set<string>();
+
+    for (const road of mapData.roads) {
+      let neighborId: string | null = null;
+      if (road.fromCityId === char.cityId) neighborId = road.toCityId;
+      else if (road.toCityId === char.cityId) neighborId = road.fromCityId;
+      if (!neighborId) continue;
+
+      const neighborCity = cityMap.get(neighborId);
+      if (!neighborCity || neighborCity.status === "dead") continue;
+
+      // Waterway check: needs harbor on either end
+      if (road.type === "waterway") {
+        const origin = cityMap.get(char.cityId);
+        if (origin?.specialty !== "harbor" && neighborCity.specialty !== "harbor") continue;
+      }
+
+      neighbors.add(neighborId);
+    }
+    return neighbors;
+  }, [selectedChar, mapData]);
 
   // Fetch battle prediction when attacker and target are selected
   useEffect(() => {
@@ -380,39 +424,8 @@ export function MapPage({
 
   return (
     <div style={styles.layout}>
-      <div style={styles.main}>
-        <header style={styles.header}>
-          <div style={styles.headerLeft}>
-            <h1 style={styles.title}>RTK - Strategic Map</h1>
-            <span style={styles.tick}>Day {viewTick}{viewTick !== currentTick ? ` (live: ${currentTick})` : ""}</span>
-            {commandCount > 0 && (
-              <span style={styles.cmdBadge}>{commandCount} 指令待執行</span>
-            )}
-          </div>
-          <div style={styles.controls}>
-            <button
-              onClick={handleAdvance}
-              disabled={advancing}
-              style={{
-                ...styles.button,
-                opacity: advancing ? 0.6 : 1,
-                cursor: advancing ? "not-allowed" : "pointer",
-              }}
-            >
-              {advancing ? "推進中..." : "推進一天"}
-            </button>
-          </div>
-        </header>
-
-        <Timeline
-          currentTick={currentTick}
-          viewTick={viewTick}
-          onTickChange={onTickChange}
-          playing={playing}
-          onPlayToggle={onPlayToggle}
-          markers={timelineMarkers}
-        />
-
+      {/* Map fills entire container */}
+      <div style={styles.mapContainer}>
         {loading ? (
           <div style={styles.loading}>Loading map...</div>
         ) : (
@@ -423,16 +436,62 @@ export function MapPage({
             tradeRoutes={tradeRoutes}
             supplyStatus={supplyStatus}
             droughtCities={droughtCities}
+            roads={mapData?.roads}
+            highlightCityIds={reachableCityIds.size > 0 ? reachableCityIds : undefined}
             onCityClick={handleCityClick}
           />
         )}
       </div>
 
-      {/* Sidebar */}
-      <aside style={styles.sidebar}>
+      {/* Floating header */}
+      <div style={styles.headerOverlay}>
+        <h1 style={styles.title}>RTK</h1>
+        <span style={styles.tick}>Day {viewTick}{viewTick !== currentTick ? ` (live: ${currentTick})` : ""}</span>
+        {commandCount > 0 && (
+          <span style={styles.cmdBadge}>{commandCount} 指令待執行</span>
+        )}
+        <button
+          onClick={handleAdvance}
+          disabled={advancing}
+          style={{
+            ...styles.button,
+            opacity: advancing ? 0.6 : 1,
+            cursor: advancing ? "not-allowed" : "pointer",
+          }}
+        >
+          {advancing ? "推進中..." : "推進一天"}
+        </button>
+      </div>
+
+      {/* Floating timeline at bottom */}
+      <div style={{ ...styles.timelineOverlay, right: sidebarOpen ? 296 : 12 }}>
+        <Timeline
+          currentTick={currentTick}
+          viewTick={viewTick}
+          onTickChange={onTickChange}
+          playing={playing}
+          onPlayToggle={onPlayToggle}
+          markers={timelineMarkers}
+        />
+      </div>
+
+      {/* Sidebar toggle button */}
+      <button
+        style={styles.sidebarToggle}
+        onClick={() => setSidebarOpen((o) => !o)}
+      >
+        {sidebarOpen ? "✕" : "☰"}
+      </button>
+
+      {/* Floating sidebar */}
+      {sidebarOpen && (
+      <aside style={styles.sidebarOverlay}>
         {selectedCity ? (
           <>
             <h2 style={styles.sideTitle}>{selectedCity.name}</h2>
+            {selectedCity.description && (
+              <p style={{ fontSize: 13, color: "#94a3b8", marginTop: -4, marginBottom: 8, fontStyle: "italic" }}>{selectedCity.description}</p>
+            )}
             <div style={styles.cityInfo}>
               <div style={styles.infoRow}>
                 <span style={styles.infoLabel}>狀態</span>
@@ -563,14 +622,20 @@ export function MapPage({
                     </span>
                   </div>
                 )}
-                <div style={styles.cmdButtons}>
-                  <button style={styles.cmdMove} onClick={() => handleCommand("move")}>
-                    移動至此
-                  </button>
-                  <button style={styles.cmdAttack} onClick={() => handleCommand("attack")}>
-                    攻擊此城
-                  </button>
-                </div>
+                {selectedCity && reachableCityIds.size > 0 && !reachableCityIds.has(selectedCity.id) ? (
+                  <div style={{ fontSize: 12, color: "#94a3b8", padding: "6px 0" }}>
+                    無道路連接
+                  </div>
+                ) : (
+                  <div style={styles.cmdButtons}>
+                    <button style={styles.cmdMove} onClick={() => handleCommand("move")}>
+                      移動至此
+                    </button>
+                    <button style={styles.cmdAttack} onClick={() => handleCommand("attack")}>
+                      攻擊此城
+                    </button>
+                  </div>
+                )}
                 <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontSize: 11, color: "#94a3b8" }}>戰術：</span>
                   <select
@@ -932,6 +997,7 @@ export function MapPage({
           </>
         )}
       </aside>
+      )}
 
       {/* Character detail modal */}
       {detailCharId && (
@@ -972,17 +1038,41 @@ function statusLabel(status: string): string {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  layout: { display: "flex", height: "100%" },
-  main: { flex: 1, display: "flex", flexDirection: "column", padding: 20 },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 },
-  headerLeft: { display: "flex", alignItems: "center", gap: 12 },
-  title: { fontSize: 22, fontWeight: "bold", margin: 0 },
-  tick: { fontSize: 14, color: "#f59e0b", backgroundColor: "#1e293b", padding: "4px 10px", borderRadius: 6, fontWeight: 600 },
+  layout: { position: "relative", flex: 1, height: "100%", overflow: "hidden" },
+  mapContainer: { position: "absolute", inset: 0, display: "flex", flexDirection: "column" },
+  loading: { height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#64748b" },
+  headerOverlay: {
+    position: "absolute", top: 12, left: 12, zIndex: 500,
+    display: "flex", alignItems: "center", gap: 10,
+    backgroundColor: "rgba(15,23,42,0.85)", backdropFilter: "blur(8px)",
+    padding: "8px 16px", borderRadius: 10,
+    pointerEvents: "auto",
+  },
+  title: { fontSize: 18, fontWeight: "bold", margin: 0, color: "#e2e8f0" },
+  tick: { fontSize: 13, color: "#f59e0b", fontWeight: 600 },
   cmdBadge: { fontSize: 12, color: "#0f172a", backgroundColor: "#f59e0b", padding: "2px 8px", borderRadius: 10, fontWeight: 700 },
-  controls: { display: "flex", alignItems: "center", gap: 8 },
-  button: { padding: "8px 16px", borderRadius: 6, border: "none", backgroundColor: "#f59e0b", color: "#0f172a", fontSize: 14, fontWeight: 700 },
-  loading: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#64748b" },
-  sidebar: { width: 280, padding: 20, backgroundColor: "#1e293b", borderLeft: "1px solid #334155", color: "#e2e8f0", overflowY: "auto" },
+  button: { padding: "6px 14px", borderRadius: 6, border: "none", backgroundColor: "#f59e0b", color: "#0f172a", fontSize: 13, fontWeight: 700 },
+  timelineOverlay: {
+    position: "absolute", bottom: 12, left: 12, zIndex: 500,
+    backgroundColor: "rgba(15,23,42,0.85)", backdropFilter: "blur(8px)",
+    padding: "6px 12px", borderRadius: 10,
+    pointerEvents: "auto",
+  },
+  sidebarToggle: {
+    position: "absolute", top: 12, right: 12, zIndex: 600,
+    width: 36, height: 36, borderRadius: 8,
+    backgroundColor: "rgba(15,23,42,0.85)", border: "1px solid #334155",
+    color: "#e2e8f0", cursor: "pointer", fontSize: 18,
+    display: "flex", alignItems: "center", justifyContent: "center",
+  },
+  sidebarOverlay: {
+    position: "absolute", top: 56, right: 12, bottom: 12,
+    width: 280, zIndex: 500,
+    backgroundColor: "rgba(30,41,59,0.92)", backdropFilter: "blur(12px)",
+    borderRadius: 12, padding: 16, overflowY: "auto",
+    color: "#e2e8f0",
+    pointerEvents: "auto",
+  },
   sideTitle: { fontSize: 18, fontWeight: "bold", marginTop: 0, marginBottom: 16 },
   sideSubtitle: { fontSize: 14, fontWeight: 600, marginTop: 16, marginBottom: 8, paddingTop: 12, borderTop: "1px solid #334155" },
   cityInfo: { display: "flex", flexDirection: "column", gap: 8 },
@@ -991,12 +1081,12 @@ const styles: Record<string, React.CSSProperties> = {
   hint: { color: "#64748b", fontStyle: "italic" },
   emptyText: { fontSize: 13, color: "#64748b", fontStyle: "italic" },
   charList: { display: "flex", flexDirection: "column", gap: 6 },
-  charItem: { padding: "6px 10px", backgroundColor: "#0f172a", borderRadius: 6 },
+  charItem: { padding: "6px 10px", backgroundColor: "rgba(15,23,42,0.6)", borderRadius: 6 },
   charName: { fontSize: 14, fontWeight: 600, display: "block" },
   charTraits: { fontSize: 12, color: "#94a3b8", display: "block", marginTop: 2 },
   selectedTag: { fontSize: 10, color: "#f59e0b", fontWeight: 700, marginTop: 4, display: "block" },
   detailBtn: { fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid #334155", backgroundColor: "transparent", color: "#94a3b8", cursor: "pointer" },
-  cmdSection: { marginTop: 12, padding: "10px 12px", backgroundColor: "#0f172a", borderRadius: 8, borderLeft: "3px solid #f59e0b" },
+  cmdSection: { marginTop: 12, padding: "10px 12px", backgroundColor: "rgba(15,23,42,0.6)", borderRadius: 8, borderLeft: "3px solid #f59e0b" },
   cmdLabel: { fontSize: 12, color: "#f59e0b", margin: "0 0 8px" },
   predictionRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   cmdButtons: { display: "flex", gap: 8 },
@@ -1013,7 +1103,7 @@ const styles: Record<string, React.CSSProperties> = {
   factionName: { fontWeight: 600 },
   factionStats: { color: "#94a3b8", marginLeft: "auto" },
   battleList: { display: "flex", flexDirection: "column", gap: 6 },
-  battleItem: { padding: "6px 10px", backgroundColor: "#0f172a", borderRadius: 6, borderLeft: "3px solid #ef4444" },
+  battleItem: { padding: "6px 10px", backgroundColor: "rgba(15,23,42,0.6)", borderRadius: 6, borderLeft: "3px solid #ef4444" },
   battleDay: { fontSize: 11, color: "#f59e0b", fontWeight: 600 },
   battleText: { fontSize: 13, color: "#cbd5e1", margin: "4px 0 0", lineHeight: 1.4 },
   neutralTag: { fontSize: 10, color: "#94a3b8", marginLeft: 6, fontWeight: 400, fontStyle: "italic" },
