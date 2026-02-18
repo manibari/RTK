@@ -1147,6 +1147,14 @@ export class SimulationService {
   }
 
   // ── War Exhaustion API ──
+  getActiveDroughtCities(): string[] {
+    const active: string[] = [];
+    for (const [cityId, expiryTick] of this.droughtCities) {
+      if (expiryTick > this.currentTick) active.push(cityId);
+    }
+    return active;
+  }
+
   getWarExhaustion(): Record<string, number> {
     const result: Record<string, number> = {};
     for (const f of FACTIONS) {
@@ -2109,26 +2117,59 @@ export class SimulationService {
 
   private async npcSpend(): Promise<void> {
     const cities = await this.repo.getAllPlaces();
+    const characters = await this.repo.getAllCharacters();
+    const defendersPerCity = new Map<string, string[]>();
+    for (const char of characters) {
+      if (!char.cityId) continue;
+      const list = defendersPerCity.get(char.cityId) ?? [];
+      list.push(char.id);
+      defendersPerCity.set(char.cityId, list);
+    }
+
+    const charToFaction = new Map<string, string>();
+    for (const f of FACTIONS) {
+      for (const m of f.members) charToFaction.set(m, f.id);
+    }
+
+    const isAllied = (fA: string, fB: string): boolean => {
+      const key = [fA, fB].sort().join(":");
+      return this.alliances.has(key);
+    };
+
     for (const faction of FACTIONS) {
-      if (faction.id === "shu") continue; // Player controls shu spending
+      if (faction.id === "shu") continue;
       const factionCities = cities.filter(
         (c) => c.controllerId && faction.members.includes(c.controllerId),
       );
+      if (factionCities.length === 0) continue;
 
-      // First: reinforce weakest garrison if any city has enough gold
+      // Determine strategic intent for spending priorities
+      const enemyCities = cities.filter((c) => {
+        if (c.status === "dead" || !c.controllerId) return false;
+        if (faction.members.includes(c.controllerId)) return false;
+        const cf = charToFaction.get(c.controllerId);
+        if (cf && isAllied(faction.id, cf)) return false;
+        return true;
+      });
+      const { evaluateStrategicIntent } = await import("./ai/npc-ai.js");
+      const intent = evaluateStrategicIntent(faction, factionCities, enemyCities, defendersPerCity);
+
+      // 1. Reinforce weakest garrison (priority higher when defending)
+      const garrisonThreshold = intent === "defend" ? 6 : 4;
       const weakest = factionCities
         .filter((c) => c.gold >= 100)
         .sort((a, b) => a.garrison - b.garrison)[0];
-      if (weakest && weakest.garrison < 4) {
+      if (weakest && weakest.garrison < garrisonThreshold) {
         await this.repo.updatePlace(weakest.id, {
           gold: weakest.gold - 100,
           garrison: weakest.garrison + 1,
         });
       }
 
-      // Then: develop richest city if affordable and low development
+      // 2. Develop cities (priority higher when developing)
+      const devCap = intent === "develop" ? 5 : 3;
       const devTarget = factionCities
-        .filter((c) => c.gold >= 300 && c.development < 3)
+        .filter((c) => c.gold >= 300 && c.development < devCap)
         .sort((a, b) => b.gold - a.gold)[0];
       if (devTarget) {
         await this.repo.updatePlace(devTarget.id, {
@@ -2137,7 +2178,7 @@ export class SimulationService {
         });
       }
 
-      // Build improvement if dev >= 3, has specialty, no improvement yet, and can afford
+      // 3. Build improvement
       const improvable = factionCities
         .filter((c) => c.gold >= 500 && c.development >= 3 && c.specialty && !c.improvement)
         .sort((a, b) => b.gold - a.gold)[0];
@@ -2146,6 +2187,63 @@ export class SimulationService {
           gold: improvable.gold - 500,
           improvement: SPECIALTY_IMPROVEMENT[improvable.specialty] ?? improvable.specialty,
         });
+      }
+
+      // 4. Build district (based on intent and city specialty)
+      const districtTarget = factionCities
+        .filter((c) => c.gold >= DISTRICT_COST && c.development >= 2 && this.cityDistrictCount(c) < MAX_DISTRICTS)
+        .sort((a, b) => b.gold - a.gold)[0];
+      if (districtTarget) {
+        let districtType: DistrictType | null = null;
+        if (intent === "defend" && !this.hasDistrict(districtTarget, "defense")) {
+          districtType = "defense";
+        } else if (intent === "develop" && !this.hasDistrict(districtTarget, "commerce")) {
+          districtType = "commerce";
+        } else if (intent === "expand" && !this.hasDistrict(districtTarget, "recruitment")) {
+          districtType = "recruitment";
+        } else if (!this.hasDistrict(districtTarget, "agriculture")) {
+          districtType = "agriculture";
+        }
+        if (districtType) {
+          const districts = [...(districtTarget.districts ?? []), { type: districtType, builtTick: this.currentTick }];
+          await this.repo.updatePlace(districtTarget.id, { gold: districtTarget.gold - DISTRICT_COST, districts } as Partial<PlaceNode>);
+        }
+      }
+
+      // 5. Train units (expand intent → cavalry; defend → archers; develop → skip)
+      if (intent !== "develop") {
+        const unitType: UnitType = intent === "expand" ? "cavalry" : "archers";
+        const cost = UNIT_TRAIN_COST[unitType];
+        const trainTarget = factionCities
+          .filter((c) => c.gold >= cost)
+          .sort((a, b) => b.gold - a.gold)[0];
+        if (trainTarget) {
+          const units = getUnitComposition(trainTarget);
+          units[unitType] += 1;
+          await this.repo.updatePlace(trainTarget.id, { gold: trainTarget.gold - cost, units });
+        }
+      }
+
+      // 6. Set city path (dev >= 3, no path yet, can afford)
+      const pathTarget = factionCities
+        .filter((c) => c.gold >= 400 && c.development >= 3 && !c.path)
+        .sort((a, b) => b.gold - a.gold)[0];
+      if (pathTarget) {
+        let chosenPath: CityPath;
+        // Choose path based on city specialty
+        if (pathTarget.specialty === "forge" || pathTarget.specialty === "military_academy") {
+          chosenPath = "fortress";
+        } else if (pathTarget.specialty === "market" || pathTarget.specialty === "harbor") {
+          chosenPath = "trade_hub";
+        } else if (pathTarget.specialty === "granary") {
+          chosenPath = "breadbasket";
+        } else if (pathTarget.specialty === "library") {
+          chosenPath = "cultural";
+        } else {
+          // Default based on intent
+          chosenPath = intent === "defend" ? "fortress" : intent === "develop" ? "trade_hub" : "breadbasket";
+        }
+        await this.repo.updatePlace(pathTarget.id, { gold: pathTarget.gold - 400, path: chosenPath } as Partial<PlaceNode>);
       }
     }
   }

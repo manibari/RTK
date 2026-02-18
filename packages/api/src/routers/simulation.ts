@@ -185,6 +185,11 @@ export const simulationRouter = router({
     return ctx.simulation.getMentorPairs();
   }),
 
+  // Active drought cities
+  getDroughtCities: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getActiveDroughtCities();
+  }),
+
   // War exhaustion
   getWarExhaustion: publicProcedure.query(({ ctx }) => {
     return ctx.simulation.getWarExhaustion();

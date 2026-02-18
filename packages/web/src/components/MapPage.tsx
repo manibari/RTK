@@ -106,6 +106,13 @@ interface FactionInfo {
   color: string;
 }
 
+interface BattleRound {
+  phase: string;
+  attackerDelta: number;
+  defenderDelta: number;
+  note?: string;
+}
+
 interface BattleResult {
   tick: number;
   cityId: string;
@@ -116,6 +123,10 @@ interface BattleResult {
   defenderName: string | null;
   winner: "attacker" | "defender";
   captured: boolean;
+  attackPower?: number;
+  defensePower?: number;
+  tactic?: string;
+  rounds?: BattleRound[];
 }
 
 interface MapPageProps {
@@ -144,6 +155,7 @@ export function MapPage({
   const [selectedChar, setSelectedChar] = useState<string | null>(null);
   const [factions, setFactions] = useState<FactionInfo[]>([]);
   const [battleLog, setBattleLog] = useState<BattleResult[]>([]);
+  const [expandedBattle, setExpandedBattle] = useState<number | null>(null);
   const [commandCount, setCommandCount] = useState(0);
   const [detailCharId, setDetailCharId] = useState<string | null>(null);
   const [prediction, setPrediction] = useState<{ winRate: number; attackPower: number; defensePower: number } | null>(null);
@@ -152,17 +164,19 @@ export function MapPage({
   const [tradeRoutes, setTradeRoutes] = useState<{ cityA: string; cityB: string }[]>([]);
   const [cityLoyalty, setCityLoyalty] = useState<Record<string, number>>({});
   const [vulnerability, setVulnerability] = useState<Record<string, { score: number; level: string }>>({});
+  const [droughtCities, setDroughtCities] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchMapData = useCallback(async (tick: number) => {
     try {
-      const [data, facs, supply, trades, loyalty, vuln] = await Promise.all([
+      const [data, facs, supply, trades, loyalty, vuln, drought] = await Promise.all([
         trpc.map.getMapData.query({ tick }),
         trpc.simulation.getFactions.query(),
         trpc.simulation.getSupplyStatus.query(),
         trpc.simulation.getTradeRoutes.query(),
         trpc.simulation.getCityLoyalty.query(),
         trpc.simulation.getCityVulnerability.query(),
+        trpc.simulation.getDroughtCities.query(),
       ]);
       setMapData(data as MapData);
       setFactions(facs as FactionInfo[]);
@@ -170,6 +184,7 @@ export function MapPage({
       setTradeRoutes((trades as { cityA: string; cityB: string }[]) ?? []);
       setCityLoyalty(loyalty as Record<string, number>);
       setVulnerability(vuln as Record<string, { score: number; level: string }>);
+      setDroughtCities(drought as string[]);
     } catch {
       // silently fail
     } finally {
@@ -406,6 +421,8 @@ export function MapPage({
             viewTick={viewTick}
             factionColors={factionColors}
             tradeRoutes={tradeRoutes}
+            supplyStatus={supplyStatus}
+            droughtCities={droughtCities}
             onCityClick={handleCityClick}
           />
         )}
@@ -853,13 +870,46 @@ export function MapPage({
                 <h3 style={{ ...styles.sideSubtitle, marginTop: 24 }}>戰報</h3>
                 <div style={styles.battleList}>
                   {[...battleLog].reverse().map((b, i) => (
-                    <div key={i} style={styles.battleItem}>
-                      <span style={styles.battleDay}>Day {b.tick}</span>
+                    <div
+                      key={i}
+                      style={{ ...styles.battleItem, cursor: b.rounds ? "pointer" : "default" }}
+                      onClick={() => b.rounds && setExpandedBattle(expandedBattle === i ? null : i)}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={styles.battleDay}>Day {b.tick}</span>
+                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          {b.tactic && (
+                            <span style={{ fontSize: 10, color: "#a855f7", fontWeight: 600 }}>
+                              {b.tactic === "aggressive" ? "猛攻" : b.tactic === "defensive" ? "堅守" : "平衡"}
+                            </span>
+                          )}
+                          {b.attackPower != null && (
+                            <span style={{ fontSize: 10, color: "#64748b" }}>
+                              [{b.attackPower} vs {b.defensePower}]
+                            </span>
+                          )}
+                          {b.rounds && (
+                            <span style={{ fontSize: 10, color: "#64748b" }}>{expandedBattle === i ? "▲" : "▼"}</span>
+                          )}
+                        </div>
+                      </div>
                       <p style={styles.battleText}>
                         {b.attackerName} {b.captured ? "攻陷" : "未能攻下"}{" "}
                         <strong>{b.cityName}</strong>
                         {b.defenderName && ` (守將：${b.defenderName})`}
                       </p>
+                      {expandedBattle === i && b.rounds && (
+                        <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #334155", display: "flex", flexDirection: "column", gap: 3 }}>
+                          {b.rounds.map((r, ri) => (
+                            <div key={ri} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, padding: "2px 4px", backgroundColor: "#0f172a", borderRadius: 3 }}>
+                              <span style={{ color: "#e2e8f0", fontWeight: 600, width: 60, flexShrink: 0 }}>{r.phase}</span>
+                              <span style={{ color: "#ef4444" }}>攻+{r.attackerDelta}</span>
+                              <span style={{ color: "#3b82f6" }}>守+{r.defenderDelta}</span>
+                              {r.note && <span style={{ color: "#94a3b8", marginLeft: "auto", fontSize: 10 }}>{r.note}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

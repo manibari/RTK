@@ -46,6 +46,8 @@ interface StrategicMapProps {
   viewTick: number;
   factionColors?: Map<string, string>; // controllerId -> faction color
   tradeRoutes?: TradeRouteDisplay[];
+  supplyStatus?: Record<string, boolean>; // cityId -> true if supplied
+  droughtCities?: string[]; // city IDs currently under drought
   onCityClick?: (cityId: string) => void;
 }
 
@@ -59,7 +61,7 @@ const FALLBACK_COLORS: Record<string, string> = {
 const TAIWAN_CENTER: [number, number] = [23.7, 120.96];
 const TAIWAN_ZOOM = 8;
 
-export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, onCityClick }: StrategicMapProps) {
+export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, supplyStatus, droughtCities, onCityClick }: StrategicMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layersRef = useRef<L.LayerGroup | null>(null);
@@ -121,9 +123,11 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, onCit
 
       // Tooltip
       const siegeInfo = city.siegedBy ? `<br/><span style="color:#ef4444">⚔ 被圍城中</span>` : "";
+      const supplyInfo = supplyStatus && city.controllerId && supplyStatus[city.id] === false ? `<br/><span style="color:#f97316">⚠ 補給中斷</span>` : "";
+      const droughtInfo = droughtCities?.includes(city.id) ? `<br/><span style="color:#a16207">☀ 旱災</span>` : "";
       const tooltipContent = `<div style="font-size:13px">
         <strong>${city.name}</strong><br/>
-        <span style="color:${color}">${statusLabel(city.status)}</span>${siegeInfo}
+        <span style="color:${color}">${statusLabel(city.status)}</span>${siegeInfo}${supplyInfo}${droughtInfo}
         ${charNames ? `<br/><span style="color:#fbbf24">${charNames}</span>` : ""}
       </div>`;
 
@@ -152,6 +156,34 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, onCit
           className: "siege-pulse",
         });
         pulseRing.addTo(layers);
+      }
+
+      // Supply disruption marker (orange dashed ring)
+      if (supplyStatus && city.controllerId && supplyStatus[city.id] === false) {
+        const supplyRing = L.circleMarker([city.lat, city.lng], {
+          radius: radius + 4,
+          color: "#f97316",
+          fillColor: "transparent",
+          fillOpacity: 0,
+          weight: 2,
+          opacity: 0.7,
+          dashArray: "4 3",
+        });
+        supplyRing.addTo(layers);
+      }
+
+      // Drought marker (brown pulsing ring)
+      if (droughtCities?.includes(city.id)) {
+        const droughtRing = L.circleMarker([city.lat, city.lng], {
+          radius: radius + 8,
+          color: "#a16207",
+          fillColor: "transparent",
+          fillOpacity: 0,
+          weight: 2,
+          opacity: 0.6,
+          className: "drought-pulse",
+        });
+        droughtRing.addTo(layers);
       }
 
       // City name label
@@ -227,7 +259,7 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, onCit
         tradeLine.addTo(layers);
       }
     }
-  }, [data, viewTick, onCityClick, tradeRoutes]);
+  }, [data, viewTick, onCityClick, tradeRoutes, supplyStatus, droughtCities]);
 
   return (
     <>
@@ -238,6 +270,13 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, onCit
         @keyframes siege-pulse-anim {
           0%, 100% { opacity: 0.3; stroke-width: 2; }
           50% { opacity: 0.9; stroke-width: 4; }
+        }
+        .drought-pulse {
+          animation: drought-pulse-anim 2s ease-in-out infinite;
+        }
+        @keyframes drought-pulse-anim {
+          0%, 100% { opacity: 0.3; stroke-width: 1; }
+          50% { opacity: 0.7; stroke-width: 3; }
         }
         .dark-tooltip {
           background: #1e293b !important;
