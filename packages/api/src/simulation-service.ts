@@ -89,6 +89,7 @@ export interface AdvanceDayResult {
   deathEvents: DeathEvent[];
   worldEvents: WorldEvent[];
   seasonalEvent: SeasonalEvent | null;
+  rebellionEvents: RebellionEvent[];
   pendingCard: PendingEventCard | null;
   gameStatus: GameStatus;
 }
@@ -163,6 +164,32 @@ const SEASON_TRAVEL_PENALTY: Record<Season, number> = {
   summer: 0,
   autumn: 0,
   winter: 1,
+};
+
+// ── City loyalty & rebellion ──
+export interface RebellionEvent {
+  tick: number;
+  cityId: string;
+  cityName: string;
+  garrisonLost: number;
+  flippedToNeutral: boolean;
+}
+
+// ── Faction traditions ──
+export type FactionTradition = "war_machine" | "diplomatic_masters" | "economic_powerhouse" | "spycraft_experts";
+
+const TRADITION_LABELS: Record<FactionTradition, string> = {
+  war_machine: "兵法之國",
+  diplomatic_masters: "外交縱橫",
+  economic_powerhouse: "商業帝國",
+  spycraft_experts: "諜報名家",
+};
+
+const TRADITION_DESCRIPTIONS: Record<FactionTradition, string> = {
+  war_machine: "攻擊力+10%",
+  diplomatic_masters: "信任回復+2/天",
+  economic_powerhouse: "金幣收入+20%",
+  spycraft_experts: "間諜成功率+15%",
 };
 
 export type WinType = "conquest" | "diplomacy" | "economy";
@@ -439,6 +466,10 @@ export class SimulationService {
   private factionTrust = new Map<string, number>(); // "fA:fB" sorted key -> trust 0-100
   private diplomaticVictoryTicks = 0; // consecutive ticks with all surviving factions allied
   private economicVictoryTicks = 0;  // consecutive ticks with >80% total gold
+  private cityLoyalty = new Map<string, number>(); // cityId -> loyalty 0-100
+  private factionTraditions = new Map<string, FactionTradition>(); // factionId -> active tradition
+  private factionBattleCount = new Map<string, number>(); // factionId -> total battles
+  private factionSpySuccessCount = new Map<string, number>(); // factionId -> successful spy missions
 
   constructor(repo: IGraphRepository, eventStore: IEventStore) {
     this.engine = new Engine();
@@ -490,6 +521,10 @@ export class SimulationService {
     this.heirCounter = 0;
     this.diplomaticVictoryTicks = 0;
     this.economicVictoryTicks = 0;
+    this.cityLoyalty.clear();
+    this.factionTraditions.clear();
+    this.factionBattleCount.clear();
+    this.factionSpySuccessCount.clear();
     FACTIONS = createDefaultFactions();
 
     // Re-initialize
@@ -1414,6 +1449,7 @@ export class SimulationService {
         deathEvents: [],
         worldEvents: [],
         seasonalEvent: null,
+        rebellionEvents: [],
         pendingCard: null,
         gameStatus: this.gameState.status,
       };
@@ -1486,10 +1522,11 @@ export class SimulationService {
     const discordEvents = await this.processSowDiscord();
     diplomacyEvents.push(...discordEvents);
 
-    // Alliance trust naturally recovers +1 per tick for allied factions
+    // Alliance trust naturally recovers +1 per tick for allied factions (+2 with diplomatic_masters tradition)
     for (const key of this.alliances) {
       const [fA, fB] = key.split(":");
-      this.adjustTrust(fA, fB, 1);
+      const bonus = (this.factionTraditions.get(fA) === "diplomatic_masters" || this.factionTraditions.get(fB) === "diplomatic_masters") ? 2 : 1;
+      this.adjustTrust(fA, fB, bonus);
     }
 
     // Betrayal: disloyal characters may defect
@@ -1552,6 +1589,13 @@ export class SimulationService {
     const pendingCard: PendingEventCard | null = drawnCard ? { card: drawnCard, tick: this.currentTick } : null;
     this.pendingCard = pendingCard;
 
+    // City loyalty & rebellions
+    await this.updateCityLoyalty();
+    const rebellionEvents = await this.processRebellions();
+
+    // Evaluate faction traditions
+    this.evaluateTraditions(battleResults, spyReports);
+
     // Eliminate factions that lost all cities
     await this.processEliminatedFactions();
 
@@ -1582,11 +1626,11 @@ export class SimulationService {
       // Re-read events with narratives
       const updatedEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
       const season = getSeason(this.currentTick);
-      return { tick: this.currentTick, season, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, seasonalEvent, pendingCard, gameStatus };
+      return { tick: this.currentTick, season, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, seasonalEvent, rebellionEvents, pendingCard, gameStatus };
     }
 
     const season = getSeason(this.currentTick);
-    return { tick: this.currentTick, season, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, seasonalEvent, pendingCard, gameStatus };
+    return { tick: this.currentTick, season, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, seasonalEvent, rebellionEvents, pendingCard, gameStatus };
   }
 
   getDailySummary(tick: number): string {
@@ -2151,13 +2195,17 @@ export class SimulationService {
       successRate += this.roleSpyBonus(spy);
       // Spy network tech: +20% success
       if (spyFaction && this.hasTech(spyFaction, "spy_network")) successRate += 0.2;
+      // Spycraft experts tradition: +15% success
+      if (spyFaction && this.factionTraditions.get(spyFaction) === "spycraft_experts") successRate += 0.15;
       successRate = Math.min(0.95, successRate);
       const success = Math.random() < successRate;
 
       // Caught chance: 50% base, -5% per intelligence, -8% per espionage skill
-      let caughtRate = 0.5 - spy.intelligence * 0.05 - spySkill * 0.08;
+      const allCharsForDetection = await this.repo.getAllCharacters();
+      const detection = this.computeSpyDetection(targetCity, allCharsForDetection);
+      let caughtRate = 0.5 - spy.intelligence * 0.05 - spySkill * 0.08 + detection * 0.005;
       if (spy.role === "spymaster") caughtRate -= 0.1;
-      caughtRate = Math.max(0.05, caughtRate);
+      caughtRate = Math.max(0.05, Math.min(0.9, caughtRate));
       const caught = !success && Math.random() < caughtRate;
 
       const report: SpyReport = {
@@ -2278,6 +2326,154 @@ export class SimulationService {
     }
   }
 
+  // ── City Loyalty & Rebellion ──
+  getCityLoyalty(cityId: string): number {
+    return this.cityLoyalty.get(cityId) ?? 50;
+  }
+
+  getAllCityLoyalty(): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const [k, v] of this.cityLoyalty) result[k] = v;
+    return result;
+  }
+
+  private async updateCityLoyalty(): Promise<void> {
+    const cities = await this.repo.getAllPlaces();
+    const characters = await this.repo.getAllCharacters();
+    for (const city of cities) {
+      if (city.status === "dead" || !city.controllerId) continue;
+      let loyalty = this.cityLoyalty.get(city.id) ?? 50;
+      const controllerFaction = this.getFactionOf(city.controllerId);
+      // Foreign controller decay: city status != allied means recently captured
+      if (city.status === "hostile" || city.status === "neutral") {
+        loyalty -= 3;
+      }
+      // Low garrison penalty
+      if (city.garrison < 1) loyalty -= 1;
+      // High war exhaustion penalty
+      if (controllerFaction) {
+        const exhaustion = this.warExhaustion.get(controllerFaction) ?? 0;
+        if (exhaustion > 50) loyalty -= 1;
+      }
+      // Governor bonus: +2/tick
+      const charsHere = characters.filter((c) => c.cityId === city.id);
+      if (charsHere.some((c) => c.role === "governor")) loyalty += 2;
+      // Development bonus: +0.5 per level
+      loyalty += city.development * 0.5;
+      // Trade route bonus: +1 per route
+      loyalty += this.tradeRoutesForCity(city.id).length;
+      // Cultural path: immune to decay (loyalty stays high)
+      if (city.path === "cultural" && loyalty < 60) loyalty = 60;
+      // Allied city natural recovery
+      if (city.status === "allied") loyalty += 1;
+      this.cityLoyalty.set(city.id, Math.max(0, Math.min(100, loyalty)));
+    }
+  }
+
+  private async processRebellions(): Promise<RebellionEvent[]> {
+    const events: RebellionEvent[] = [];
+    const cities = await this.repo.getAllPlaces();
+    for (const city of cities) {
+      if (city.status === "dead" || !city.controllerId) continue;
+      const loyalty = this.cityLoyalty.get(city.id) ?? 50;
+      if (loyalty >= 20) continue;
+      // 30% chance of rebellion when loyalty < 20
+      if (Math.random() > 0.3) continue;
+      const garrisonLoss = Math.ceil(city.garrison * 0.5);
+      const goldLoss = Math.round(city.gold * 0.3);
+      const flipped = city.garrison - garrisonLoss <= 0;
+      await this.repo.updatePlace(city.id, {
+        garrison: Math.max(0, city.garrison - garrisonLoss),
+        gold: Math.max(0, city.gold - goldLoss),
+        ...(flipped ? { status: "neutral" as const, controllerId: undefined } : {}),
+      });
+      // Morale penalty for controlling faction
+      const factionId = this.getFactionOf(city.controllerId);
+      if (factionId) {
+        const morale = this.factionMorale.get(factionId) ?? 50;
+        this.factionMorale.set(factionId, Math.max(0, morale - 10));
+      }
+      // Reset loyalty after rebellion
+      this.cityLoyalty.set(city.id, flipped ? 50 : 30);
+      events.push({
+        tick: this.currentTick,
+        cityId: city.id,
+        cityName: city.name,
+        garrisonLost: garrisonLoss,
+        flippedToNeutral: flipped,
+      });
+    }
+    return events;
+  }
+
+  // Set initial loyalty for newly captured cities
+  private setCapturedCityLoyalty(cityId: string): void {
+    this.cityLoyalty.set(cityId, 30);
+  }
+
+  // ── Counter-Intelligence ──
+  private computeSpyDetection(city: PlaceNode, characters: CharacterNode[]): number {
+    let detection = 0;
+    const charsHere = characters.filter((c) => c.cityId === city.id);
+    // Spymaster stationed: +25 detection
+    if (charsHere.some((c) => c.role === "spymaster")) detection += 25;
+    // Best intelligence character: +3 per point
+    const bestInt = Math.max(0, ...charsHere.map((c) => c.intelligence));
+    detection += bestInt * 3;
+    // Defense district: +10
+    if (this.hasDistrict(city, "defense")) detection += 10;
+    // Spy network tech: +10
+    const defenderFaction = city.controllerId ? this.getFactionOf(city.controllerId) : null;
+    if (defenderFaction && this.hasTech(defenderFaction, "spy_network")) detection += 10;
+    // Fortress path: +10
+    if (city.path === "fortress") detection += 10;
+    return Math.min(80, detection);
+  }
+
+  // ── Faction Traditions ──
+  getFactionTraditions(): Record<string, { tradition: FactionTradition; label: string; description: string } | null> {
+    const result: Record<string, { tradition: FactionTradition; label: string; description: string } | null> = {};
+    for (const f of FACTIONS) {
+      const t = this.factionTraditions.get(f.id);
+      result[f.id] = t ? { tradition: t, label: TRADITION_LABELS[t], description: TRADITION_DESCRIPTIONS[t] } : null;
+    }
+    return result;
+  }
+
+  private evaluateTraditions(battles: BattleResult[], spyReports: SpyReport[]): void {
+    // Track faction battle counts
+    for (const b of battles) {
+      for (const fId of [this.getFactionOf(b.attackerId), this.getFactionOf(b.defenderId ?? "")].filter(Boolean) as string[]) {
+        this.factionBattleCount.set(fId, (this.factionBattleCount.get(fId) ?? 0) + 1);
+      }
+    }
+    // Track faction spy success counts
+    for (const r of spyReports) {
+      if (!r.success) continue;
+      const fId = this.getFactionOf(r.characterId);
+      if (fId) this.factionSpySuccessCount.set(fId, (this.factionSpySuccessCount.get(fId) ?? 0) + 1);
+    }
+    // Evaluate traditions for each faction
+    for (const f of FACTIONS) {
+      if (this.factionTraditions.has(f.id)) continue; // already assigned
+      const battles = this.factionBattleCount.get(f.id) ?? 0;
+      const allianceCount = [...this.alliances].filter((a) => a.includes(f.id)).length;
+      const cityCount = this.countFactionCities(f.id);
+      const spySuccesses = this.factionSpySuccessCount.get(f.id) ?? 0;
+      if (battles >= 15) this.factionTraditions.set(f.id, "war_machine");
+      else if (allianceCount >= 3) this.factionTraditions.set(f.id, "diplomatic_masters");
+      else if (cityCount >= 5) this.factionTraditions.set(f.id, "economic_powerhouse");
+      else if (spySuccesses >= 8) this.factionTraditions.set(f.id, "spycraft_experts");
+    }
+  }
+
+  private countFactionCities(factionId: string): number {
+    const faction = FACTIONS.find((f) => f.id === factionId);
+    if (!faction) return 0;
+    // Count is tracked via members controlling cities — approximate via faction membership
+    return faction.members.length; // rough proxy
+  }
+
   private async processSieges(): Promise<void> {
     const cities = await this.repo.getAllPlaces();
     for (const city of cities) {
@@ -2382,6 +2578,8 @@ export class SimulationService {
       // War exhaustion >50: -20% income
       const factionId = this.getFactionOf(city.controllerId);
       if (factionId && (this.warExhaustion.get(factionId) ?? 0) > 50) multiplier *= 0.8;
+      // Economic powerhouse tradition: +20% income
+      if (factionId && this.factionTraditions.get(factionId) === "economic_powerhouse") multiplier += 0.2;
       const income = Math.round(baseIncome * multiplier * seasonMult);
       // Trade route bonus: +10 gold per active route
       const tradeBonus = this.tradeRoutesForCity(city.id).length * 10;
@@ -2479,6 +2677,8 @@ export class SimulationService {
         // Legacy bonus from prestigious dead characters
         const attackerLegacy = attackFaction ? this.getLegacyBonus(attackFaction) : 0;
         if (attackerLegacy > 0) attackPower += Math.min(attackerLegacy, 5);
+        // War machine tradition: +10% attack
+        if (this.factionTraditions.get(attackFaction) === "war_machine") attackPower *= 1.1;
 
         // Unit type counter modifier
         const attackerOriginCity = await this.repo.getPlace(cityArrivals[0]?.originCityId ?? "");
@@ -2500,6 +2700,8 @@ export class SimulationService {
             garrison: Math.max(0, city.garrison - 1),
             siegedBy: undefined, siegeTick: undefined, // Clear siege on capture
           });
+          // Set low loyalty for captured city
+          this.setCapturedCityLoyalty(city.id);
           // Growth: winner's military +1 (cap 10)
           for (const ac of attackChars) {
             if (ac.military < 10) {
@@ -3174,6 +3376,10 @@ export class SimulationService {
       heirCounter: this.heirCounter,
       diplomaticVictoryTicks: this.diplomaticVictoryTicks,
       economicVictoryTicks: this.economicVictoryTicks,
+      cityLoyalty: [...this.cityLoyalty.entries()],
+      factionTraditions: [...this.factionTraditions.entries()],
+      factionBattleCount: [...this.factionBattleCount.entries()],
+      factionSpySuccessCount: [...this.factionSpySuccessCount.entries()],
       savedAt: new Date().toISOString(),
     };
 
@@ -3254,6 +3460,10 @@ export class SimulationService {
     this.heirCounter = data.heirCounter ?? 0;
     this.diplomaticVictoryTicks = data.diplomaticVictoryTicks ?? 0;
     this.economicVictoryTicks = data.economicVictoryTicks ?? 0;
+    this.cityLoyalty = new Map(data.cityLoyalty ?? []);
+    this.factionTraditions = new Map(data.factionTraditions ?? []);
+    this.factionBattleCount = new Map(data.factionBattleCount ?? []);
+    this.factionSpySuccessCount = new Map(data.factionSpySuccessCount ?? []);
 
     // Re-init narrative service
     const characters = await this.repo.getAllCharacters();
@@ -3444,6 +3654,10 @@ interface SaveData {
   heirCounter: number;
   diplomaticVictoryTicks: number;
   economicVictoryTicks: number;
+  cityLoyalty: [string, number][];
+  factionTraditions: [string, FactionTradition][];
+  factionBattleCount: [string, number][];
+  factionSpySuccessCount: [string, number][];
   savedAt: string;
 }
 

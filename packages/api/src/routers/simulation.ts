@@ -224,6 +224,16 @@ export const simulationRouter = router({
     return ctx.simulation.listSaves();
   }),
 
+  // City loyalty
+  getCityLoyalty: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getAllCityLoyalty();
+  }),
+
+  // Faction traditions
+  getFactionTraditions: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getFactionTraditions();
+  }),
+
   // Reset
   reset: publicProcedure.mutation(async ({ ctx }) => {
     await ctx.simulation.reset();

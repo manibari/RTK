@@ -150,20 +150,23 @@ export function MapPage({
   const [tactic, setTactic] = useState<"aggressive" | "defensive" | "balanced">("balanced");
   const [supplyStatus, setSupplyStatus] = useState<Record<string, boolean>>({});
   const [tradeRoutes, setTradeRoutes] = useState<{ cityA: string; cityB: string }[]>([]);
+  const [cityLoyalty, setCityLoyalty] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchMapData = useCallback(async (tick: number) => {
     try {
-      const [data, facs, supply, trades] = await Promise.all([
+      const [data, facs, supply, trades, loyalty] = await Promise.all([
         trpc.map.getMapData.query({ tick }),
         trpc.simulation.getFactions.query(),
         trpc.simulation.getSupplyStatus.query(),
         trpc.simulation.getTradeRoutes.query(),
+        trpc.simulation.getCityLoyalty.query(),
       ]);
       setMapData(data as MapData);
       setFactions(facs as FactionInfo[]);
       setSupplyStatus(supply as Record<string, boolean>);
       setTradeRoutes((trades as { cityA: string; cityB: string }[]) ?? []);
+      setCityLoyalty(loyalty as Record<string, number>);
     } catch {
       // silently fail
     } finally {
@@ -441,6 +444,17 @@ export function MapPage({
                 <span style={styles.infoLabel}>糧食</span>
                 <span style={{ color: (selectedCity.food ?? 100) < 30 ? "#ef4444" : (selectedCity.food ?? 100) < 60 ? "#f59e0b" : "#22c55e", fontWeight: 600 }}>{selectedCity.food ?? 100}</span>
               </div>
+              {/* City loyalty */}
+              {selectedCity.controllerId && (() => {
+                const loyalty = cityLoyalty[selectedCity.id] ?? 50;
+                const color = loyalty < 20 ? "#ef4444" : loyalty < 40 ? "#f59e0b" : "#22c55e";
+                return (
+                  <div style={styles.infoRow}>
+                    <span style={styles.infoLabel}>忠誠</span>
+                    <span style={{ color, fontWeight: 600 }}>{Math.round(loyalty)}</span>
+                  </div>
+                );
+              })()}
               {/* Unit composition */}
               {selectedCity.units && (selectedCity.units.infantry + selectedCity.units.cavalry + selectedCity.units.archers > 0) && (
                 <div style={styles.infoRow}>

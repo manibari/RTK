@@ -213,6 +213,14 @@ export function AppShell() {
         const seasonColors: Record<string, string> = { spring: "#22c55e", summer: "#ef4444", autumn: "#f59e0b", winter: "#3b82f6" };
         addToast(`【${result.seasonalEvent.title}】${result.seasonalEvent.description}｜${result.seasonalEvent.effects}`, seasonColors[result.seasonalEvent.season] ?? "#64748b");
       }
+      if (result.rebellionEvents?.length > 0) {
+        for (const r of result.rebellionEvents) {
+          const text = r.flippedToNeutral
+            ? `${r.cityName} 爆發叛亂，城市脫離控制！`
+            : `${r.cityName} 民變！守備-${r.garrisonLost}`;
+          addToast(text, "#dc2626");
+        }
+      }
       if (result.dailySummary) {
         setSummaries((prev) => new Map(prev).set(result.tick, result.dailySummary));
       }

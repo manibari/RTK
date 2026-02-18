@@ -50,22 +50,25 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
   const [history, setHistory] = useState<Record<string, { tick: number; power: number }[]>>({});
   const [techs, setTechs] = useState<Record<string, FactionTechState>>({});
   const [trustMap, setTrustMap] = useState<Record<string, number>>({});
+  const [traditions, setTraditions] = useState<Record<string, { tradition: string; label: string; description: string } | null>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchStats = useCallback(async () => {
     try {
-      const [s, a, h, t, tr] = await Promise.all([
+      const [s, a, h, t, tr, trad] = await Promise.all([
         trpc.simulation.getFactionStats.query(),
         trpc.simulation.getAlliances.query(),
         trpc.simulation.getFactionHistory.query(),
         trpc.simulation.getFactionTechs.query(),
         trpc.simulation.getFactionTrust.query(),
+        trpc.simulation.getFactionTraditions.query(),
       ]);
       setStats(s as FactionStat[]);
       setAlliances(a as unknown as AlliancePair[]);
       setHistory(h as Record<string, { tick: number; power: number }[]>);
       setTechs(t as Record<string, FactionTechState>);
       setTrustMap(tr as Record<string, number>);
+      setTraditions(trad as Record<string, { tradition: string; label: string; description: string } | null>);
     } catch {
       // silently fail
     } finally {
@@ -276,6 +279,13 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
                     );
                   })}
                 </div>
+              </div>
+            )}
+            {/* Faction tradition */}
+            {traditions[f.id] && (
+              <div style={{ marginTop: 8, padding: "4px 8px", backgroundColor: "#1e1b4b", borderRadius: 4 }}>
+                <span style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600 }}>{traditions[f.id]!.label}</span>
+                <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: 6 }}>{traditions[f.id]!.description}</span>
               </div>
             )}
           </div>
