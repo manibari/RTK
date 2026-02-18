@@ -44,8 +44,8 @@ const characters: CharacterNode[] = [
   { id: "huang_zhong", name: "黃忠", biography: "老當益壯，定軍山斬夏侯淵，百步穿楊的神弓手。", avatarUrl: "/avatars/huang_zhong.svg", traits: ["brave", "loyal", "proud"], cityId: "changsha", military: 5, intelligence: 0, charm: 1, skills: { ...S0, tactics: 3 }, bornTick: -800 },
   { id: "ma_chao", name: "馬超", biography: "西涼錦馬超，為父報仇割據一方，後歸順劉備封五虎上將。", avatarUrl: "/avatars/ma_chao.svg", traits: ["brave", "impulsive", "ambitious"], cityId: "tianshui", military: 4, intelligence: 1, charm: 2, skills: { ...S0, tactics: 2, leadership: 1 }, bornTick: -352 },
   { id: "sima_yi", name: "司馬懿", biography: "鷹視狼顧，忍辱負重數十年，終為司馬家奪取天下埋下伏筆。", avatarUrl: "/avatars/sima_yi.svg", traits: ["cunning", "cautious", "ambitious"], cityId: "ye", military: 1, intelligence: 5, charm: 2, skills: { ...S0, espionage: 3, leadership: 1 }, bornTick: -352 },
-  { id: "yan_liang", name: "顏良", biography: "河北名將，袁紹麾下首席猛將，白馬之戰被關羽一刀斬落。", avatarUrl: "/avatars/yan_liang.svg", traits: ["brave", "proud", "loyal"], cityId: "puyang", military: 4, intelligence: 0, charm: 1, skills: { ...S0, tactics: 2 }, bornTick: -480 },
-  { id: "wen_chou", name: "文醜", biography: "河北四庭柱之一，與顏良齊名，延津之戰敗亡。", avatarUrl: "/avatars/wen_chou.svg", traits: ["brave", "impulsive", "proud"], cityId: "puyang", military: 4, intelligence: 0, charm: 0, skills: { ...S0, tactics: 1 }, bornTick: -480 },
+  { id: "yan_liang", name: "顏良", biography: "河北名將，袁紹麾下首席猛將，白馬之戰被關羽一刀斬落。", avatarUrl: "/avatars/yan_liang.svg", traits: ["brave", "proud", "loyal"], cityId: "jinan", military: 4, intelligence: 0, charm: 1, skills: { ...S0, tactics: 2 }, bornTick: -480 },
+  { id: "wen_chou", name: "文醜", biography: "河北四庭柱之一，與顏良齊名，延津之戰敗亡。", avatarUrl: "/avatars/wen_chou.svg", traits: ["brave", "impulsive", "proud"], cityId: "jinan", military: 4, intelligence: 0, charm: 0, skills: { ...S0, tactics: 1 }, bornTick: -480 },
   { id: "zhang_jiao", name: "張角", biography: "太平道教主，黃巾起義領袖，蒼天已死黃天當立，揭開三國序幕。", avatarUrl: "/avatars/zhang_jiao.svg", traits: ["charismatic", "cunning", "ambitious"], cityId: "pingyuan", military: 1, intelligence: 3, charm: 4, skills: { ...S0, leadership: 2, espionage: 1 }, bornTick: -576 },
   { id: "hua_tuo", name: "華佗", biography: "神醫華佗，發明麻沸散，欲為曹操開顱治病，被疑而殺。", avatarUrl: "/avatars/hua_tuo.svg", traits: ["wise", "humble", "cautious"], cityId: "lujiang", military: 0, intelligence: 4, charm: 3, skills: { ...S0, commerce: 2 }, bornTick: -576 },
   { id: "yuan_shao", name: "袁紹", biography: "四世三公，北方霸主，官渡之戰敗於曹操，從此一蹶不振。", avatarUrl: "/avatars/yuan_shao.svg", traits: ["ambitious", "proud", "diplomatic"], cityId: "ye", military: 1, intelligence: 2, charm: 3, skills: { ...S0, leadership: 2, commerce: 1 }, bornTick: -544 },
@@ -71,7 +71,6 @@ const cities: PlaceNode[] = [
   { id: "xuchang", name: "許昌", description: "魏都舊址，中原重鎮", lat: 34.02, lng: 113.85, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 0, garrison: 1, development: 0, specialty: "forge", food: 60 },
   { id: "ye", name: "邯鄲", description: "河北重鎮，曹魏根基", lat: 36.33, lng: 114.48, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 0, garrison: 1, development: 0, specialty: "military_academy", food: 60 },
   { id: "hefei", name: "合肥", description: "淮南要塞，吳魏必爭", lat: 31.82, lng: 117.23, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 0, garrison: 1, development: 0, specialty: "military_academy", food: 60 },
-  { id: "shouchun", name: "壽縣", description: "淮河重鎮，南北咽喉", lat: 32.57, lng: 116.78, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 0, garrison: 1, development: 0, specialty: "market", food: 60 },
   { id: "puyang", name: "濮陽", description: "中原糧倉，黃河要地", lat: 35.76, lng: 115.03, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 0, garrison: 1, development: 0, specialty: "granary", food: 60 },
   { id: "chenliu", name: "開封", description: "中原腹地，七朝古都", lat: 34.80, lng: 114.31, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 0, garrison: 1, development: 0, specialty: "market", food: 60 },
 
@@ -90,7 +89,6 @@ const cities: PlaceNode[] = [
   { id: "pingyuan", name: "德州", description: "華北平原，黃河之畔", lat: 37.43, lng: 116.36, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "granary", food: 60 },
   { id: "wuling", name: "常德", description: "洞庭西岸，武陵故地", lat: 29.03, lng: 111.69, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "library", food: 60 },
   { id: "lingling", name: "永州", description: "瀟湘之源，零陵故地", lat: 26.42, lng: 111.61, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "granary", food: 60 },
-  { id: "guiyang", name: "郴州", description: "湘南要地，五嶺之一", lat: 25.80, lng: 113.03, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "forge", food: 60 },
   { id: "lujiang", name: "廬江", description: "皖南水鄉，廬江舊郡", lat: 31.26, lng: 117.29, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "library", food: 60 },
   { id: "shangyong", name: "十堰", description: "上庸故地，秦楚咽喉", lat: 32.63, lng: 110.80, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "forge", food: 60 },
   { id: "nanchang", name: "南昌", description: "豫章故郡，贛江要衝", lat: 28.68, lng: 115.86, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "granary", food: 60 },
@@ -98,6 +96,16 @@ const cities: PlaceNode[] = [
   { id: "ji", name: "北京", description: "幽燕重鎮，北方門戶", lat: 39.90, lng: 116.40, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "military_academy", food: 60 },
   { id: "jinyang", name: "太原", description: "晉陽故城，表裡山河", lat: 37.87, lng: 112.55, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "forge", food: 60 },
   { id: "liaodong", name: "遼陽", description: "遼東郡治，東北要塞", lat: 41.27, lng: 123.17, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "military_academy", food: 60 },
+
+  // === New cities (EU4 area coverage) ===
+  { id: "suzhou", name: "蘇州", description: "江南水鄉，魚米富庶", lat: 31.30, lng: 120.62, status: "neutral", tier: "minor", controllerId: "sun_quan", gold: 0, garrison: 0, development: 0, specialty: "market", food: 60 },
+  { id: "hangzhou", name: "杭州", description: "錢塘繁華，東南形勝", lat: 30.27, lng: 120.15, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "market", food: 60 },
+  { id: "fuzhou", name: "福州", description: "閩都要地，海上門戶", lat: 26.07, lng: 119.30, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "harbor", food: 60 },
+  { id: "jinan", name: "濟南", description: "齊魯首府，泉城名都", lat: 36.65, lng: 116.99, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "library", food: 60 },
+  { id: "nanning", name: "南寧", description: "嶺南西部，百越之地", lat: 22.82, lng: 108.37, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "granary", food: 60 },
+  { id: "guiyang_city", name: "貴陽", description: "黔中腹地，夜郎故地", lat: 26.65, lng: 106.63, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "forge", food: 60 },
+  { id: "zunyi", name: "遵義", description: "黔北門戶，蜀黔要道", lat: 27.73, lng: 106.93, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "granary", food: 60 },
+  { id: "yangzhou", name: "揚州", description: "淮左名都，運河樞紐", lat: 32.39, lng: 119.42, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "market", food: 60 },
 ];
 
 const relationships: RelationshipEdge[] = [
@@ -184,7 +192,6 @@ const roads: RoadEdge[] = [
   { fromCityId: "hanzhong", toCityId: "xiangyang", type: "mountain", travelTime: 3 },
   { fromCityId: "changsha", toCityId: "nanman", type: "mountain", travelTime: 3 },
   { fromCityId: "jiangzhou", toCityId: "chengdu", type: "mountain", travelTime: 3 },
-  { fromCityId: "nanhai", toCityId: "guiyang", type: "mountain", travelTime: 3 },
 
   // === 關隴官道 (official, travelTime=1) ===
   { fromCityId: "tianshui", toCityId: "changan", type: "official", travelTime: 1 },
@@ -206,10 +213,8 @@ const roads: RoadEdge[] = [
 
   // New city roads (official)
   { fromCityId: "hefei", toCityId: "jianye", type: "official", travelTime: 1 },
-  { fromCityId: "hefei", toCityId: "shouchun", type: "official", travelTime: 1 },
   { fromCityId: "hefei", toCityId: "lujiang", type: "official", travelTime: 1 },
-  { fromCityId: "shouchun", toCityId: "xuchang", type: "official", travelTime: 1 },
-  { fromCityId: "shouchun", toCityId: "lujiang", type: "official", travelTime: 1 },
+  { fromCityId: "hefei", toCityId: "xuchang", type: "official", travelTime: 1 },
   { fromCityId: "wan", toCityId: "xiangyang", type: "official", travelTime: 1 },
   { fromCityId: "wan", toCityId: "luoyang", type: "official", travelTime: 1 },
   { fromCityId: "wan", toCityId: "xuchang", type: "official", travelTime: 1 },
@@ -219,8 +224,6 @@ const roads: RoadEdge[] = [
   { fromCityId: "wuling", toCityId: "changsha", type: "official", travelTime: 1 },
   { fromCityId: "wuling", toCityId: "jingzhou", type: "official", travelTime: 1 },
   { fromCityId: "lingling", toCityId: "changsha", type: "official", travelTime: 1 },
-  { fromCityId: "lingling", toCityId: "guiyang", type: "official", travelTime: 1 },
-  { fromCityId: "guiyang", toCityId: "changsha", type: "official", travelTime: 1 },
   { fromCityId: "lujiang", toCityId: "jianye", type: "official", travelTime: 1 },
   { fromCityId: "puyang", toCityId: "ye", type: "official", travelTime: 1 },
   { fromCityId: "puyang", toCityId: "chenliu", type: "official", travelTime: 1 },
@@ -240,6 +243,37 @@ const roads: RoadEdge[] = [
   { fromCityId: "jinyang", toCityId: "luoyang", type: "official", travelTime: 1 },
   { fromCityId: "jinyang", toCityId: "ye", type: "official", travelTime: 1 },
   { fromCityId: "liaodong", toCityId: "pingyuan", type: "mountain", travelTime: 3 },
+
+  // === New EU4 area roads ===
+  // Jiangnan / Zhejiang
+  { fromCityId: "suzhou", toCityId: "jianye", type: "official", travelTime: 1 },
+  { fromCityId: "suzhou", toCityId: "hangzhou", type: "official", travelTime: 1 },
+  { fromCityId: "suzhou", toCityId: "yangzhou", type: "official", travelTime: 1 },
+  { fromCityId: "hangzhou", toCityId: "kuaiji", type: "official", travelTime: 1 },
+  { fromCityId: "hangzhou", toCityId: "nanchang", type: "mountain", travelTime: 3 },
+  // Fujian
+  { fromCityId: "fuzhou", toCityId: "nanchang", type: "mountain", travelTime: 3 },
+  { fromCityId: "fuzhou", toCityId: "hangzhou", type: "waterway", travelTime: 2 },
+  // Shandong
+  { fromCityId: "jinan", toCityId: "beihai", type: "official", travelTime: 1 },
+  { fromCityId: "jinan", toCityId: "chenliu", type: "official", travelTime: 1 },
+  { fromCityId: "jinan", toCityId: "ye", type: "official", travelTime: 1 },
+  { fromCityId: "jinan", toCityId: "pingyuan", type: "official", travelTime: 1 },
+  // Guangxi
+  { fromCityId: "nanning", toCityId: "nanhai", type: "official", travelTime: 1 },
+  { fromCityId: "nanning", toCityId: "nanman", type: "mountain", travelTime: 3 },
+  // Guizhou
+  { fromCityId: "guiyang_city", toCityId: "nanman", type: "mountain", travelTime: 3 },
+  { fromCityId: "guiyang_city", toCityId: "zunyi", type: "official", travelTime: 1 },
+  { fromCityId: "guiyang_city", toCityId: "nanning", type: "mountain", travelTime: 3 },
+  { fromCityId: "zunyi", toCityId: "jiangzhou", type: "mountain", travelTime: 3 },
+  { fromCityId: "zunyi", toCityId: "wuling", type: "mountain", travelTime: 3 },
+  // Huainan
+  { fromCityId: "yangzhou", toCityId: "jianye", type: "official", travelTime: 1 },
+  { fromCityId: "yangzhou", toCityId: "hefei", type: "official", travelTime: 1 },
+  { fromCityId: "yangzhou", toCityId: "xiapi", type: "official", travelTime: 1 },
+  // Lingling replacement
+  { fromCityId: "lingling", toCityId: "nanhai", type: "mountain", travelTime: 3 },
 
   // === 長江水路 (waterway, travelTime=2) ===
   { fromCityId: "xiangyang", toCityId: "jingzhou", type: "waterway", travelTime: 2 },
