@@ -93,7 +93,11 @@ const cities: PlaceNode[] = [
   { id: "guiyang", name: "郴州", description: "湘南要地，五嶺之一", lat: 25.80, lng: 113.03, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "forge", food: 60 },
   { id: "lujiang", name: "廬江", description: "皖南水鄉，廬江舊郡", lat: 31.26, lng: 117.29, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "library", food: 60 },
   { id: "shangyong", name: "十堰", description: "上庸故地，秦楚咽喉", lat: 32.63, lng: 110.80, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "forge", food: 60 },
-  { id: "changde_jiangling", name: "江陵", description: "荊州腹地，長江重鎮", lat: 30.33, lng: 112.18, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "granary", food: 60 },
+  { id: "nanchang", name: "南昌", description: "豫章故郡，贛江要衝", lat: 28.68, lng: 115.86, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "granary", food: 60 },
+  { id: "wuwei", name: "武威", description: "河西走廊，絲路咽喉", lat: 37.93, lng: 102.64, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "forge", food: 60 },
+  { id: "ji", name: "北京", description: "幽燕重鎮，北方門戶", lat: 39.90, lng: 116.40, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "military_academy", food: 60 },
+  { id: "jinyang", name: "太原", description: "晉陽故城，表裡山河", lat: 37.87, lng: 112.55, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "forge", food: 60 },
+  { id: "liaodong", name: "遼陽", description: "遼東郡治，東北要塞", lat: 41.27, lng: 123.17, status: "neutral", tier: "minor", gold: 0, garrison: 0, development: 0, specialty: "military_academy", food: 60 },
 ];
 
 const relationships: RelationshipEdge[] = [
@@ -224,8 +228,18 @@ const roads: RoadEdge[] = [
   { fromCityId: "chenliu", toCityId: "luoyang", type: "official", travelTime: 1 },
   { fromCityId: "shangyong", toCityId: "hanzhong", type: "official", travelTime: 1 },
   { fromCityId: "shangyong", toCityId: "xiangyang", type: "official", travelTime: 1 },
-  { fromCityId: "changde_jiangling", toCityId: "jingzhou", type: "official", travelTime: 1 },
-  { fromCityId: "changde_jiangling", toCityId: "wuling", type: "official", travelTime: 1 },
+  { fromCityId: "nanchang", toCityId: "changsha", type: "official", travelTime: 1 },
+  { fromCityId: "nanchang", toCityId: "lujiang", type: "official", travelTime: 1 },
+  { fromCityId: "nanchang", toCityId: "kuaiji", type: "official", travelTime: 1 },
+  { fromCityId: "wuwei", toCityId: "tianshui", type: "mountain", travelTime: 3 },
+  { fromCityId: "wuwei", toCityId: "changan", type: "mountain", travelTime: 3 },
+  { fromCityId: "ji", toCityId: "ye", type: "official", travelTime: 1 },
+  { fromCityId: "ji", toCityId: "pingyuan", type: "official", travelTime: 1 },
+  { fromCityId: "ji", toCityId: "jinyang", type: "official", travelTime: 1 },
+  { fromCityId: "ji", toCityId: "liaodong", type: "mountain", travelTime: 3 },
+  { fromCityId: "jinyang", toCityId: "luoyang", type: "official", travelTime: 1 },
+  { fromCityId: "jinyang", toCityId: "ye", type: "official", travelTime: 1 },
+  { fromCityId: "liaodong", toCityId: "pingyuan", type: "mountain", travelTime: 3 },
 
   // === 長江水路 (waterway, travelTime=2) ===
   { fromCityId: "xiangyang", toCityId: "jingzhou", type: "waterway", travelTime: 2 },
