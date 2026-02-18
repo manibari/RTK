@@ -208,6 +208,10 @@ export function AppShell() {
           addToast(w.description, colors[w.type] ?? "#64748b");
         }
       }
+      if (result.seasonalEvent) {
+        const seasonColors: Record<string, string> = { spring: "#22c55e", summer: "#ef4444", autumn: "#f59e0b", winter: "#3b82f6" };
+        addToast(`【${result.seasonalEvent.title}】${result.seasonalEvent.description}｜${result.seasonalEvent.effects}`, seasonColors[result.seasonalEvent.season] ?? "#64748b");
+      }
       if (result.dailySummary) {
         setSummaries((prev) => new Map(prev).set(result.tick, result.dailySummary));
       }

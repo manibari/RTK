@@ -1,5 +1,5 @@
 import { Engine } from "@rtk/simulation";
-import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode, SpyMission, SpyMissionType, CharacterSkills, CharacterRole, DistrictType, District } from "@rtk/graph-db";
+import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode, SpyMission, SpyMissionType, CharacterSkills, CharacterRole, DistrictType, District, UnitType, UnitComposition } from "@rtk/graph-db";
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
 import { NarrativeService } from "./narrative/narrative-service.js";
 import { evaluateNPCDecisions } from "./ai/npc-ai.js";
@@ -47,6 +47,33 @@ const TACTIC_MODIFIERS: Record<BattleTactic, { attack: number; defense: number }
   balanced: { attack: 0, defense: 0 },
 };
 
+// ── Unit counter system ──
+const DEFAULT_UNITS: UnitComposition = { infantry: 1, cavalry: 0, archers: 0 };
+const UNIT_TRAIN_COST: Record<UnitType, number> = { infantry: 80, cavalry: 150, archers: 120 };
+
+function getUnitComposition(city: PlaceNode): UnitComposition {
+  return city.units ?? { ...DEFAULT_UNITS };
+}
+
+// Rock-paper-scissors: cavalry > infantry > archers > cavalry
+function computeUnitModifier(attackUnits: UnitComposition, defendUnits: UnitComposition): { attackMod: number; defenseMod: number } {
+  const aTotal = attackUnits.infantry + attackUnits.cavalry + attackUnits.archers || 1;
+  const dTotal = defendUnits.infantry + defendUnits.cavalry + defendUnits.archers || 1;
+
+  // Weighted advantage ratios
+  const aAdvantage =
+    (attackUnits.cavalry / aTotal) * (defendUnits.infantry / dTotal) * 0.2 +
+    (attackUnits.infantry / aTotal) * (defendUnits.archers / dTotal) * 0.2 +
+    (attackUnits.archers / aTotal) * (defendUnits.cavalry / dTotal) * 0.2;
+
+  const dAdvantage =
+    (defendUnits.cavalry / dTotal) * (attackUnits.infantry / aTotal) * 0.2 +
+    (defendUnits.infantry / dTotal) * (attackUnits.archers / aTotal) * 0.2 +
+    (defendUnits.archers / dTotal) * (attackUnits.cavalry / aTotal) * 0.2;
+
+  return { attackMod: aAdvantage - dAdvantage, defenseMod: dAdvantage - aAdvantage };
+}
+
 export interface AdvanceDayResult {
   tick: number;
   season: Season;
@@ -59,6 +86,7 @@ export interface AdvanceDayResult {
   spyReports: SpyReport[];
   deathEvents: DeathEvent[];
   worldEvents: WorldEvent[];
+  seasonalEvent: SeasonalEvent | null;
   pendingCard: PendingEventCard | null;
   gameStatus: GameStatus;
 }
@@ -87,6 +115,15 @@ const WORLD_EVENT_LABELS: Record<WorldEventType, string> = {
   drought: "旱災",
   bandits: "盜匪",
 };
+
+// ── Seasonal major events ──
+export interface SeasonalEvent {
+  tick: number;
+  season: Season;
+  title: string;
+  description: string;
+  effects: string;
+}
 
 export type GameStatus = "ongoing" | "victory" | "defeat";
 
@@ -136,7 +173,7 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade" | "build_district" | "assign_mentor" | "build_siege" | "demand";
+  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade" | "build_district" | "assign_mentor" | "build_siege" | "demand" | "sow_discord" | "train_unit";
   characterId: string;
   targetCityId: string;
   targetCharacterId?: string; // for recruit / hire_neutral / assign_mentor (apprentice)
@@ -147,6 +184,8 @@ export interface PlayerCommand {
   districtType?: DistrictType; // for build_district
   demandType?: "tribute" | "withdraw"; // for demand
   demandAmount?: number; // for tribute demand (gold amount)
+  targetFactionId?: string; // for sow_discord
+  unitType?: UnitType; // for train_unit
 }
 
 // ── District system ──
@@ -393,6 +432,7 @@ export class SimulationService {
   private mentorPairs: MentorPair[] = [];
   private warExhaustion = new Map<string, number>(); // factionId -> 0-100
   private droughtCities = new Map<string, number>(); // cityId -> drought expires at tick
+  private factionTrust = new Map<string, number>(); // "fA:fB" sorted key -> trust 0-100
   private diplomaticVictoryTicks = 0; // consecutive ticks with all surviving factions allied
   private economicVictoryTicks = 0;  // consecutive ticks with >80% total gold
 
@@ -442,6 +482,7 @@ export class SimulationService {
     this.mentorPairs = [];
     this.warExhaustion.clear();
     this.droughtCities.clear();
+    this.factionTrust.clear();
     this.diplomaticVictoryTicks = 0;
     this.economicVictoryTicks = 0;
     FACTIONS = createDefaultFactions();
@@ -1089,6 +1130,55 @@ export class SimulationService {
     return results;
   }
 
+  private async processSowDiscord(): Promise<DiplomacyEvent[]> {
+    const results: DiplomacyEvent[] = [];
+    const discordCmds = this.commandQueue.filter((c) => c.type === "sow_discord");
+
+    for (const cmd of discordCmds) {
+      const agentFaction = this.getFactionOf(cmd.characterId);
+      if (!agentFaction) continue;
+      const targetFaction = cmd.targetFactionId;
+      if (!targetFaction || targetFaction === agentFaction) continue;
+
+      const agent = await this.repo.getCharacter(cmd.characterId);
+      if (!agent) continue;
+
+      // Cost: 150 gold
+      const cities = await this.repo.getAllPlaces();
+      const payCity = cities.find((c) => c.controllerId && this.getFactionOf(c.controllerId) === agentFaction && c.gold >= 150);
+      if (!payCity) continue;
+      await this.repo.updatePlace(payCity.id, { gold: payCity.gold - 150 });
+
+      // Success rate based on intelligence + espionage skill
+      const espionage = (agent.skills?.espionage ?? 0);
+      const successChance = 0.2 + (agent.intelligence * 0.05) + (espionage * 0.08);
+
+      // Find all alliances involving the target faction
+      const targetAlliances = [...this.alliances].filter((k) => k.includes(targetFaction));
+      if (targetAlliances.length === 0) {
+        results.push({ tick: this.currentTick, type: "demand_rejected", factionA: agentFaction, factionB: targetFaction, description: `離間計失敗：${targetFaction} 目前無任何盟約` });
+        continue;
+      }
+
+      if (Math.random() < Math.min(0.75, successChance)) {
+        // Break a random alliance of the target
+        const allianceKey = targetAlliances[Math.floor(Math.random() * targetAlliances.length)];
+        this.alliances.delete(allianceKey);
+        const [fA, fB] = allianceKey.split(":");
+        const otherFaction = fA === targetFaction ? fB : fA;
+        this.adjustTrust(fA, fB, -15);
+        this.addPrestige(cmd.characterId, 3);
+        results.push({ tick: this.currentTick, type: "alliance_broken", factionA: fA, factionB: fB, description: `${agentFaction} 施展離間計，${fA} 與 ${fB} 同盟瓦解` });
+      } else {
+        // Failed: target gains trust with allies, agent loses prestige
+        this.adjustTrust(agentFaction, targetFaction, -10);
+        results.push({ tick: this.currentTick, type: "demand_rejected", factionA: agentFaction, factionB: targetFaction, description: `${agentFaction} 的離間計被識破，信任度下降` });
+      }
+    }
+    this.commandQueue = this.commandQueue.filter((c) => c.type !== "sow_discord");
+    return results;
+  }
+
   // ── Food system ──
   private async produceFood(): Promise<void> {
     const cities = await this.repo.getAllPlaces();
@@ -1155,6 +1245,77 @@ export class SimulationService {
     }];
   }
 
+  private async processSeasonalEvent(): Promise<SeasonalEvent | null> {
+    // Trigger at the start of each season (tick divisible by 4)
+    if (this.currentTick === 0 || this.currentTick % 4 !== 0) return null;
+
+    const season = getSeason(this.currentTick);
+    const cities = await this.repo.getAllPlaces();
+    const alliedCities = cities.filter((c) => c.controllerId && this.getFactionOf(c.controllerId) === "shu");
+
+    let title = "";
+    let description = "";
+    let effects = "";
+
+    switch (season) {
+      case "spring": {
+        // 豐收祭典: all cities gain food +20, morale +3
+        title = "豐收祭典";
+        for (const c of cities.filter((c) => c.controllerId)) {
+          await this.repo.updatePlace(c.id, { food: Math.min(200, (c.food ?? 100) + 20) });
+        }
+        for (const f of FACTIONS) this.adjustMorale(f.id, 3);
+        description = "春暖花開，各地慶祝豐收祭典，民心大振";
+        effects = "全城市糧食+20，全勢力士氣+3";
+        break;
+      }
+      case "summer": {
+        // 邊境衝突: random border city gains garrison +1, trust between 2 random factions -5
+        title = "邊境衝突";
+        const borderCities = cities.filter((c) => c.controllerId && c.siegedBy);
+        if (borderCities.length > 0) {
+          const bc = borderCities[Math.floor(Math.random() * borderCities.length)];
+          await this.repo.updatePlace(bc.id, { garrison: bc.garrison + 2 });
+          description = `夏日炎炎，${bc.name} 邊境衝突加劇，守備增援`;
+          effects = `${bc.name} 守備+2`;
+        } else {
+          // No sieged city: all factions get exhaustion -5
+          for (const f of FACTIONS) this.adjustExhaustion(f.id, -5);
+          description = "夏日太平，各國休養生息，戰爭疲乏減輕";
+          effects = "全勢力疲乏-5";
+        }
+        break;
+      }
+      case "autumn": {
+        // 商路開通: allied cities get gold +30 each
+        title = "商路開通";
+        for (const c of alliedCities) {
+          await this.repo.updatePlace(c.id, { gold: c.gold + 30 });
+        }
+        description = "秋收時節商旅雲集，玩家城市獲得額外金幣收入";
+        effects = `我方城市金幣+30（共${alliedCities.length}城）`;
+        break;
+      }
+      case "winter": {
+        // 嚴冬寒潮: all cities lose food -15, ungarrisoned cities lose garrison -1
+        title = "嚴冬寒潮";
+        for (const c of cities.filter((c) => c.controllerId)) {
+          const foodLoss = 15;
+          const garrisonLoss = c.garrison <= 1 ? 0 : (Math.random() < 0.3 ? 1 : 0);
+          await this.repo.updatePlace(c.id, {
+            food: Math.max(0, (c.food ?? 100) - foodLoss),
+            garrison: Math.max(0, c.garrison - garrisonLoss),
+          });
+        }
+        description = "寒冬降臨，糧草消耗加劇，部分守軍凍傷減員";
+        effects = "全城市糧食-15，部分城市守備-1";
+        break;
+      }
+    }
+
+    return { tick: this.currentTick, season, title, description, effects };
+  }
+
   private travelTimeFor(charId: string, originCity: PlaceNode | undefined, baseTravelTime: number): number {
     const faction = this.getFactionOf(charId);
     let time = originCity?.specialty === "harbor" ? 1 : baseTravelTime;
@@ -1179,6 +1340,7 @@ export class SimulationService {
         spyReports: [],
         deathEvents: [],
         worldEvents: [],
+        seasonalEvent: null,
         pendingCard: null,
         gameStatus: this.gameState.status,
       };
@@ -1247,6 +1409,16 @@ export class SimulationService {
     const demandEvents = await this.processDemands();
     diplomacyEvents.push(...demandEvents);
 
+    // Process sow discord commands
+    const discordEvents = await this.processSowDiscord();
+    diplomacyEvents.push(...discordEvents);
+
+    // Alliance trust naturally recovers +1 per tick for allied factions
+    for (const key of this.alliances) {
+      const [fA, fB] = key.split(":");
+      this.adjustTrust(fA, fB, 1);
+    }
+
     // Betrayal: disloyal characters may defect
     const betrayalEvents = await this.processBetrayals();
 
@@ -1258,6 +1430,9 @@ export class SimulationService {
 
     // World events (plague, drought, bandits)
     const worldEvents = await this.processWorldEvents();
+
+    // Seasonal major event (every 4 ticks)
+    const seasonalEvent = await this.processSeasonalEvent();
 
     // Character deaths from recent battles
     const deathEvents = await this.processDeaths(battleResults);
@@ -1331,11 +1506,11 @@ export class SimulationService {
       // Re-read events with narratives
       const updatedEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
       const season = getSeason(this.currentTick);
-      return { tick: this.currentTick, season, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, pendingCard, gameStatus };
+      return { tick: this.currentTick, season, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, seasonalEvent, pendingCard, gameStatus };
     }
 
     const season = getSeason(this.currentTick);
-    return { tick: this.currentTick, season, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, pendingCard, gameStatus };
+    return { tick: this.currentTick, season, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, seasonalEvent, pendingCard, gameStatus };
   }
 
   getDailySummary(tick: number): string {
@@ -1614,6 +1789,20 @@ export class SimulationService {
           food: Math.max(0, (city.food ?? 100) - foodHit),
         });
         this.addPrestige(char.id, 2);
+        continue;
+      }
+
+      // Train unit at allied city
+      if (cmd.type === "train_unit" && cmd.unitType) {
+        const city = await this.repo.getPlace(cmd.targetCityId);
+        if (!city || !city.controllerId) continue;
+        const faction = this.getFactionOf(cmd.characterId);
+        if (!faction || this.getFactionOf(city.controllerId) !== faction) continue;
+        const cost = UNIT_TRAIN_COST[cmd.unitType];
+        if (city.gold < cost) continue;
+        const units = getUnitComposition(city);
+        units[cmd.unitType] += 1;
+        await this.repo.updatePlace(city.id, { gold: city.gold - cost, units });
         continue;
       }
 
@@ -2170,7 +2359,15 @@ export class SimulationService {
         const attackerLegacy = attackFaction ? this.getLegacyBonus(attackFaction) : 0;
         if (attackerLegacy > 0) attackPower += Math.min(attackerLegacy, 5);
 
-        const attackerWins = attackPower > effectiveDefense;
+        // Unit type counter modifier
+        const attackerOriginCity = await this.repo.getPlace(cityArrivals[0]?.originCityId ?? "");
+        const attackUnits = attackerOriginCity ? getUnitComposition(attackerOriginCity) : { ...DEFAULT_UNITS };
+        const defendUnits = getUnitComposition(city);
+        const unitMod = computeUnitModifier(attackUnits, defendUnits);
+        attackPower *= (1 + unitMod.attackMod);
+        const effectiveDefenseWithUnits = effectiveDefense * (1 + unitMod.defenseMod);
+
+        const attackerWins = attackPower > effectiveDefenseWithUnits;
         const leadAttacker = attackChars[0];
         if (!leadAttacker) continue;
 
@@ -2457,6 +2654,28 @@ export class SimulationService {
     return [a, b].sort().join(":");
   }
 
+  // ── Trust system ──
+  private getTrust(fA: string, fB: string): number {
+    return this.factionTrust.get(this.allianceKey(fA, fB)) ?? 50;
+  }
+
+  private adjustTrust(fA: string, fB: string, delta: number): void {
+    const key = this.allianceKey(fA, fB);
+    const cur = this.factionTrust.get(key) ?? 50;
+    this.factionTrust.set(key, Math.max(0, Math.min(100, cur + delta)));
+  }
+
+  getFactionTrust(): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (let i = 0; i < FACTIONS.length; i++) {
+      for (let j = i + 1; j < FACTIONS.length; j++) {
+        const key = this.allianceKey(FACTIONS[i].id, FACTIONS[j].id);
+        result[key] = this.factionTrust.get(key) ?? 50;
+      }
+    }
+    return result;
+  }
+
   private async evaluateDiplomacy(): Promise<DiplomacyEvent[]> {
     const events: DiplomacyEvent[] = [];
     const rels = this.engine.getRelationships();
@@ -2617,11 +2836,21 @@ export class SimulationService {
 
     if (intimacy < 40) return { success: false, reason: `親密度不足（${intimacy}/40）` };
 
+    // Trust affects success rate: trust < 20 → impossible, trust 20-80 → scaled chance
+    const trust = this.getTrust(playerFaction, factionId);
+    if (trust < 20) return { success: false, reason: `信任度過低（${trust}/20）` };
+    const trustBonus = (trust - 50) / 100; // -0.3 to +0.5
+    const successChance = 0.5 + trustBonus + (intimacy - 40) / 200;
+    if (Math.random() > Math.min(0.95, Math.max(0.1, successChance))) {
+      return { success: false, reason: `${factionId} 拒絕結盟（信任度：${trust}）` };
+    }
+
     this.alliances.add(key);
+    this.adjustTrust(playerFaction, factionId, 10);
     // Track diplomacy achievement for player leader
     this.trackDiplomacy(playerLeader);
     this.addPrestige(playerLeader, 3);
-    return { success: true, reason: `與 ${targetLeader} 結盟成功` };
+    return { success: true, reason: `與 ${targetLeader} 結盟成功（信任度：${trust}→${this.getTrust(playerFaction, factionId)}）` };
   }
 
   async resolveEventCard(choiceIndex: number): Promise<{ success: boolean; description: string }> {
@@ -2661,7 +2890,8 @@ export class SimulationService {
     const key = this.allianceKey(playerFaction, factionId);
     if (!this.alliances.has(key)) return { success: false, reason: "No alliance exists" };
     this.alliances.delete(key);
-    return { success: true, reason: "Alliance broken" };
+    this.adjustTrust(playerFaction, factionId, -20);
+    return { success: true, reason: `Alliance broken（信任度 -20 → ${this.getTrust(playerFaction, factionId)}）` };
   }
 
   async getFactionStats(): Promise<{ id: string; name: string; color: string; gold: number; cities: number; characters: number; power: number; morale: number; legacy: number; exhaustion: number }[]> {
@@ -2814,6 +3044,7 @@ export class SimulationService {
       mentorPairs: [...this.mentorPairs],
       warExhaustion: [...this.warExhaustion.entries()],
       droughtCities: [...this.droughtCities.entries()],
+      factionTrust: [...this.factionTrust.entries()],
       diplomaticVictoryTicks: this.diplomaticVictoryTicks,
       economicVictoryTicks: this.economicVictoryTicks,
       savedAt: new Date().toISOString(),
@@ -2892,6 +3123,7 @@ export class SimulationService {
     this.mentorPairs = data.mentorPairs ?? [];
     this.warExhaustion = new Map(data.warExhaustion ?? []);
     this.droughtCities = new Map(data.droughtCities ?? []);
+    this.factionTrust = new Map(data.factionTrust ?? []);
     this.diplomaticVictoryTicks = data.diplomaticVictoryTicks ?? 0;
     this.economicVictoryTicks = data.economicVictoryTicks ?? 0;
 
@@ -3080,6 +3312,7 @@ interface SaveData {
   mentorPairs: MentorPair[];
   warExhaustion: [string, number][];
   droughtCities: [string, number][];
+  factionTrust: [string, number][];
   diplomaticVictoryTicks: number;
   economicVictoryTicks: number;
   savedAt: string;

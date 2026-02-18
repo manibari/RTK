@@ -16,6 +16,12 @@ interface District {
   builtTick: number;
 }
 
+interface UnitComposition {
+  infantry: number;
+  cavalry: number;
+  archers: number;
+}
+
 interface PlaceNode {
   id: string;
   name: string;
@@ -33,6 +39,7 @@ interface PlaceNode {
   improvement?: string;
   districts?: District[];
   food?: number;
+  units?: UnitComposition;
 }
 
 const DISTRICT_LABELS: Record<string, string> = {
@@ -429,6 +436,15 @@ export function MapPage({
                 <span style={styles.infoLabel}>糧食</span>
                 <span style={{ color: (selectedCity.food ?? 100) < 30 ? "#ef4444" : (selectedCity.food ?? 100) < 60 ? "#f59e0b" : "#22c55e", fontWeight: 600 }}>{selectedCity.food ?? 100}</span>
               </div>
+              {/* Unit composition */}
+              {selectedCity.units && (selectedCity.units.infantry + selectedCity.units.cavalry + selectedCity.units.archers > 0) && (
+                <div style={styles.infoRow}>
+                  <span style={styles.infoLabel}>兵種</span>
+                  <span style={{ fontSize: 12, color: "#cbd5e1" }}>
+                    步{selectedCity.units.infantry} 騎{selectedCity.units.cavalry} 弓{selectedCity.units.archers}
+                  </span>
+                </div>
+              )}
               {(() => {
                 // Check if this is the last city for its faction
                 const controllerFaction = factions.find((f) => f.members.includes(selectedCity.controllerId ?? ""));
@@ -664,6 +680,34 @@ export function MapPage({
                     </div>
                   );
                 })()}
+                {/* Unit training */}
+                {(selectedCity.gold ?? 0) >= 80 && (
+                  <div style={{ marginTop: 8 }}>
+                    <p style={{ ...styles.cmdLabel, marginBottom: 4 }}>
+                      訓練兵種（步{(selectedCity.units?.infantry ?? 1)} 騎{(selectedCity.units?.cavalry ?? 0)} 弓{(selectedCity.units?.archers ?? 0)}）
+                    </p>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {([["infantry", "步兵", 80], ["cavalry", "騎兵", 150], ["archers", "弓兵", 120]] as const).map(([type, label, cost]) => (
+                        (selectedCity.gold ?? 0) >= cost && (
+                          <button
+                            key={type}
+                            style={{ ...styles.reinforceBtn, fontSize: 10, flex: 1, backgroundColor: type === "cavalry" ? "#a855f7" : type === "archers" ? "#22c55e" : "#3b82f6" }}
+                            onClick={() => {
+                              trpc.simulation.queueCommand.mutate({
+                                type: "train_unit",
+                                characterId: "liu_bei",
+                                targetCityId: selectedCity.id,
+                                unitType: type,
+                              }).then(() => setCommandCount((c) => c + 1));
+                            }}
+                          >
+                            {label}（{cost}金）
+                          </button>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

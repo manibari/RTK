@@ -50,7 +50,7 @@ export const simulationRouter = router({
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
-      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "hire_neutral", "assign_role", "start_research", "establish_trade", "build_district", "assign_mentor", "build_siege", "demand"]),
+      type: z.enum(["move", "attack", "recruit", "reinforce", "develop", "build_improvement", "spy", "sabotage", "hire_neutral", "assign_role", "start_research", "establish_trade", "build_district", "assign_mentor", "build_siege", "demand", "sow_discord", "train_unit"]),
       characterId: z.string(),
       targetCityId: z.string(),
       targetCharacterId: z.string().optional(),
@@ -61,6 +61,8 @@ export const simulationRouter = router({
       districtType: z.enum(["defense", "commerce", "agriculture", "recruitment"]).optional(),
       demandType: z.enum(["tribute", "withdraw"]).optional(),
       demandAmount: z.number().optional(),
+      targetFactionId: z.string().optional(),
+      unitType: z.enum(["infantry", "cavalry", "archers"]).optional(),
     }))
     .mutation(({ ctx, input }) => {
       ctx.simulation.queueCommand(input);
@@ -185,6 +187,11 @@ export const simulationRouter = router({
   // War exhaustion
   getWarExhaustion: publicProcedure.query(({ ctx }) => {
     return ctx.simulation.getWarExhaustion();
+  }),
+
+  // Faction trust
+  getFactionTrust: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getFactionTrust();
   }),
 
   // Victory stats (for victory screen)

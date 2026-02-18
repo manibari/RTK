@@ -45,6 +45,14 @@ export interface District {
   builtTick: number;
 }
 
+export type UnitType = "infantry" | "cavalry" | "archers";
+
+export interface UnitComposition {
+  infantry: number;
+  cavalry: number;
+  archers: number;
+}
+
 export interface PlaceNode {
   id: string;
   name: string;
@@ -62,6 +70,7 @@ export interface PlaceNode {
   improvement?: string;
   districts?: District[];
   food?: number;
+  units?: UnitComposition;
 }
 
 export interface Movement {

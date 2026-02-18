@@ -49,20 +49,23 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
   const [alliances, setAlliances] = useState<AlliancePair[]>([]);
   const [history, setHistory] = useState<Record<string, { tick: number; power: number }[]>>({});
   const [techs, setTechs] = useState<Record<string, FactionTechState>>({});
+  const [trustMap, setTrustMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchStats = useCallback(async () => {
     try {
-      const [s, a, h, t] = await Promise.all([
+      const [s, a, h, t, tr] = await Promise.all([
         trpc.simulation.getFactionStats.query(),
         trpc.simulation.getAlliances.query(),
         trpc.simulation.getFactionHistory.query(),
         trpc.simulation.getFactionTechs.query(),
+        trpc.simulation.getFactionTrust.query(),
       ]);
       setStats(s as FactionStat[]);
       setAlliances(a as unknown as AlliancePair[]);
       setHistory(h as Record<string, { tick: number; power: number }[]>);
       setTechs(t as Record<string, FactionTechState>);
+      setTrustMap(tr as Record<string, number>);
     } catch {
       // silently fail
     } finally {
@@ -195,19 +198,51 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
             )}
 
             {/* Diplomacy buttons (only for non-player factions) */}
-            {f.id !== "shu" && (
+            {f.id !== "shu" && (() => {
+              const trustKey = ["shu", f.id].sort().join(":");
+              const trust = trustMap[trustKey] ?? 50;
+              return (
               <div style={styles.diplomacyRow}>
-                {isAllied(f.id) ? (
-                  <button style={styles.breakBtn} onClick={() => handleBreak(f.id)}>
-                    解除同盟
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, width: "100%" }}>
+                  <span style={{ fontSize: 11, color: "#94a3b8" }}>信任</span>
+                  <div style={{ flex: 1, height: 4, backgroundColor: "#0f172a", borderRadius: 2, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${trust}%`, backgroundColor: trust >= 60 ? "#22c55e" : trust >= 30 ? "#f59e0b" : "#ef4444", borderRadius: 2 }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: "#94a3b8" }}>{trust}</span>
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {isAllied(f.id) ? (
+                    <button style={styles.breakBtn} onClick={() => handleBreak(f.id)}>
+                      解除同盟
+                    </button>
+                  ) : (
+                    <button style={styles.allyBtn} onClick={() => handlePropose(f.id)}>
+                      提議結盟
+                    </button>
+                  )}
+                  <button
+                    style={{ ...styles.breakBtn, backgroundColor: "#6366f1", borderColor: "#6366f1", fontSize: 10 }}
+                    onClick={async () => {
+                      try {
+                        await trpc.simulation.queueCommand.mutate({
+                          type: "sow_discord",
+                          characterId: "liu_bei",
+                          targetCityId: "",
+                          targetFactionId: f.id,
+                        });
+                        onMessage?.(`對 ${f.id} 發動離間計（150金）`, "#6366f1");
+                        fetchStats();
+                      } catch {
+                        onMessage?.("離間計指令失敗", "#ef4444");
+                      }
+                    }}
+                  >
+                    離間計
                   </button>
-                ) : (
-                  <button style={styles.allyBtn} onClick={() => handlePropose(f.id)}>
-                    提議結盟
-                  </button>
-                )}
+                </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* Technology */}
             {techs[f.id] && (
