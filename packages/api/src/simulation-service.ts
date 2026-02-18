@@ -2,7 +2,7 @@ import { Engine } from "@rtk/simulation";
 import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode, SpyMission, SpyMissionType, CharacterSkills, CharacterRole, DistrictType, District, UnitType, UnitComposition, CityPath } from "@rtk/graph-db";
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
 import { NarrativeService } from "./narrative/narrative-service.js";
-import { evaluateNPCDecisions } from "./ai/npc-ai.js";
+import { evaluateNPCDecisions, evaluateNPCSpyDecisions } from "./ai/npc-ai.js";
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { drawEventCard, applyEventCardChoice, type EventCard, type PendingEventCard } from "./event-cards.js";
@@ -1772,6 +1772,11 @@ export class SimulationService {
       const baseTravelTime = decision.action === "attack" ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
       const travelTime = this.travelTimeFor(decision.characterId, originCity, baseTravelTime);
 
+      // Store NPC tactic if attacking
+      if (decision.action === "attack" && decision.tactic) {
+        this.pendingTactics.set(decision.characterId, decision.tactic);
+      }
+
       await this.repo.addMovement({
         characterId: decision.characterId,
         originCityId: char.cityId,
@@ -1781,6 +1786,29 @@ export class SimulationService {
       });
 
       await this.repo.createCharacter({ ...char, cityId: decision.targetCityId });
+    }
+
+    // NPC spy missions
+    const activeSpyCharIds = new Set(this.spyMissions.map((m) => m.characterId));
+    const spyDecisions = evaluateNPCSpyDecisions(FACTIONS, characters, cities, "shu", this.alliances, activeSpyCharIds);
+
+    for (const spy of spyDecisions) {
+      if (this.commandedThisTick.has(spy.characterId)) continue;
+      const spyChar = await this.repo.getCharacter(spy.characterId);
+      if (!spyChar?.cityId) continue;
+
+      this.commandedThisTick.add(spy.characterId);
+      this.spyCounter++;
+      const mission: SpyMission = {
+        id: `spy_${this.spyCounter}`,
+        characterId: spy.characterId,
+        targetCityId: spy.targetCityId,
+        missionType: spy.missionType,
+        status: "traveling",
+        departureTick: this.currentTick,
+        arrivalTick: this.currentTick + 2,
+      };
+      this.spyMissions.push(mission);
     }
   }
 
@@ -3498,6 +3526,41 @@ export class SimulationService {
       tick: this.currentTick,
       topCharacters,
       factionStats: stats.map((s) => ({ id: s.id, cities: s.cities, gold: s.gold, characters: s.characters })),
+    };
+  }
+
+  async getVictoryProgress(): Promise<{
+    conquest: { playerCities: number; totalMajor: number };
+    diplomacy: { consecutiveTicks: number; required: number; allAllied: boolean };
+    economy: { consecutiveTicks: number; required: number; goldShare: number };
+  }> {
+    const cities = await this.repo.getAllPlaces();
+    const majorCities = cities.filter((c) => c.tier === "major" && c.status !== "dead");
+    const playerMajors = majorCities.filter(
+      (c) => c.controllerId && FACTIONS[0].members.includes(c.controllerId),
+    ).length;
+
+    // Economic gold share
+    let shuGold = 0;
+    let totalGold = 0;
+    for (const city of cities) {
+      if (!city.controllerId) continue;
+      totalGold += city.gold;
+      if (FACTIONS[0].members.includes(city.controllerId)) shuGold += city.gold;
+    }
+    const goldShare = totalGold > 0 ? shuGold / totalGold : 0;
+
+    // Diplomatic: check if all surviving factions are allied
+    const survivingFactions = FACTIONS.filter((f) => f.id !== "shu" && f.members.length > 0);
+    const allAllied = survivingFactions.length > 0 && survivingFactions.every((f) => {
+      const key = ["shu", f.id].sort().join(":");
+      return this.alliances.has(key);
+    });
+
+    return {
+      conquest: { playerCities: playerMajors, totalMajor: majorCities.length },
+      diplomacy: { consecutiveTicks: this.diplomaticVictoryTicks, required: 10, allAllied },
+      economy: { consecutiveTicks: this.economicVictoryTicks, required: 5, goldShare },
     };
   }
 

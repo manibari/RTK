@@ -200,6 +200,11 @@ export const simulationRouter = router({
     return ctx.simulation.getVictoryStats();
   }),
 
+  // Victory progress (live HUD)
+  getVictoryProgress: publicProcedure.query(async ({ ctx }) => {
+    return ctx.simulation.getVictoryProgress();
+  }),
+
   // Event cards
   resolveEventCard: publicProcedure
     .input(z.object({ choiceIndex: z.number().min(0).max(3) }))

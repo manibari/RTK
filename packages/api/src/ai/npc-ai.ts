@@ -1,4 +1,5 @@
-import type { CharacterNode, PlaceNode, RelationshipEdge } from "@rtk/graph-db";
+import type { CharacterNode, PlaceNode, RelationshipEdge, SpyMissionType } from "@rtk/graph-db";
+import type { BattleTactic } from "../simulation-service.js";
 
 interface FactionDef {
   id: string;
@@ -10,8 +11,20 @@ export interface AIDecision {
   characterId: string;
   action: "move" | "attack" | "stay";
   targetCityId?: string;
+  tactic?: BattleTactic;
   reason: string;
 }
+
+// NPC spy decision: which character to send on what mission
+export interface AISpyDecision {
+  characterId: string;
+  targetCityId: string;
+  missionType: SpyMissionType;
+  reason: string;
+}
+
+// Faction-level strategic intent for a given tick
+export type StrategicIntent = "expand" | "defend" | "develop";
 
 // ── Personality system ──
 const AGGRESSION_TRAITS: Record<string, number> = {
@@ -27,18 +40,63 @@ function personalityWeight(char: CharacterNode): { aggression: number; caution: 
     aggression += AGGRESSION_TRAITS[t] ?? 0;
     caution += CAUTION_TRAITS[t] ?? 0;
   }
-  // Military-heavy chars are slightly more aggressive; intelligence-heavy are more cautious
   aggression += Math.floor(char.military / 4);
   caution += Math.floor(char.intelligence / 4);
   return { aggression: Math.min(6, aggression), caution: Math.min(6, caution) };
 }
 
 /**
+ * Determine a faction's macro strategic intent based on situation.
+ * - expand: faction has strength advantage, go on the offensive
+ * - defend: faction is outnumbered or under siege, consolidate
+ * - develop: faction is stable, invest in economy/garrisons
+ */
+export function evaluateStrategicIntent(
+  faction: FactionDef,
+  factionCities: PlaceNode[],
+  enemyCities: PlaceNode[],
+  defendersPerCity: Map<string, string[]>,
+): StrategicIntent {
+  if (factionCities.length === 0) return "defend";
+
+  const totalGarrison = factionCities.reduce((s, c) => s + c.garrison, 0);
+  const totalMembers = faction.members.length;
+  const avgGarrison = totalGarrison / factionCities.length;
+
+  // Under siege: any faction city with 0 garrison or low defenders → defend
+  const underThreat = factionCities.some(
+    (c) => c.garrison <= 1 || (defendersPerCity.get(c.id)?.length ?? 0) === 0,
+  );
+  if (underThreat && totalMembers <= 2) return "defend";
+
+  // Strong position: many members, good garrisons → expand
+  if (totalMembers >= 3 && avgGarrison >= 3 && enemyCities.length > 0) return "expand";
+
+  // Low development cities → develop
+  const avgDev = factionCities.reduce((s, c) => s + c.development, 0) / factionCities.length;
+  if (avgDev < 2 && avgGarrison >= 2) return "develop";
+
+  // Default: balanced — expand if garrison is sufficient, else defend
+  if (avgGarrison >= 2 && enemyCities.length > 0) return "expand";
+  return "defend";
+}
+
+/**
+ * Pick a tactic for an NPC character based on traits and situation.
+ */
+function pickTactic(char: CharacterNode, defending: boolean): BattleTactic {
+  const { aggression, caution } = personalityWeight(char);
+  if (defending && caution >= 3) return "defensive";
+  if (!defending && aggression >= 4) return "aggressive";
+  if (caution > aggression + 1) return "defensive";
+  if (aggression > caution + 1) return "aggressive";
+  return "balanced";
+}
+
+/**
  * NPC AI: evaluates strategic decisions for non-player factions.
- * Player faction (shu) is skipped — controlled by the player.
- * Alliance-aware: won't attack allied factions.
- * Relationship-aware: avoids attacking cities held by high-intimacy characters.
- * Personality-aware: traits drive aggression vs caution thresholds.
+ * Now with faction-level strategic intent (expand/defend/develop),
+ * coordinated target focus, and trait-based tactic selection.
  */
 export function evaluateNPCDecisions(
   factions: FactionDef[],
@@ -52,13 +110,11 @@ export function evaluateNPCDecisions(
   const charMap = new Map(characters.map((c) => [c.id, c]));
   const cityMap = new Map(cities.map((c) => [c.id, c]));
 
-  // Build a lookup: characterId -> factionId
   const charToFaction = new Map<string, string>();
   for (const f of factions) {
     for (const m of f.members) charToFaction.set(m, f.id);
   }
 
-  // Count defenders per city
   const defendersPerCity = new Map<string, string[]>();
   for (const char of characters) {
     if (!char.cityId) continue;
@@ -78,7 +134,6 @@ export function evaluateNPCDecisions(
     const factionCities = cities.filter(
       (c) => c.controllerId && faction.members.includes(c.controllerId),
     );
-    // Filter enemy cities: exclude allies and dead cities
     const enemyCities = cities.filter((c) => {
       if (c.status === "dead" || !c.controllerId) return false;
       if (faction.members.includes(c.controllerId)) return false;
@@ -87,10 +142,17 @@ export function evaluateNPCDecisions(
       return true;
     });
 
+    // Compute faction strategic intent
+    const intent = evaluateStrategicIntent(faction, factionCities, enemyCities, defendersPerCity);
+
+    // Pick a coordinated target: all attackers from this faction aim at the same city
+    const focusTarget = intent === "expand"
+      ? pickBestTarget(enemyCities, defendersPerCity, 2) // moderate caution for faction-level target
+      : null;
+
     for (const memberId of faction.members) {
       const char = charMap.get(memberId);
       if (!char?.cityId) continue;
-
       if (decisions.some((d) => d.characterId === memberId)) continue;
 
       const decision = decideForCharacter(
@@ -101,9 +163,80 @@ export function evaluateNPCDecisions(
         defendersPerCity,
         cityMap,
         relationships,
+        intent,
+        focusTarget,
       );
       decisions.push(decision);
     }
+  }
+
+  return decisions;
+}
+
+/**
+ * NPC spy decisions: factions may send spies against enemies.
+ * Called from simulation-service after movement decisions.
+ */
+export function evaluateNPCSpyDecisions(
+  factions: FactionDef[],
+  characters: CharacterNode[],
+  cities: PlaceNode[],
+  playerFactionId: string,
+  alliances: Set<string> = new Set(),
+  activeSpyCharIds: Set<string> = new Set(),
+): AISpyDecision[] {
+  const decisions: AISpyDecision[] = [];
+  const charToFaction = new Map<string, string>();
+  for (const f of factions) {
+    for (const m of f.members) charToFaction.set(m, f.id);
+  }
+
+  const isAllied = (fA: string, fB: string): boolean => {
+    const key = [fA, fB].sort().join(":");
+    return alliances.has(key);
+  };
+
+  for (const faction of factions) {
+    if (faction.id === playerFactionId) continue;
+    // 15% chance per tick for each NPC faction to attempt a spy mission
+    if (Math.random() > 0.15) continue;
+
+    const enemyCities = cities.filter((c) => {
+      if (c.status === "dead" || !c.controllerId) return false;
+      if (faction.members.includes(c.controllerId)) return false;
+      const cf = charToFaction.get(c.controllerId);
+      if (cf && isAllied(faction.id, cf)) return false;
+      return true;
+    });
+    if (enemyCities.length === 0) continue;
+
+    // Find a character with espionage or intelligence skill (prefer spymaster role)
+    const factionChars = characters.filter(
+      (c) => faction.members.includes(c.id) && c.cityId && !activeSpyCharIds.has(c.id),
+    );
+    // Score by espionage capability
+    const spyCandidates = factionChars
+      .map((c) => ({
+        char: c,
+        score: c.intelligence + (c.skills?.espionage ?? 0) * 3 + (c.role === "spymaster" ? 5 : 0),
+      }))
+      .filter((x) => x.score >= 3) // minimum threshold
+      .sort((a, b) => b.score - a.score);
+
+    if (spyCandidates.length === 0) continue;
+
+    const spy = spyCandidates[0].char;
+    const target = enemyCities[Math.floor(Math.random() * enemyCities.length)];
+
+    // Choose mission type: sabotage if target has high garrison, intel otherwise
+    const missionType: SpyMissionType = target.garrison >= 4 ? "sabotage" : "intel";
+
+    decisions.push({
+      characterId: spy.id,
+      targetCityId: target.id,
+      missionType,
+      reason: `${spy.name} spies on ${target.name} (${missionType})`,
+    });
   }
 
   return decisions;
@@ -126,53 +259,105 @@ function decideForCharacter(
   defendersPerCity: Map<string, string[]>,
   cityMap: Map<string, PlaceNode>,
   relationships: RelationshipEdge[],
+  intent: StrategicIntent,
+  focusTarget: PlaceNode | null,
 ): AIDecision {
   const currentCity = cityMap.get(char.cityId);
   const isLeader = char.id === faction.leaderId;
   const { aggression, caution } = personalityWeight(char);
 
-  // Filter out enemy cities whose controller has high intimacy with this character
   const viableEnemyCities = enemyCities.filter((c) => {
     if (!c.controllerId) return true;
     const intimacy = getIntimacyWith(char.id, c.controllerId, relationships);
-    return intimacy < 70; // Won't attack someone with intimacy >= 70
+    return intimacy < 70;
   });
 
-  // Leaders prefer to stay and defend (but aggressive leaders are bolder)
-  if (isLeader) {
-    const weakEnemy = pickBestTarget(viableEnemyCities, defendersPerCity, caution);
-    const homeDefenders = defendersPerCity.get(char.cityId)?.length ?? 0;
-    const leaderThreshold = Math.max(1, 2 - Math.floor(aggression / 3));
-    if (weakEnemy && homeDefenders > leaderThreshold) {
+  // ── DEFEND intent: leaders stay, non-leaders reinforce weakest cities ──
+  if (intent === "defend") {
+    // Reinforce the weakest garrison faction city
+    const weakest = factionCities
+      .filter((c) => c.id !== char.cityId)
+      .sort((a, b) => a.garrison - b.garrison)[0];
+    if (weakest && weakest.garrison <= 2 && !isLeader) {
+      return {
+        characterId: char.id,
+        action: "move",
+        targetCityId: weakest.id,
+        reason: `[Defend] Reinforce ${weakest.name} (garrison ${weakest.garrison})`,
+      };
+    }
+    return { characterId: char.id, action: "stay", reason: `[Defend] Hold position` };
+  }
+
+  // ── DEVELOP intent: stay and build (handled in npcSpend), only attack if obvious opportunity ──
+  if (intent === "develop") {
+    const easyTarget = viableEnemyCities.find(
+      (c) => c.garrison <= 1 && (defendersPerCity.get(c.id)?.length ?? 0) === 0,
+    );
+    if (easyTarget && !isLeader) {
+      const tactic = pickTactic(char, false);
       return {
         characterId: char.id,
         action: "attack",
-        targetCityId: weakEnemy.id,
-        reason: `Leader attacks ${weakEnemy.name}`,
+        targetCityId: easyTarget.id,
+        tactic,
+        reason: `[Develop] Opportunistic grab on undefended ${easyTarget.name}`,
       };
     }
-    return { characterId: char.id, action: "stay", reason: "Leader holds position" };
+    return { characterId: char.id, action: "stay", reason: `[Develop] Stay and build` };
   }
 
-  // Non-leaders: evaluate priorities
+  // ── EXPAND intent: coordinated offensive ──
+
+  // Leaders: attack the focus target if safe
+  if (isLeader) {
+    const homeDefenders = defendersPerCity.get(char.cityId)?.length ?? 0;
+    const leaderThreshold = Math.max(1, 2 - Math.floor(aggression / 3));
+    if (focusTarget && homeDefenders > leaderThreshold) {
+      const tactic = pickTactic(char, false);
+      return {
+        characterId: char.id,
+        action: "attack",
+        targetCityId: focusTarget.id,
+        tactic,
+        reason: `[Expand] Leader leads assault on ${focusTarget.name}`,
+      };
+    }
+    return { characterId: char.id, action: "stay", reason: "[Expand] Leader holds capital" };
+  }
+
+  // Non-leaders: coordinate on focus target if available
   const myDefenders = defendersPerCity.get(char.cityId)?.length ?? 0;
 
-  // Priority 1: If city is overstaffed, send to attack
-  // Aggressive chars attack from overstaffed-by-1; cautious wait for overstaffed-by-3+
+  // Priority 1: Join the coordinated attack on the focus target
+  if (focusTarget && myDefenders > 1) {
+    const tactic = pickTactic(char, false);
+    return {
+      characterId: char.id,
+      action: "attack",
+      targetCityId: focusTarget.id,
+      tactic,
+      reason: `[Expand] Coordinated assault on ${focusTarget.name}`,
+    };
+  }
+
+  // Priority 2: Attack any weak target if overstaffed
   const attackThreshold = Math.max(1, 2 + Math.floor(caution / 2) - Math.floor(aggression / 2));
   if (myDefenders > attackThreshold && viableEnemyCities.length > 0) {
     const target = pickBestTarget(viableEnemyCities, defendersPerCity, caution);
     if (target) {
+      const tactic = pickTactic(char, false);
       return {
         characterId: char.id,
         action: "attack",
         targetCityId: target.id,
-        reason: `Attack ${target.name} (personality-driven)`,
+        tactic,
+        reason: `[Expand] Attack ${target.name} (personality-driven)`,
       };
     }
   }
 
-  // Priority 2: Reinforce an allied city that has no defenders
+  // Priority 3: Reinforce an allied city that has no defenders
   const emptyAlliedCity = factionCities.find(
     (c) => c.id !== char.cityId && (defendersPerCity.get(c.id)?.length ?? 0) === 0,
   );
@@ -181,24 +366,25 @@ function decideForCharacter(
       characterId: char.id,
       action: "move",
       targetCityId: emptyAlliedCity.id,
-      reason: `Reinforce empty ${emptyAlliedCity.name}`,
+      reason: `[Expand] Reinforce empty ${emptyAlliedCity.name}`,
     };
   }
 
-  // Priority 3: Random attack — chance scales with aggression, reduced by caution
+  // Priority 4: Random opportunistic attack
   const randomAttackChance = 0.15 + aggression * 0.05 - caution * 0.03;
   if (Math.random() < randomAttackChance && viableEnemyCities.length > 0) {
     const target = viableEnemyCities[Math.floor(Math.random() * viableEnemyCities.length)];
+    const tactic = pickTactic(char, false);
     return {
       characterId: char.id,
       action: "attack",
       targetCityId: target.id,
-      reason: `Opportunistic attack on ${target.name}`,
+      tactic,
+      reason: `[Expand] Opportunistic attack on ${target.name}`,
     };
   }
 
-  // Default: stay
-  return { characterId: char.id, action: "stay", reason: "Hold position" };
+  return { characterId: char.id, action: "stay", reason: "[Expand] Hold position" };
 }
 
 /**

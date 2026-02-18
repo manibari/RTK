@@ -6,11 +6,12 @@ import { GraphPage } from "./GraphPage";
 import { MapPage } from "./MapPage";
 import { GameLog } from "./GameLog";
 import { StatsPanel } from "./StatsPanel";
+import { HeroHall } from "./HeroHall";
 import { ToastStack, createToastId, type ToastMessage } from "./ToastStack";
 import { VictoryScreen } from "./VictoryScreen";
 import type { TimelineMarker } from "./Timeline";
 
-type ViewTab = "graph" | "map" | "log" | "stats";
+type ViewTab = "graph" | "map" | "log" | "stats" | "heroes";
 type SimSpeed = 1 | 2 | 5;
 type Season = "spring" | "summer" | "autumn" | "winter";
 
@@ -87,6 +88,11 @@ export function AppShell() {
   const [pendingCard, setPendingCard] = useState<PendingEventCard | null>(null);
   const [headline, setHeadline] = useState<{ text: string; color: string } | null>(null);
   const headlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [victoryProgress, setVictoryProgress] = useState<{
+    conquest: { playerCities: number; totalMajor: number };
+    diplomacy: { consecutiveTicks: number; required: number; allAllied: boolean };
+    economy: { consecutiveTicks: number; required: number; goldShare: number };
+  } | null>(null);
   const [autoSim, setAutoSim] = useState(false);
   const [simSpeed, setSimSpeed] = useState<SimSpeed>(1);
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -98,11 +104,13 @@ export function AppShell() {
     Promise.all([
       trpc.simulation.getCurrentTick.query(),
       trpc.simulation.getGameState.query(),
-    ]).then(([tickData, state]) => {
+      trpc.simulation.getVictoryProgress.query(),
+    ]).then(([tickData, state, vp]) => {
       setCurrentTick(tickData.tick);
       setViewTick(tickData.tick);
       setGameStatus(state.status as GameStatus);
       if (tickData.season) setSeason(tickData.season as Season);
+      setVictoryProgress(vp);
     }).catch(() => {});
   }, []);
 
@@ -240,6 +248,9 @@ export function AppShell() {
         setPendingCard(result.pendingCard as PendingEventCard);
       }
 
+      // Fetch victory progress
+      trpc.simulation.getVictoryProgress.query().then(setVictoryProgress).catch(() => {});
+
       return result;
     } finally {
       setAdvancing(false);
@@ -300,6 +311,7 @@ export function AppShell() {
     setAllDiplomacy([]);
     setSummaries(new Map());
     setToasts([]);
+    setVictoryProgress(null);
     addToast("遊戲已重置", "#22c55e");
   }, [addToast]);
 
@@ -380,6 +392,12 @@ export function AppShell() {
           >
             勢力
           </button>
+          <button
+            style={activeTab === "heroes" ? styles.tabActive : styles.tab}
+            onClick={() => setActiveTab("heroes")}
+          >
+            英雄堂
+          </button>
         </div>
 
         {/* Save/Load + Auto-simulate controls */}
@@ -391,6 +409,24 @@ export function AppShell() {
             </div>
           ))}
           <div style={styles.divider} />
+          {/* Victory progress mini-HUD */}
+          {victoryProgress && gameStatus === "ongoing" && (
+            <>
+              <div style={styles.vpChip} title={`征服：${victoryProgress.conquest.playerCities}/${victoryProgress.conquest.totalMajor} 主城`}>
+                <span style={{ color: "#ef4444" }}>⚔</span>
+                <span>{victoryProgress.conquest.playerCities}/{victoryProgress.conquest.totalMajor}</span>
+              </div>
+              <div style={styles.vpChip} title={`外交：${victoryProgress.diplomacy.allAllied ? "全員結盟" : "未結盟"} ${victoryProgress.diplomacy.consecutiveTicks}/${victoryProgress.diplomacy.required} 回合`}>
+                <span style={{ color: "#22c55e" }}>🤝</span>
+                <span>{victoryProgress.diplomacy.consecutiveTicks}/{victoryProgress.diplomacy.required}</span>
+              </div>
+              <div style={styles.vpChip} title={`經濟：金幣佔比 ${Math.round(victoryProgress.economy.goldShare * 100)}% ${victoryProgress.economy.consecutiveTicks}/${victoryProgress.economy.required} 回合`}>
+                <span style={{ color: "#f59e0b" }}>💰</span>
+                <span>{Math.round(victoryProgress.economy.goldShare * 100)}%</span>
+              </div>
+              <div style={styles.divider} />
+            </>
+          )}
           <button
             style={{
               ...styles.autoSimBtn,
@@ -474,8 +510,10 @@ export function AppShell() {
             summaries={summaries}
             currentTick={currentTick}
           />
-        ) : (
+        ) : activeTab === "stats" ? (
           <StatsPanel currentTick={currentTick} onMessage={addToast} />
+        ) : (
+          <HeroHall currentTick={currentTick} />
         )}
       </div>
 
@@ -620,6 +658,20 @@ const styles: Record<string, React.CSSProperties> = {
     width: 1,
     height: 20,
     backgroundColor: "#334155",
+  },
+  vpChip: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "3px 8px",
+    borderRadius: 6,
+    backgroundColor: "#1e293b",
+    border: "1px solid #334155",
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#e2e8f0",
+    cursor: "default",
+    whiteSpace: "nowrap" as const,
   },
   autoSimBtn: {
     padding: "6px 14px",
