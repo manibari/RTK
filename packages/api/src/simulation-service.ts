@@ -7,6 +7,7 @@ import { buildAdjacencyMap, findRoad, getReachableNeighbors, type AdjacencyMap }
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { drawEventCard, applyEventCardChoice, type EventCard, type PendingEventCard } from "./event-cards.js";
+import { type Difficulty, type BalanceConfig, getBalanceConfig, BALANCE_NORMAL } from "./balance-config.js";
 
 export interface TimelinePoint {
   tick: number;
@@ -491,14 +492,23 @@ export class SimulationService {
   private treaties: Treaty[] = [];
   private treatyCounter = 0;
   private designatedHeir: string | null = null; // characterId of designated heir for player faction
+  private config: BalanceConfig;
+  private difficulty: Difficulty;
 
-  constructor(repo: IGraphRepository, eventStore: IEventStore) {
+  constructor(repo: IGraphRepository, eventStore: IEventStore, difficulty: Difficulty = "normal") {
     this.engine = new Engine();
     this.repo = repo;
     this.eventStore = eventStore;
+    this.difficulty = difficulty;
+    this.config = getBalanceConfig(difficulty);
   }
 
-  async reset(): Promise<void> {
+  async reset(difficulty?: Difficulty): Promise<void> {
+    if (difficulty) {
+      this.difficulty = difficulty;
+      this.config = getBalanceConfig(difficulty);
+    }
+
     // Clear event store
     this.eventStore.clear();
 
@@ -581,6 +591,14 @@ export class SimulationService {
 
   get currentSeason(): Season {
     return getSeason(this.currentTick);
+  }
+
+  getDifficulty(): Difficulty {
+    return this.difficulty;
+  }
+
+  getConfig(): BalanceConfig {
+    return this.config;
   }
 
   // Player command API
@@ -1332,7 +1350,7 @@ export class SimulationService {
     const season = getSeason(this.currentTick);
     for (const city of cities) {
       if (city.status === "dead" || !city.controllerId) continue;
-      let foodIncome = city.tier === "major" ? 30 : 15;
+      let foodIncome = city.tier === "major" ? this.config.food.majorCityFoodIncome : this.config.food.minorCityFoodIncome;
       // Granary specialty: +100% (tripled with improvement)
       if (city.specialty === "granary") foodIncome *= city.improvement ? 3 : 2;
       // Agriculture district: +60%
@@ -1356,7 +1374,7 @@ export class SimulationService {
   }
 
   private async processWorldEvents(): Promise<WorldEvent[]> {
-    if (Math.random() > 0.20) return [];
+    if (Math.random() > this.config.events.worldEventChance) return [];
     const cities = (await this.repo.getAllPlaces()).filter((c) => c.status !== "dead" && c.controllerId);
     if (cities.length === 0) return [];
     const city = cities[Math.floor(Math.random() * cities.length)];
@@ -1446,10 +1464,10 @@ export class SimulationService {
         break;
       }
       case "winter": {
-        // 嚴冬寒潮: all cities lose food -15, ungarrisoned cities lose garrison -1
+        // 嚴冬寒潮: all cities lose food, ungarrisoned cities lose garrison -1
         title = "嚴冬寒潮";
         for (const c of cities.filter((c) => c.controllerId)) {
-          const foodLoss = 15;
+          const foodLoss = this.config.events.winterFoodLoss;
           const garrisonLoss = c.garrison <= 1 ? 0 : (Math.random() < 0.3 ? 1 : 0);
           await this.repo.updatePlace(c.id, {
             food: Math.max(0, (c.food ?? 100) - foodLoss),
@@ -1457,7 +1475,7 @@ export class SimulationService {
           });
         }
         description = "寒冬降臨，糧草消耗加劇，部分守軍凍傷減員";
-        effects = "全城市糧食-15，部分城市守備-1";
+        effects = `全城市糧食-${this.config.events.winterFoodLoss}，部分城市守備-1`;
         break;
       }
     }
@@ -1541,6 +1559,11 @@ export class SimulationService {
 
     // NPC factions spend gold (reinforce + develop + improvements)
     await this.npcSpend();
+
+    // NPC free garrison bonus (Hard mode: every 4 ticks)
+    if (this.config.npcAI.freeGarrisonPer4Ticks > 0 && this.currentTick % 4 === 0) {
+      await this.applyNPCFreeGarrison();
+    }
 
     // Specialty passive effects (military_academy, library)
     await this.processSpecialtyPassives();
@@ -1637,8 +1660,8 @@ export class SimulationService {
     const agingDeaths = await this.processAging();
     deathEvents.push(...agingDeaths);
 
-    // Draw event card (30% chance)
-    const drawnCard = drawEventCard();
+    // Draw event card
+    const drawnCard = drawEventCard(this.config.events.eventCardChance, this.config.events.eventCardGoldScale);
     const pendingCard: PendingEventCard | null = drawnCard ? { card: drawnCard, tick: this.currentTick } : null;
     this.pendingCard = pendingCard;
 
@@ -1784,7 +1807,7 @@ export class SimulationService {
     const adjacency = buildAdjacencyMap(roads);
 
     const rels = this.engine.getRelationships() as import("@rtk/graph-db").RelationshipEdge[];
-    const decisions = evaluateNPCDecisions(FACTIONS, characters, cities, "shu", this.alliances, rels, adjacency, cityMap);
+    const decisions = evaluateNPCDecisions(FACTIONS, characters, cities, "shu", this.alliances, rels, adjacency, cityMap, this.config.npcAI.npcExpansionAggression);
 
     for (const decision of decisions) {
       if (decision.action === "stay" || !decision.targetCityId) continue;
@@ -1818,7 +1841,7 @@ export class SimulationService {
 
     // NPC spy missions
     const activeSpyCharIds = new Set(this.spyMissions.map((m) => m.characterId));
-    const spyDecisions = evaluateNPCSpyDecisions(FACTIONS, characters, cities, "shu", this.alliances, activeSpyCharIds);
+    const spyDecisions = evaluateNPCSpyDecisions(FACTIONS, characters, cities, "shu", this.alliances, activeSpyCharIds, this.config.npcAI.spyChancePerTick);
 
     for (const spy of spyDecisions) {
       if (this.commandedThisTick.has(spy.characterId)) continue;
@@ -1850,9 +1873,9 @@ export class SimulationService {
       // Reinforce: spend gold to increase garrison
       if (cmd.type === "reinforce") {
         const city = await this.repo.getPlace(cmd.targetCityId);
-        if (!city || city.gold < 100) continue;
+        if (!city || city.gold < this.config.costs.reinforce) continue;
         await this.repo.updatePlace(city.id, {
-          gold: city.gold - 100,
+          gold: city.gold - this.config.costs.reinforce,
           garrison: city.garrison + 1,
         });
         continue;
@@ -1861,20 +1884,20 @@ export class SimulationService {
       // Develop: spend gold to increase city development
       if (cmd.type === "develop") {
         const city = await this.repo.getPlace(cmd.targetCityId);
-        if (!city || city.gold < 300 || city.development >= 5) continue;
+        if (!city || city.gold < this.config.costs.develop || city.development >= 5) continue;
         await this.repo.updatePlace(city.id, {
-          gold: city.gold - 300,
+          gold: city.gold - this.config.costs.develop,
           development: city.development + 1,
         });
         continue;
       }
 
-      // Build improvement: spend 500 gold, requires dev Lv.3+, must have specialty
+      // Build improvement: requires dev Lv.3+, must have specialty
       if (cmd.type === "build_improvement") {
         const city = await this.repo.getPlace(cmd.targetCityId);
-        if (!city || city.gold < 500 || city.development < 3 || !city.specialty || city.improvement) continue;
+        if (!city || city.gold < this.config.costs.buildImprovement || city.development < 3 || !city.specialty || city.improvement) continue;
         await this.repo.updatePlace(city.id, {
-          gold: city.gold - 500,
+          gold: city.gold - this.config.costs.buildImprovement,
           improvement: SPECIALTY_IMPROVEMENT[city.specialty] ?? city.specialty,
         });
         continue;
@@ -1917,18 +1940,18 @@ export class SimulationService {
         const cityA = await this.repo.getPlace(cmd.targetCityId);
         const cityB = await this.repo.getPlace(cmd.tradeCityId);
         if (!cityA || !cityB) continue;
-        if (cityA.gold < 200) continue;
+        if (cityA.gold < this.config.costs.establishTrade) continue;
         // Both cities must be allied
         if (cityA.status !== "allied" || cityB.status !== "allied") continue;
-        // Max 3 routes per city
-        if (this.tradeRoutesForCity(cityA.id).length >= 3) continue;
-        if (this.tradeRoutesForCity(cityB.id).length >= 3) continue;
+        // Max routes per city
+        if (this.tradeRoutesForCity(cityA.id).length >= this.config.economy.maxTradeRoutesPerCity) continue;
+        if (this.tradeRoutesForCity(cityB.id).length >= this.config.economy.maxTradeRoutesPerCity) continue;
         // No duplicate route
         const dup = this.tradeRoutes.find(
           (r) => (r.cityA === cityA.id && r.cityB === cityB.id) || (r.cityA === cityB.id && r.cityB === cityA.id),
         );
         if (dup) continue;
-        await this.repo.updatePlace(cityA.id, { gold: cityA.gold - 200 });
+        await this.repo.updatePlace(cityA.id, { gold: cityA.gold - this.config.costs.establishTrade });
         this.tradeCounter++;
         this.tradeRoutes.push({
           id: `trade-${this.tradeCounter}`,
@@ -1943,11 +1966,11 @@ export class SimulationService {
       // Build district in a city
       if (cmd.type === "build_district" && cmd.districtType) {
         const city = await this.repo.getPlace(cmd.targetCityId);
-        if (!city || city.gold < DISTRICT_COST || city.development < 2) continue;
+        if (!city || city.gold < this.config.costs.buildDistrict || city.development < 2) continue;
         if (this.cityDistrictCount(city) >= MAX_DISTRICTS) continue;
         if (this.hasDistrict(city, cmd.districtType)) continue;
         const districts = [...(city.districts ?? []), { type: cmd.districtType, builtTick: this.currentTick }];
-        await this.repo.updatePlace(city.id, { gold: city.gold - DISTRICT_COST, districts } as Partial<PlaceNode>);
+        await this.repo.updatePlace(city.id, { gold: city.gold - this.config.costs.buildDistrict, districts } as Partial<PlaceNode>);
         continue;
       }
 
@@ -2012,14 +2035,14 @@ export class SimulationService {
         continue;
       }
 
-      // Set city specialization path: costs 400 gold, requires dev >= 3
+      // Set city specialization path
       if (cmd.type === "set_path" && cmd.cityPath) {
         const city = await this.repo.getPlace(cmd.targetCityId);
         if (!city || !city.controllerId) continue;
         const faction = this.getFactionOf(cmd.characterId);
         if (!faction || this.getFactionOf(city.controllerId) !== faction) continue;
-        if (city.development < 3 || city.gold < 400) continue;
-        await this.repo.updatePlace(city.id, { gold: city.gold - 400, path: cmd.cityPath } as Partial<PlaceNode>);
+        if (city.development < 3 || city.gold < this.config.costs.setPath) continue;
+        await this.repo.updatePlace(city.id, { gold: city.gold - this.config.costs.setPath, path: cmd.cityPath } as Partial<PlaceNode>);
         continue;
       }
 
@@ -2035,15 +2058,16 @@ export class SimulationService {
         const factionId = "shu";
         const state = this.getFactionTech(factionId);
         if (state.current || state.completed.includes(tech.id)) continue;
-        // Deduct cost from richest allied city
+        // Deduct cost (with tech cost multiplier) from richest allied city
+        const adjustedResearchCost = Math.round(tech.cost * this.config.tech.researchCostMultiplier);
         const allCities = await this.repo.getAllPlaces();
         const shuFaction = FACTIONS.find((f) => f.id === factionId);
         if (!shuFaction) continue;
         const alliedCities = allCities
           .filter((c) => c.controllerId && shuFaction.members.includes(c.controllerId))
           .sort((a, b) => b.gold - a.gold);
-        if (alliedCities.length === 0 || alliedCities[0].gold < tech.cost) continue;
-        await this.repo.updatePlace(alliedCities[0].id, { gold: alliedCities[0].gold - tech.cost });
+        if (alliedCities.length === 0 || alliedCities[0].gold < adjustedResearchCost) continue;
+        await this.repo.updatePlace(alliedCities[0].id, { gold: alliedCities[0].gold - adjustedResearchCost });
         state.current = { techId: tech.id, startTick: this.currentTick };
         continue;
       }
@@ -2065,10 +2089,10 @@ export class SimulationService {
       if (cmd.type === "spy" || cmd.type === "sabotage" || cmd.type === "blockade") {
         const spyChar = await this.repo.getCharacter(cmd.characterId);
         if (!spyChar) continue;
-        // Deduct 100 gold from spy's current city
+        // Deduct spy mission cost from spy's current city
         const spyCity = spyChar.cityId ? await this.repo.getPlace(spyChar.cityId) : null;
-        if (!spyCity || spyCity.gold < 100) continue;
-        await this.repo.updatePlace(spyCity.id, { gold: spyCity.gold - 100 });
+        if (!spyCity || spyCity.gold < this.config.costs.spyMission) continue;
+        await this.repo.updatePlace(spyCity.id, { gold: spyCity.gold - this.config.costs.spyMission });
         this.spyCounter++;
         this.spyMissions.push({
           id: `spy-${this.spyCounter}`,
@@ -2189,14 +2213,21 @@ export class SimulationService {
       const { evaluateStrategicIntent } = await import("./ai/npc-ai.js");
       const intent = evaluateStrategicIntent(faction, factionCities, enemyCities, defendersPerCity);
 
+      // NPC cost multiplier
+      const npcCostMult = this.config.npcAI.npcCostMultiplier;
+      const npcReinforceCost = Math.round(this.config.costs.reinforce * npcCostMult);
+      const npcDevelopCost = Math.round(this.config.costs.develop * npcCostMult);
+      const npcImprovementCost = Math.round(this.config.costs.buildImprovement * npcCostMult);
+      const npcDistrictCost = Math.round(this.config.costs.buildDistrict * npcCostMult);
+
       // 1. Reinforce weakest garrison (priority higher when defending)
       const garrisonThreshold = intent === "defend" ? 6 : 4;
       const weakest = factionCities
-        .filter((c) => c.gold >= 100)
+        .filter((c) => c.gold >= npcReinforceCost)
         .sort((a, b) => a.garrison - b.garrison)[0];
       if (weakest && weakest.garrison < garrisonThreshold) {
         await this.repo.updatePlace(weakest.id, {
-          gold: weakest.gold - 100,
+          gold: weakest.gold - npcReinforceCost,
           garrison: weakest.garrison + 1,
         });
       }
@@ -2204,29 +2235,29 @@ export class SimulationService {
       // 2. Develop cities (priority higher when developing)
       const devCap = intent === "develop" ? 5 : 3;
       const devTarget = factionCities
-        .filter((c) => c.gold >= 300 && c.development < devCap)
+        .filter((c) => c.gold >= npcDevelopCost && c.development < devCap)
         .sort((a, b) => b.gold - a.gold)[0];
       if (devTarget) {
         await this.repo.updatePlace(devTarget.id, {
-          gold: devTarget.gold - 300,
+          gold: devTarget.gold - npcDevelopCost,
           development: devTarget.development + 1,
         });
       }
 
       // 3. Build improvement
       const improvable = factionCities
-        .filter((c) => c.gold >= 500 && c.development >= 3 && c.specialty && !c.improvement)
+        .filter((c) => c.gold >= npcImprovementCost && c.development >= 3 && c.specialty && !c.improvement)
         .sort((a, b) => b.gold - a.gold)[0];
       if (improvable && improvable.specialty) {
         await this.repo.updatePlace(improvable.id, {
-          gold: improvable.gold - 500,
+          gold: improvable.gold - npcImprovementCost,
           improvement: SPECIALTY_IMPROVEMENT[improvable.specialty] ?? improvable.specialty,
         });
       }
 
       // 4. Build district (based on intent and city specialty)
       const districtTarget = factionCities
-        .filter((c) => c.gold >= DISTRICT_COST && c.development >= 2 && this.cityDistrictCount(c) < MAX_DISTRICTS)
+        .filter((c) => c.gold >= npcDistrictCost && c.development >= 2 && this.cityDistrictCount(c) < MAX_DISTRICTS)
         .sort((a, b) => b.gold - a.gold)[0];
       if (districtTarget) {
         let districtType: DistrictType | null = null;
@@ -2241,14 +2272,14 @@ export class SimulationService {
         }
         if (districtType) {
           const districts = [...(districtTarget.districts ?? []), { type: districtType, builtTick: this.currentTick }];
-          await this.repo.updatePlace(districtTarget.id, { gold: districtTarget.gold - DISTRICT_COST, districts } as Partial<PlaceNode>);
+          await this.repo.updatePlace(districtTarget.id, { gold: districtTarget.gold - npcDistrictCost, districts } as Partial<PlaceNode>);
         }
       }
 
       // 5. Train units (expand intent → cavalry; defend → archers; develop → skip)
       if (intent !== "develop") {
         const unitType: UnitType = intent === "expand" ? "cavalry" : "archers";
-        const cost = UNIT_TRAIN_COST[unitType];
+        const cost = Math.round(UNIT_TRAIN_COST[unitType] * npcCostMult);
         const trainTarget = factionCities
           .filter((c) => c.gold >= cost)
           .sort((a, b) => b.gold - a.gold)[0];
@@ -2260,8 +2291,9 @@ export class SimulationService {
       }
 
       // 6. Set city path (dev >= 3, no path yet, can afford)
+      const npcPathCost = Math.round(this.config.costs.setPath * npcCostMult);
       const pathTarget = factionCities
-        .filter((c) => c.gold >= 400 && c.development >= 3 && !c.path)
+        .filter((c) => c.gold >= npcPathCost && c.development >= 3 && !c.path)
         .sort((a, b) => b.gold - a.gold)[0];
       if (pathTarget) {
         let chosenPath: CityPath;
@@ -2278,7 +2310,24 @@ export class SimulationService {
           // Default based on intent
           chosenPath = intent === "defend" ? "fortress" : intent === "develop" ? "trade_hub" : "breadbasket";
         }
-        await this.repo.updatePlace(pathTarget.id, { gold: pathTarget.gold - 400, path: chosenPath } as Partial<PlaceNode>);
+        await this.repo.updatePlace(pathTarget.id, { gold: pathTarget.gold - npcPathCost, path: chosenPath } as Partial<PlaceNode>);
+      }
+    }
+  }
+
+  private async applyNPCFreeGarrison(): Promise<void> {
+    const bonus = this.config.npcAI.freeGarrisonPer4Ticks;
+    if (bonus <= 0) return;
+    const cities = await this.repo.getAllPlaces();
+    for (const faction of FACTIONS) {
+      if (faction.id === "shu") continue;
+      // Give free garrison to the weakest NPC city
+      const factionCities = cities
+        .filter((c) => c.controllerId && faction.members.includes(c.controllerId))
+        .sort((a, b) => a.garrison - b.garrison);
+      if (factionCities.length > 0) {
+        const weakest = factionCities[0];
+        await this.repo.updatePlace(weakest.id, { garrison: weakest.garrison + bonus });
       }
     }
   }
@@ -2290,7 +2339,8 @@ export class SimulationService {
       const tech = TECHNOLOGIES.find((t) => t.id === state.current!.techId);
       if (!tech) continue;
       const elapsed = this.currentTick - state.current.startTick;
-      if (elapsed < tech.turns) continue;
+      const adjustedTurns = Math.round(tech.turns * this.config.tech.researchTimeMultiplier);
+      if (elapsed < adjustedTurns) continue;
 
       // Research complete
       state.completed.push(tech.id);
@@ -2327,14 +2377,15 @@ export class SimulationService {
       const nextTech = TECHNOLOGIES.find((t) => !state.completed.includes(t.id));
       if (!nextTech) continue;
 
-      // Check if faction can afford
+      // Check if faction can afford (NPC cost multiplier applied to research)
+      const adjustedCost = Math.round(nextTech.cost * this.config.tech.researchCostMultiplier * this.config.npcAI.npcCostMultiplier);
       const cities = await this.repo.getAllPlaces();
       const factionCities = cities
         .filter((c) => c.controllerId && faction.members.includes(c.controllerId))
         .sort((a, b) => b.gold - a.gold);
-      if (factionCities.length === 0 || factionCities[0].gold < nextTech.cost) continue;
+      if (factionCities.length === 0 || factionCities[0].gold < adjustedCost) continue;
 
-      await this.repo.updatePlace(factionCities[0].id, { gold: factionCities[0].gold - nextTech.cost });
+      await this.repo.updatePlace(factionCities[0].id, { gold: factionCities[0].gold - adjustedCost });
       state.current = { techId: nextTech.id, startTick: this.currentTick };
     }
   }
@@ -2684,9 +2735,9 @@ export class SimulationService {
       if (!city.siegedBy || city.siegeTick == null) continue;
       const duration = this.currentTick - city.siegeTick;
 
-      // Granary specialty: siege attrition delayed to 4 ticks (6 with improvement)
-      // Agriculture district: +3 ticks additional delay
-      let siegeDelay = city.specialty === "granary" ? (city.improvement ? 6 : 4) : 2;
+      // Granary specialty: siege attrition delayed; Agriculture district: +3 ticks additional delay
+      const baseSiegeDelay = this.config.combat.baseSiegeDelay;
+      let siegeDelay = city.specialty === "granary" ? (city.improvement ? baseSiegeDelay * 3 : baseSiegeDelay * 2) : baseSiegeDelay;
       if (this.hasDistrict(city, "agriculture")) siegeDelay += 3;
       if (duration < siegeDelay) continue;
 
@@ -2761,8 +2812,8 @@ export class SimulationService {
       if (city.status === "dead" || !city.controllerId) continue;
       // Sieged cities produce no gold
       if (city.siegedBy) continue;
-      const baseIncome = city.tier === "major" ? 60 : 30;
-      let multiplier = 1 + city.development * 0.3;
+      const baseIncome = city.tier === "major" ? this.config.economy.majorCityBaseIncome : this.config.economy.minorCityBaseIncome;
+      let multiplier = 1 + city.development * this.config.economy.developmentMultiplierPerLevel;
       // Unsupplied cities: -30% gold production
       if (supplyStatus[city.id] === false) multiplier *= 0.7;
       // Market specialty: +50% income (doubled with improvement)
@@ -2775,8 +2826,8 @@ export class SimulationService {
       multiplier += bestCommerce * 0.1;
       // Governor role bonus: +20% income
       multiplier += this.roleGoldBonus(charsHere);
-      // Commerce district: +80% income
-      if (this.hasDistrict(city, "commerce")) multiplier += 0.8;
+      // Commerce district bonus
+      if (this.hasDistrict(city, "commerce")) multiplier += this.config.economy.commerceDistrictBonus;
       // Trade hub path: +50% income
       if (city.path === "trade_hub") multiplier += 0.5;
       // War exhaustion >50: -20% income
@@ -2784,9 +2835,11 @@ export class SimulationService {
       if (factionId && (this.warExhaustion.get(factionId) ?? 0) > 50) multiplier *= 0.8;
       // Economic powerhouse tradition: +20% income
       if (factionId && this.factionTraditions.get(factionId) === "economic_powerhouse") multiplier += 0.2;
-      const income = Math.round(baseIncome * multiplier * seasonMult);
-      // Trade route bonus: +10 gold per active route
-      const tradeBonus = this.tradeRoutesForCity(city.id).length * 10;
+      // NPC income multiplier (only for non-player factions)
+      const npcIncomeMult = (factionId && factionId !== "shu") ? this.config.npcAI.npcIncomeMultiplier : 1;
+      const income = Math.round(baseIncome * multiplier * seasonMult * npcIncomeMult);
+      // Trade route bonus
+      const tradeBonus = this.tradeRoutesForCity(city.id).length * this.config.economy.tradeRouteGoldBonus;
       await this.repo.updatePlace(city.id, { gold: city.gold + income + tradeBonus });
     }
   }
@@ -2995,7 +3048,7 @@ export class SimulationService {
       if (this.deadCharacters.has(loserId)) continue;
 
       const tactic = battle.tactic ?? "balanced";
-      const deathChance = tactic === "aggressive" && battle.winner === "defender" ? 0.25 : 0.15;
+      const deathChance = tactic === "aggressive" && battle.winner === "defender" ? this.config.combat.aggressiveDeathChance : this.config.combat.baseDeathChance;
       if (Math.random() >= deathChance) continue;
 
       const loser = await this.repo.getCharacter(loserId);
@@ -3100,15 +3153,16 @@ export class SimulationService {
       // Pick two cities that don't already have a route between them
       for (let i = 0; i < factionCities.length; i++) {
         const a = factionCities[i];
-        if (a.gold < 200 || this.tradeRoutesForCity(a.id).length >= 3) continue;
+        const npcTradeCost = Math.round(this.config.costs.establishTrade * this.config.npcAI.npcCostMultiplier);
+        if (a.gold < npcTradeCost || this.tradeRoutesForCity(a.id).length >= this.config.economy.maxTradeRoutesPerCity) continue;
         for (let j = i + 1; j < factionCities.length; j++) {
           const b = factionCities[j];
-          if (this.tradeRoutesForCity(b.id).length >= 3) continue;
+          if (this.tradeRoutesForCity(b.id).length >= this.config.economy.maxTradeRoutesPerCity) continue;
           const dup = this.tradeRoutes.find(
             (r) => (r.cityA === a.id && r.cityB === b.id) || (r.cityA === b.id && r.cityB === a.id),
           );
           if (dup) continue;
-          await this.repo.updatePlace(a.id, { gold: a.gold - 200 });
+          await this.repo.updatePlace(a.id, { gold: a.gold - npcTradeCost });
           this.tradeCounter++;
           this.tradeRoutes.push({
             id: `trade-${this.tradeCounter}`,
@@ -3706,8 +3760,8 @@ export class SimulationService {
 
     return {
       conquest: { playerCities: playerMajors, totalMajor: majorCities.length },
-      diplomacy: { consecutiveTicks: this.diplomaticVictoryTicks, required: 20, allAllied },
-      economy: { consecutiveTicks: this.economicVictoryTicks, required: 10, goldShare },
+      diplomacy: { consecutiveTicks: this.diplomaticVictoryTicks, required: this.config.victory.diplomaticConsecutiveTicks, allAllied },
+      economy: { consecutiveTicks: this.economicVictoryTicks, required: this.config.victory.economicConsecutiveTicks, goldShare },
     };
   }
 
@@ -3744,8 +3798,9 @@ export class SimulationService {
     const movements = await this.repo.getActiveMovements(this.currentTick);
 
     const data: SaveData = {
-      version: 1,
+      version: 2,
       tick: this.currentTick,
+      difficulty: this.difficulty,
       gameState: { ...this.gameState },
       factions: FACTIONS.map((f) => ({ ...f, members: [...f.members] })),
       alliances: [...this.alliances],
@@ -3871,6 +3926,10 @@ export class SimulationService {
     this.treatyCounter = data.treatyCounter ?? 0;
     this.designatedHeir = data.designatedHeir ?? null;
 
+    // Restore difficulty (v1 saves default to "normal")
+    this.difficulty = data.difficulty ?? "normal";
+    this.config = getBalanceConfig(this.difficulty);
+
     // Re-init narrative service
     const characters = await this.repo.getAllCharacters();
     const characterMap = new Map(characters.map((c) => [c.id, c]));
@@ -3981,7 +4040,7 @@ export class SimulationService {
     });
     if (allAllied) {
       this.diplomaticVictoryTicks++;
-      if (this.diplomaticVictoryTicks >= 20) {
+      if (this.diplomaticVictoryTicks >= this.config.victory.diplomaticConsecutiveTicks) {
         this.gameState = { status: "victory", winnerFaction: "shu", tick: this.currentTick, winType: "diplomacy" };
         return "victory";
       }
@@ -3998,9 +4057,9 @@ export class SimulationService {
       totalGold += city.gold;
       if (FACTIONS[0].members.includes(city.controllerId)) shuGold += city.gold;
     }
-    if (totalGold > 0 && shuGold / totalGold >= 0.85) {
+    if (totalGold > 0 && shuGold / totalGold >= this.config.victory.economicGoldShareThreshold) {
       this.economicVictoryTicks++;
-      if (this.economicVictoryTicks >= 10) {
+      if (this.economicVictoryTicks >= this.config.victory.economicConsecutiveTicks) {
         this.gameState = { status: "victory", winnerFaction: "shu", tick: this.currentTick, winType: "economy" };
         return "victory";
       }
@@ -4028,7 +4087,7 @@ export class SimulationService {
 }
 
 interface SaveData {
-  version: 1;
+  version: 1 | 2;
   tick: number;
   gameState: GameState;
   factions: { id: string; leaderId: string; members: string[]; color: string }[];
@@ -4067,6 +4126,7 @@ interface SaveData {
   treaties: Treaty[];
   treatyCounter: number;
   designatedHeir: string | null;
+  difficulty?: Difficulty;
   savedAt: string;
 }
 

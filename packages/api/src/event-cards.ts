@@ -208,9 +208,8 @@ let cardCounter = 0;
 const recentCardTitles: string[] = [];
 const DEDUP_WINDOW = 5; // don't repeat within last 5 draws
 
-export function drawEventCard(): EventCard | null {
-  // 30% chance per turn
-  if (Math.random() > 0.3) return null;
+export function drawEventCard(eventCardChance: number = 0.3, goldScale: number = 1.0): EventCard | null {
+  if (Math.random() > eventCardChance) return null;
 
   // Filter out recently drawn cards
   const eligible = EVENT_CARD_POOL.filter((c) => !recentCardTitles.includes(c.title));
@@ -223,9 +222,22 @@ export function drawEventCard(): EventCard | null {
   recentCardTitles.push(template.title);
   if (recentCardTitles.length > DEDUP_WINDOW) recentCardTitles.shift();
 
+  // Scale gold deltas by goldScale factor
+  const scaledChoices = goldScale === 1.0
+    ? template.choices
+    : template.choices.map((c) => ({
+        ...c,
+        effect: {
+          ...c.effect,
+          ...(c.effect.goldDelta != null ? { goldDelta: Math.round(c.effect.goldDelta * goldScale) } : {}),
+        },
+      }));
+
   return {
     id: `event-${cardCounter}`,
-    ...template,
+    title: template.title,
+    description: template.description,
+    choices: scaledChoices,
   };
 }
 

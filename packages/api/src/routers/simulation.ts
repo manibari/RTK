@@ -47,6 +47,10 @@ export const simulationRouter = router({
     return { tick: ctx.simulation.currentTick, season: ctx.simulation.currentSeason };
   }),
 
+  getDifficulty: publicProcedure.query(({ ctx }) => {
+    return { difficulty: ctx.simulation.getDifficulty() };
+  }),
+
   // Player commands
   queueCommand: publicProcedure
     .input(z.object({
@@ -265,8 +269,10 @@ export const simulationRouter = router({
   }),
 
   // Reset
-  reset: publicProcedure.mutation(async ({ ctx }) => {
-    await ctx.simulation.reset();
-    return { tick: 0, status: "ongoing" };
-  }),
+  reset: publicProcedure
+    .input(z.object({ difficulty: z.enum(["easy", "normal", "hard"]).optional() }).optional())
+    .mutation(async ({ ctx, input }) => {
+      await ctx.simulation.reset(input?.difficulty);
+      return { tick: 0, status: "ongoing", difficulty: ctx.simulation.getDifficulty() };
+    }),
 });

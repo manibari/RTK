@@ -108,6 +108,7 @@ export function evaluateNPCDecisions(
   relationships: RelationshipEdge[] = [],
   adjacency?: AdjacencyMap,
   extCityMap?: Map<string, PlaceNode>,
+  expansionAggression: number = 1.0,
 ): AIDecision[] {
   const decisions: AIDecision[] = [];
   const charMap = new Map(characters.map((c) => [c.id, c]));
@@ -169,6 +170,7 @@ export function evaluateNPCDecisions(
         intent,
         focusTarget,
         adjacency,
+        expansionAggression,
       );
       decisions.push(decision);
     }
@@ -188,6 +190,7 @@ export function evaluateNPCSpyDecisions(
   playerFactionId: string,
   alliances: Set<string> = new Set(),
   activeSpyCharIds: Set<string> = new Set(),
+  spyChancePerTick: number = 0.15,
 ): AISpyDecision[] {
   const decisions: AISpyDecision[] = [];
   const charToFaction = new Map<string, string>();
@@ -202,8 +205,8 @@ export function evaluateNPCSpyDecisions(
 
   for (const faction of factions) {
     if (faction.id === playerFactionId) continue;
-    // 15% chance per tick for each NPC faction to attempt a spy mission
-    if (Math.random() > 0.15) continue;
+    // Chance per tick for each NPC faction to attempt a spy mission
+    if (Math.random() > spyChancePerTick) continue;
 
     const enemyCities = cities.filter((c) => {
       if (c.status === "dead" || !c.controllerId) return false;
@@ -266,6 +269,7 @@ function decideForCharacter(
   intent: StrategicIntent,
   focusTarget: PlaceNode | null,
   adjacency?: AdjacencyMap,
+  expansionAggression: number = 1.0,
 ): AIDecision {
   const currentCity = cityMap.get(char.cityId);
   const isLeader = char.id === faction.leaderId;
@@ -384,8 +388,8 @@ function decideForCharacter(
     };
   }
 
-  // Priority 4: Random opportunistic attack
-  const randomAttackChance = 0.15 + aggression * 0.05 - caution * 0.03;
+  // Priority 4: Random opportunistic attack (scaled by expansion aggression)
+  const randomAttackChance = (0.15 + aggression * 0.05 - caution * 0.03) * expansionAggression;
   if (Math.random() < randomAttackChance && viableEnemyCities.length > 0) {
     const target = viableEnemyCities[Math.floor(Math.random() * viableEnemyCities.length)];
     const tactic = pickTactic(char, false);
