@@ -96,4 +96,45 @@ describe("Simulation Balance Integration", () => {
       );
     });
   });
+
+  describe("loyalty config values are consistent across difficulties", () => {
+    it("all presets have valid loyalty values", () => {
+      for (const preset of [BALANCE_EASY, BALANCE_NORMAL, BALANCE_HARD]) {
+        expect(preset.loyalty.initialLoyalty).toBeGreaterThan(0);
+        expect(preset.loyalty.initialLoyalty).toBeLessThanOrEqual(100);
+        expect(preset.loyalty.capturedCityLoyalty).toBeGreaterThan(0);
+        expect(preset.loyalty.capturedCityLoyalty).toBeLessThan(preset.loyalty.initialLoyalty);
+        expect(preset.loyalty.foreignDecayPerTick).toBeGreaterThan(0);
+        expect(preset.loyalty.rebellionThreshold).toBeGreaterThan(0);
+        expect(preset.loyalty.rebellionChance).toBeGreaterThan(0);
+        expect(preset.loyalty.rebellionChance).toBeLessThanOrEqual(1);
+      }
+    });
+
+    it("harder difficulties have harsher rebellion parameters", () => {
+      expect(BALANCE_HARD.loyalty.foreignDecayPerTick).toBeGreaterThan(
+        BALANCE_EASY.loyalty.foreignDecayPerTick,
+      );
+      expect(BALANCE_HARD.loyalty.rebellionChance).toBeGreaterThan(
+        BALANCE_EASY.loyalty.rebellionChance,
+      );
+      expect(BALANCE_HARD.loyalty.rebellionThreshold).toBeGreaterThan(
+        BALANCE_EASY.loyalty.rebellionThreshold,
+      );
+    });
+
+    it("easier difficulties give more loyalty to captured cities", () => {
+      expect(BALANCE_EASY.loyalty.capturedCityLoyalty).toBeGreaterThan(
+        BALANCE_HARD.loyalty.capturedCityLoyalty,
+      );
+    });
+
+    it("normal preset has expected loyalty values", () => {
+      expect(BALANCE_NORMAL.loyalty.initialLoyalty).toBe(50);
+      expect(BALANCE_NORMAL.loyalty.capturedCityLoyalty).toBe(35);
+      expect(BALANCE_NORMAL.loyalty.foreignDecayPerTick).toBe(2);
+      expect(BALANCE_NORMAL.loyalty.rebellionThreshold).toBe(20);
+      expect(BALANCE_NORMAL.loyalty.rebellionChance).toBe(0.20);
+    });
+  });
 });

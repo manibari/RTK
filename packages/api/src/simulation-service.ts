@@ -2583,7 +2583,7 @@ export class SimulationService {
 
   // ── City Loyalty & Rebellion ──
   getCityLoyalty(cityId: string): number {
-    return this.cityLoyalty.get(cityId) ?? 50;
+    return this.cityLoyalty.get(cityId) ?? this.config.loyalty.initialLoyalty;
   }
 
   getAllCityLoyalty(): Record<string, number> {
@@ -2597,11 +2597,11 @@ export class SimulationService {
     const characters = await this.repo.getAllCharacters();
     for (const city of cities) {
       if (city.status === "dead" || !city.controllerId) continue;
-      let loyalty = this.cityLoyalty.get(city.id) ?? 50;
+      let loyalty = this.cityLoyalty.get(city.id) ?? this.config.loyalty.initialLoyalty;
       const controllerFaction = this.getFactionOf(city.controllerId);
       // Foreign controller decay: city status != allied means recently captured
       if (city.status === "hostile" || city.status === "neutral") {
-        loyalty -= 3;
+        loyalty -= this.config.loyalty.foreignDecayPerTick;
       }
       // Low garrison penalty
       if (city.garrison < 1) loyalty -= 1;
@@ -2631,9 +2631,8 @@ export class SimulationService {
     for (const city of cities) {
       if (city.status === "dead" || !city.controllerId) continue;
       const loyalty = this.cityLoyalty.get(city.id) ?? 50;
-      if (loyalty >= 20) continue;
-      // 30% chance of rebellion when loyalty < 20
-      if (Math.random() > 0.3) continue;
+      if (loyalty >= this.config.loyalty.rebellionThreshold) continue;
+      if (Math.random() > this.config.loyalty.rebellionChance) continue;
       const garrisonLoss = Math.ceil(city.garrison * 0.5);
       const goldLoss = Math.round(city.gold * 0.3);
       const flipped = city.garrison - garrisonLoss <= 0;
@@ -2663,7 +2662,7 @@ export class SimulationService {
 
   // Set initial loyalty for newly captured cities
   private setCapturedCityLoyalty(cityId: string): void {
-    this.cityLoyalty.set(cityId, 30);
+    this.cityLoyalty.set(cityId, this.config.loyalty.capturedCityLoyalty);
   }
 
   // ── Counter-Intelligence ──

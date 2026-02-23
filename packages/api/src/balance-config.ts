@@ -62,6 +62,14 @@ export interface BalanceConfig {
     majorCityFoodIncome: number;
     minorCityFoodIncome: number;
   };
+
+  loyalty: {
+    initialLoyalty: number;
+    capturedCityLoyalty: number;
+    foreignDecayPerTick: number;
+    rebellionThreshold: number;
+    rebellionChance: number;
+  };
 }
 
 export const BALANCE_EASY: BalanceConfig = {
@@ -123,6 +131,14 @@ export const BALANCE_EASY: BalanceConfig = {
   food: {
     majorCityFoodIncome: 30,
     minorCityFoodIncome: 15,
+  },
+
+  loyalty: {
+    initialLoyalty: 60,
+    capturedCityLoyalty: 40,
+    foreignDecayPerTick: 1,
+    rebellionThreshold: 15,
+    rebellionChance: 0.15,
   },
 };
 
@@ -186,6 +202,14 @@ export const BALANCE_NORMAL: BalanceConfig = {
     majorCityFoodIncome: 30,
     minorCityFoodIncome: 15,
   },
+
+  loyalty: {
+    initialLoyalty: 50,
+    capturedCityLoyalty: 35,
+    foreignDecayPerTick: 2,
+    rebellionThreshold: 20,
+    rebellionChance: 0.20,
+  },
 };
 
 export const BALANCE_HARD: BalanceConfig = {
@@ -247,6 +271,14 @@ export const BALANCE_HARD: BalanceConfig = {
   food: {
     majorCityFoodIncome: 30,
     minorCityFoodIncome: 15,
+  },
+
+  loyalty: {
+    initialLoyalty: 50,
+    capturedCityLoyalty: 30,
+    foreignDecayPerTick: 3,
+    rebellionThreshold: 25,
+    rebellionChance: 0.30,
   },
 };
 
