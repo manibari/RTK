@@ -35,7 +35,7 @@ pnpm lint             # lint all packages
 packages/
   simulation/   # ECS engine — tick-based simulation (combat, economy, diplomacy, espionage, AI, events)
   graph-db/     # Graph database abstraction + Neo4j / In-Memory implementations
-  api/          # tRPC API server — 55+ endpoints bridging simulation ↔ frontend
+  api/          # tRPC API server — 58 endpoints bridging simulation ↔ frontend
   web/          # Next.js frontend — strategic map, relationship graph, stats dashboard, game log, hero hall
 ```
 

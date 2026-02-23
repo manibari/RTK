@@ -78,9 +78,9 @@ packages/
 | Victory/Defeat Screen | Done | End-game modal with final statistics |
 | Character Detail | Done | Profile, stats, skills, relationships, pair events, mentor info, achievements |
 
-### Player Commands (22 types)
+### Player Commands (23 types)
 
-- **Military**: move, attack, reinforce, train_unit, build_siege, blockade
+- **Military**: move, attack, reinforce, transfer_troops, train_unit, build_siege, blockade
 - **City Management**: develop, build_improvement, build_district, set_path, establish_trade
 - **Diplomacy**: propose_nap, propose_defense_pact, demand, sow_discord
 - **Characters**: hire_neutral, assign_role, assign_mentor, designate_heir
@@ -89,7 +89,8 @@ packages/
 
 ## Known Issues
 
-- **勝利條件過短**：各勢力成長曲線和迭代速度過快，遊戲太快結束
+- **勢力淘汰過快**：弱勢勢力（如呂布）仍可能在 15 tick 內被消滅，中期博弈階段偏短
+- **叛亂連鎖**：新佔領城市忠誠度低，連續叛亂可能導致佔領方反而虧損
 
 ## Planned Development
 
@@ -102,12 +103,16 @@ packages/
 - [x] 現代化地名：全面使用現代城市名稱（北京、南京、廣州等）
 - [x] 道路系統：IGraphRepository 支援 Road 操作，NPC AI 依路徑鄰接決策
 
-### Phase 2 — Game Balance
+### Phase 2 — Game Balance (In Progress)
 
-- [ ] 降低成長速度：調整經濟收入、科技研發、兵力恢復的數值曲線
+- [x] 難度分級系統：3 套難度預設（簡單/普通/困難），影響經濟、成本、NPC AI、事件頻率
+- [x] 經濟再平衡：降低強化成本（150→80）、提高城市收入（大城 40→50）
+- [x] 駐軍自然恢復：每 N tick 被控制城市 +1 駐軍（上限依城市等級與難度）
+- [x] 駐軍轉移系統：玩家/NPC 可透過道路在城市間調兵
+- [x] 城市忠誠度與叛亂：佔領城市忠誠度逐漸下降，低於門檻有機率叛亂
+- [x] NPC AI 調兵：NPC 自動從盈餘城市轉移兵力到缺口城市
 - [ ] 延長遊戲時長：拉長勝利條件門檻，確保遊戲有足夠的中期博弈階段
-- [ ] AI 難度分級：NPC 勢力的決策邏輯區分簡單/普通/困難
-- [ ] 事件頻率調整：平衡隨機事件的正負面影響
+- [ ] 弱勢勢力保護機制：防止小勢力過早被消滅
 
 ### Phase 3 — Polish & UX
 
