@@ -42,6 +42,7 @@ export interface BalanceConfig {
     baseDeathChance: number;
     aggressiveDeathChance: number;
     baseSiegeDelay: number;
+    conquestGarrisonPenalty: number; // garrison lost by captured city on conquest
   };
 
   events: {
@@ -57,6 +58,8 @@ export interface BalanceConfig {
     spyChancePerTick: number;
     npcExpansionAggression: number;
     freeGarrisonPer4Ticks: number;
+    underdogCityThreshold: number;        // factions with <= N cities get protection
+    underdogFreeGarrisonPerTick: number;  // free garrison per tick for underdog cities
   };
 
   food: {
@@ -118,7 +121,8 @@ export const BALANCE_EASY: BalanceConfig = {
   combat: {
     baseDeathChance: 0.15,
     aggressiveDeathChance: 0.25,
-    baseSiegeDelay: 2,
+    baseSiegeDelay: 3,
+    conquestGarrisonPenalty: 1,
   },
 
   events: {
@@ -132,8 +136,10 @@ export const BALANCE_EASY: BalanceConfig = {
     npcIncomeMultiplier: 0.85,
     npcCostMultiplier: 1.15,
     spyChancePerTick: 0.10,
-    npcExpansionAggression: 0.7,
+    npcExpansionAggression: 0.5,
     freeGarrisonPer4Ticks: 0,
+    underdogCityThreshold: 2,
+    underdogFreeGarrisonPerTick: 2,
   },
 
   food: {
@@ -143,7 +149,7 @@ export const BALANCE_EASY: BalanceConfig = {
 
   loyalty: {
     initialLoyalty: 60,
-    capturedCityLoyalty: 40,
+    capturedCityLoyalty: 30,
     foreignDecayPerTick: 1,
     rebellionThreshold: 15,
     rebellionChance: 0.15,
@@ -195,7 +201,8 @@ export const BALANCE_NORMAL: BalanceConfig = {
   combat: {
     baseDeathChance: 0.15,
     aggressiveDeathChance: 0.25,
-    baseSiegeDelay: 2,
+    baseSiegeDelay: 3,
+    conquestGarrisonPenalty: 2,
   },
 
   events: {
@@ -209,8 +216,10 @@ export const BALANCE_NORMAL: BalanceConfig = {
     npcIncomeMultiplier: 1.0,
     npcCostMultiplier: 1.0,
     spyChancePerTick: 0.15,
-    npcExpansionAggression: 1.0,
+    npcExpansionAggression: 0.7,
     freeGarrisonPer4Ticks: 0,
+    underdogCityThreshold: 2,
+    underdogFreeGarrisonPerTick: 1,
   },
 
   food: {
@@ -220,7 +229,7 @@ export const BALANCE_NORMAL: BalanceConfig = {
 
   loyalty: {
     initialLoyalty: 50,
-    capturedCityLoyalty: 35,
+    capturedCityLoyalty: 25,
     foreignDecayPerTick: 2,
     rebellionThreshold: 20,
     rebellionChance: 0.20,
@@ -272,7 +281,8 @@ export const BALANCE_HARD: BalanceConfig = {
   combat: {
     baseDeathChance: 0.15,
     aggressiveDeathChance: 0.25,
-    baseSiegeDelay: 2,
+    baseSiegeDelay: 3,
+    conquestGarrisonPenalty: 2,
   },
 
   events: {
@@ -286,8 +296,10 @@ export const BALANCE_HARD: BalanceConfig = {
     npcIncomeMultiplier: 1.25,
     npcCostMultiplier: 0.8,
     spyChancePerTick: 0.20,
-    npcExpansionAggression: 1.3,
+    npcExpansionAggression: 1.0,
     freeGarrisonPer4Ticks: 1,
+    underdogCityThreshold: 1,
+    underdogFreeGarrisonPerTick: 1,
   },
 
   food: {
@@ -297,7 +309,7 @@ export const BALANCE_HARD: BalanceConfig = {
 
   loyalty: {
     initialLoyalty: 50,
-    capturedCityLoyalty: 30,
+    capturedCityLoyalty: 20,
     foreignDecayPerTick: 3,
     rebellionThreshold: 25,
     rebellionChance: 0.30,

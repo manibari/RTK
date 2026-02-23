@@ -1619,6 +1619,9 @@ export class SimulationService {
       await this.applyNPCFreeGarrison();
     }
 
+    // Underdog protection: small NPC factions get free garrison
+    await this.applyUnderdogProtection();
+
     // Specialty passive effects (military_academy, library)
     await this.processSpecialtyPassives();
 
@@ -2465,6 +2468,28 @@ export class SimulationService {
     }
   }
 
+  private async applyUnderdogProtection(): Promise<void> {
+    const { underdogCityThreshold, underdogFreeGarrisonPerTick } = this.config.npcAI;
+    if (underdogFreeGarrisonPerTick <= 0) return;
+    const cities = await this.repo.getAllPlaces();
+    for (const faction of FACTIONS) {
+      if (faction.id === "shu") continue; // skip player faction
+      const factionCities = cities.filter(
+        (c) => c.controllerId && faction.members.includes(c.controllerId),
+      );
+      if (factionCities.length === 0 || factionCities.length > underdogCityThreshold) continue;
+      // Underdog faction: grant free garrison to all cities
+      const { majorCityGarrisonCap, minorCityGarrisonCap } = this.config.garrison;
+      for (const city of factionCities) {
+        const baseCap = city.tier === "major" ? majorCityGarrisonCap : minorCityGarrisonCap;
+        const underdogCap = baseCap + 2;
+        if (city.garrison >= underdogCap) continue;
+        const newGarrison = Math.min(underdogCap, city.garrison + underdogFreeGarrisonPerTick);
+        await this.repo.updatePlace(city.id, { garrison: newGarrison });
+      }
+    }
+  }
+
   private async processResearch(): Promise<void> {
     for (const faction of FACTIONS) {
       const state = this.getFactionTech(faction.id);
@@ -3091,7 +3116,7 @@ export class SimulationService {
           await this.repo.updatePlace(city.id, {
             controllerId: leadAttacker.id,
             status: newStatus,
-            garrison: Math.max(0, city.garrison - 1),
+            garrison: Math.max(0, city.garrison - this.config.combat.conquestGarrisonPenalty),
             siegedBy: undefined, siegeTick: undefined, // Clear siege on capture
           });
           // Set low loyalty for captured city

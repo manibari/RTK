@@ -421,7 +421,7 @@ function pickBestTarget(
     const defenders = defendersPerCity.get(city.id)?.length ?? 0;
     const garrison = city.garrison;
     // Score: lower defense = higher score; high caution penalizes well-defended targets more
-    let score = 10 - defenders * (1 + caution * 0.3) - garrison * 0.5;
+    let score = 10 - defenders * (1 + caution * 0.3) - garrison * 0.8;
     // Bonus for undefended cities
     if (defenders === 0) score += 5;
     // Bonus for minor cities (easier to capture)

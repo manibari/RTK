@@ -186,12 +186,54 @@ describe("BalanceConfig", () => {
       expect(BALANCE_NORMAL.npcAI.freeGarrisonPer4Ticks).toBe(0);
       expect(BALANCE_HARD.npcAI.freeGarrisonPer4Ticks).toBeGreaterThan(0);
     });
+
+    it("underdog threshold: easy >= normal >= hard", () => {
+      expect(BALANCE_EASY.npcAI.underdogCityThreshold).toBeGreaterThanOrEqual(
+        BALANCE_NORMAL.npcAI.underdogCityThreshold,
+      );
+      expect(BALANCE_NORMAL.npcAI.underdogCityThreshold).toBeGreaterThanOrEqual(
+        BALANCE_HARD.npcAI.underdogCityThreshold,
+      );
+    });
+
+    it("underdog free garrison: easy >= normal >= hard", () => {
+      expect(BALANCE_EASY.npcAI.underdogFreeGarrisonPerTick).toBeGreaterThanOrEqual(
+        BALANCE_NORMAL.npcAI.underdogFreeGarrisonPerTick,
+      );
+      expect(BALANCE_NORMAL.npcAI.underdogFreeGarrisonPerTick).toBeGreaterThanOrEqual(
+        BALANCE_HARD.npcAI.underdogFreeGarrisonPerTick,
+      );
+    });
+
+    it("all presets have positive underdog values", () => {
+      for (const [, config] of configs) {
+        expect(config.npcAI.underdogCityThreshold).toBeGreaterThan(0);
+        expect(config.npcAI.underdogFreeGarrisonPerTick).toBeGreaterThan(0);
+      }
+    });
   });
 
   describe("transfer troops cost scales with difficulty", () => {
     it("transferTroops: easy <= normal <= hard", () => {
       expect(BALANCE_EASY.costs.transferTroops).toBeLessThanOrEqual(BALANCE_NORMAL.costs.transferTroops);
       expect(BALANCE_NORMAL.costs.transferTroops).toBeLessThanOrEqual(BALANCE_HARD.costs.transferTroops);
+    });
+  });
+
+  describe("conquest garrison penalty scales with difficulty", () => {
+    it("conquestGarrisonPenalty: easy <= normal <= hard", () => {
+      expect(BALANCE_EASY.combat.conquestGarrisonPenalty).toBeLessThanOrEqual(
+        BALANCE_NORMAL.combat.conquestGarrisonPenalty,
+      );
+      expect(BALANCE_NORMAL.combat.conquestGarrisonPenalty).toBeLessThanOrEqual(
+        BALANCE_HARD.combat.conquestGarrisonPenalty,
+      );
+    });
+
+    it("all presets have positive conquest garrison penalty", () => {
+      for (const [, config] of configs) {
+        expect(config.combat.conquestGarrisonPenalty).toBeGreaterThan(0);
+      }
     });
   });
 

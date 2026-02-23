@@ -132,6 +132,57 @@ describe("Simulation Balance Integration", () => {
     });
   });
 
+  describe("conquest garrison penalty config", () => {
+    it("normal preset conquest penalty is 2", () => {
+      expect(BALANCE_NORMAL.combat.conquestGarrisonPenalty).toBe(2);
+    });
+
+    it("easy preset is less punishing", () => {
+      expect(BALANCE_EASY.combat.conquestGarrisonPenalty).toBeLessThanOrEqual(
+        BALANCE_NORMAL.combat.conquestGarrisonPenalty,
+      );
+    });
+
+    it("all presets have baseSiegeDelay of 3", () => {
+      expect(BALANCE_EASY.combat.baseSiegeDelay).toBe(3);
+      expect(BALANCE_NORMAL.combat.baseSiegeDelay).toBe(3);
+      expect(BALANCE_HARD.combat.baseSiegeDelay).toBe(3);
+    });
+  });
+
+  describe("underdog protection config", () => {
+    it("normal preset has expected underdog values", () => {
+      expect(BALANCE_NORMAL.npcAI.underdogCityThreshold).toBe(2);
+      expect(BALANCE_NORMAL.npcAI.underdogFreeGarrisonPerTick).toBe(1);
+    });
+
+    it("easy preset gives more underdog protection", () => {
+      expect(BALANCE_EASY.npcAI.underdogFreeGarrisonPerTick).toBeGreaterThanOrEqual(
+        BALANCE_NORMAL.npcAI.underdogFreeGarrisonPerTick,
+      );
+    });
+
+    it("hard preset has tighter threshold", () => {
+      expect(BALANCE_HARD.npcAI.underdogCityThreshold).toBeLessThanOrEqual(
+        BALANCE_NORMAL.npcAI.underdogCityThreshold,
+      );
+    });
+  });
+
+  describe("expansion aggression reduced from previous values", () => {
+    it("normal expansion aggression is 0.7", () => {
+      expect(BALANCE_NORMAL.npcAI.npcExpansionAggression).toBe(0.7);
+    });
+
+    it("hard expansion aggression is 1.0", () => {
+      expect(BALANCE_HARD.npcAI.npcExpansionAggression).toBe(1.0);
+    });
+
+    it("easy expansion aggression is 0.5", () => {
+      expect(BALANCE_EASY.npcAI.npcExpansionAggression).toBe(0.5);
+    });
+  });
+
   describe("loyalty config values are consistent across difficulties", () => {
     it("all presets have valid loyalty values", () => {
       for (const preset of [BALANCE_EASY, BALANCE_NORMAL, BALANCE_HARD]) {
@@ -166,7 +217,7 @@ describe("Simulation Balance Integration", () => {
 
     it("normal preset has expected loyalty values", () => {
       expect(BALANCE_NORMAL.loyalty.initialLoyalty).toBe(50);
-      expect(BALANCE_NORMAL.loyalty.capturedCityLoyalty).toBe(35);
+      expect(BALANCE_NORMAL.loyalty.capturedCityLoyalty).toBe(25);
       expect(BALANCE_NORMAL.loyalty.foreignDecayPerTick).toBe(2);
       expect(BALANCE_NORMAL.loyalty.rebellionThreshold).toBe(20);
       expect(BALANCE_NORMAL.loyalty.rebellionChance).toBe(0.20);
