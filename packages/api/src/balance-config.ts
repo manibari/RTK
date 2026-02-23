@@ -24,6 +24,7 @@ export interface BalanceConfig {
     establishTrade: number;
     buildSiege: number;
     setPath: number;
+    transferTroops: number;
   };
 
   victory: {
@@ -70,6 +71,12 @@ export interface BalanceConfig {
     rebellionThreshold: number;
     rebellionChance: number;
   };
+
+  garrison: {
+    recoveryInterval: number;     // ticks between passive +1
+    majorCityGarrisonCap: number; // natural recovery cap for major cities
+    minorCityGarrisonCap: number; // natural recovery cap for minor cities
+  };
 }
 
 export const BALANCE_EASY: BalanceConfig = {
@@ -85,7 +92,7 @@ export const BALANCE_EASY: BalanceConfig = {
   },
 
   costs: {
-    reinforce: 100,
+    reinforce: 60,
     develop: 300,
     buildImprovement: 500,
     buildDistrict: 400,
@@ -94,6 +101,7 @@ export const BALANCE_EASY: BalanceConfig = {
     establishTrade: 200,
     buildSiege: 300,
     setPath: 400,
+    transferTroops: 20,
   },
 
   victory: {
@@ -140,14 +148,20 @@ export const BALANCE_EASY: BalanceConfig = {
     rebellionThreshold: 15,
     rebellionChance: 0.15,
   },
+
+  garrison: {
+    recoveryInterval: 2,
+    majorCityGarrisonCap: 10,
+    minorCityGarrisonCap: 7,
+  },
 };
 
 export const BALANCE_NORMAL: BalanceConfig = {
   difficulty: "normal",
 
   economy: {
-    majorCityBaseIncome: 40,
-    minorCityBaseIncome: 20,
+    majorCityBaseIncome: 50,
+    minorCityBaseIncome: 25,
     developmentMultiplierPerLevel: 0.2,
     commerceDistrictBonus: 0.5,
     tradeRouteGoldBonus: 7,
@@ -155,7 +169,7 @@ export const BALANCE_NORMAL: BalanceConfig = {
   },
 
   costs: {
-    reinforce: 150,
+    reinforce: 80,
     develop: 400,
     buildImprovement: 600,
     buildDistrict: 500,
@@ -164,6 +178,7 @@ export const BALANCE_NORMAL: BalanceConfig = {
     establishTrade: 200,
     buildSiege: 300,
     setPath: 400,
+    transferTroops: 30,
   },
 
   victory: {
@@ -210,14 +225,20 @@ export const BALANCE_NORMAL: BalanceConfig = {
     rebellionThreshold: 20,
     rebellionChance: 0.20,
   },
+
+  garrison: {
+    recoveryInterval: 3,
+    majorCityGarrisonCap: 8,
+    minorCityGarrisonCap: 5,
+  },
 };
 
 export const BALANCE_HARD: BalanceConfig = {
   difficulty: "hard",
 
   economy: {
-    majorCityBaseIncome: 30,
-    minorCityBaseIncome: 15,
+    majorCityBaseIncome: 35,
+    minorCityBaseIncome: 18,
     developmentMultiplierPerLevel: 0.15,
     commerceDistrictBonus: 0.4,
     tradeRouteGoldBonus: 5,
@@ -225,7 +246,7 @@ export const BALANCE_HARD: BalanceConfig = {
   },
 
   costs: {
-    reinforce: 200,
+    reinforce: 120,
     develop: 500,
     buildImprovement: 700,
     buildDistrict: 600,
@@ -234,6 +255,7 @@ export const BALANCE_HARD: BalanceConfig = {
     establishTrade: 200,
     buildSiege: 300,
     setPath: 400,
+    transferTroops: 50,
   },
 
   victory: {
@@ -279,6 +301,12 @@ export const BALANCE_HARD: BalanceConfig = {
     foreignDecayPerTick: 3,
     rebellionThreshold: 25,
     rebellionChance: 0.30,
+  },
+
+  garrison: {
+    recoveryInterval: 4,
+    majorCityGarrisonCap: 6,
+    minorCityGarrisonCap: 4,
   },
 };
 

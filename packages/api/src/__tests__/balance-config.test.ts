@@ -188,6 +188,50 @@ describe("BalanceConfig", () => {
     });
   });
 
+  describe("transfer troops cost scales with difficulty", () => {
+    it("transferTroops: easy <= normal <= hard", () => {
+      expect(BALANCE_EASY.costs.transferTroops).toBeLessThanOrEqual(BALANCE_NORMAL.costs.transferTroops);
+      expect(BALANCE_NORMAL.costs.transferTroops).toBeLessThanOrEqual(BALANCE_HARD.costs.transferTroops);
+    });
+  });
+
+  describe("garrison recovery scales with difficulty", () => {
+    it("recovery interval: easy <= normal <= hard (slower on harder)", () => {
+      expect(BALANCE_EASY.garrison.recoveryInterval).toBeLessThanOrEqual(
+        BALANCE_NORMAL.garrison.recoveryInterval,
+      );
+      expect(BALANCE_NORMAL.garrison.recoveryInterval).toBeLessThanOrEqual(
+        BALANCE_HARD.garrison.recoveryInterval,
+      );
+    });
+
+    it("major city garrison cap: easy >= normal >= hard", () => {
+      expect(BALANCE_EASY.garrison.majorCityGarrisonCap).toBeGreaterThanOrEqual(
+        BALANCE_NORMAL.garrison.majorCityGarrisonCap,
+      );
+      expect(BALANCE_NORMAL.garrison.majorCityGarrisonCap).toBeGreaterThanOrEqual(
+        BALANCE_HARD.garrison.majorCityGarrisonCap,
+      );
+    });
+
+    it("minor city garrison cap: easy >= normal >= hard", () => {
+      expect(BALANCE_EASY.garrison.minorCityGarrisonCap).toBeGreaterThanOrEqual(
+        BALANCE_NORMAL.garrison.minorCityGarrisonCap,
+      );
+      expect(BALANCE_NORMAL.garrison.minorCityGarrisonCap).toBeGreaterThanOrEqual(
+        BALANCE_HARD.garrison.minorCityGarrisonCap,
+      );
+    });
+
+    it("garrison caps are positive", () => {
+      for (const [, config] of configs) {
+        expect(config.garrison.recoveryInterval).toBeGreaterThan(0);
+        expect(config.garrison.majorCityGarrisonCap).toBeGreaterThan(0);
+        expect(config.garrison.minorCityGarrisonCap).toBeGreaterThan(0);
+      }
+    });
+  });
+
   describe("all numeric values are positive and sensible", () => {
     for (const [name, config] of configs) {
       it(`${name}: economy values are positive`, () => {

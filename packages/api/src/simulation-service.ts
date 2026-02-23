@@ -43,6 +43,16 @@ export interface TradeRoute {
   establishedTick: number;
 }
 
+export interface TroopTransfer {
+  id: string;
+  sourceCityId: string;
+  destinationCityId: string;
+  amount: number;
+  departureTick: number;
+  arrivalTick: number;
+  factionId: string;
+}
+
 export type BattleTactic = "aggressive" | "defensive" | "balanced";
 
 const TACTIC_MODIFIERS: Record<BattleTactic, { attack: number; defense: number }> = {
@@ -221,7 +231,7 @@ export interface GameState {
 }
 
 export interface PlayerCommand {
-  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "blockade" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade" | "build_district" | "assign_mentor" | "build_siege" | "demand" | "sow_discord" | "train_unit" | "set_path" | "propose_nap" | "propose_defense_pact" | "designate_heir";
+  type: "move" | "attack" | "recruit" | "reinforce" | "develop" | "build_improvement" | "spy" | "sabotage" | "blockade" | "hire_neutral" | "assign_role" | "start_research" | "establish_trade" | "build_district" | "assign_mentor" | "build_siege" | "demand" | "sow_discord" | "train_unit" | "set_path" | "propose_nap" | "propose_defense_pact" | "designate_heir" | "transfer_troops";
   characterId: string;
   targetCityId: string;
   targetCharacterId?: string; // for recruit / hire_neutral / assign_mentor (apprentice)
@@ -235,6 +245,8 @@ export interface PlayerCommand {
   targetFactionId?: string; // for sow_discord
   unitType?: UnitType; // for train_unit
   cityPath?: CityPath; // for set_path
+  destinationCityId?: string; // for transfer_troops
+  transferAmount?: number; // for transfer_troops
 }
 
 // ── District system ──
@@ -468,6 +480,8 @@ export class SimulationService {
   private tradeRoutes: TradeRoute[] = [];
   private tradeCounter = 0;
   private deadCharacters = new Set<string>();
+  private troopTransfers: TroopTransfer[] = [];
+  private troopTransferCounter = 0;
   private pendingTactics = new Map<string, BattleTactic>(); // characterId -> tactic for next battle
   private factionMorale = new Map<string, number>(); // factionId -> morale (0-100)
   private characterPrestige = new Map<string, number>(); // characterId -> prestige score
@@ -531,6 +545,8 @@ export class SimulationService {
     this.factionHistory.clear();
     this.spyMissions = [];
     this.spyCounter = 0;
+    this.troopTransfers = [];
+    this.troopTransferCounter = 0;
     this.factionTech.clear();
     this.tradeRoutes = [];
     this.tradeCounter = 0;
@@ -1373,6 +1389,41 @@ export class SimulationService {
     }
   }
 
+  private async applyGarrisonRecovery(): Promise<void> {
+    const { recoveryInterval, majorCityGarrisonCap, minorCityGarrisonCap } = this.config.garrison;
+    if (this.currentTick % recoveryInterval !== 0) return;
+    const cities = await this.repo.getAllPlaces();
+    for (const city of cities) {
+      if (city.status === "dead" || !city.controllerId) continue;
+      // Skip besieged or starving cities
+      if (city.siegedBy) continue;
+      if ((city.food ?? 100) === 0) continue;
+      const cap = city.tier === "major" ? majorCityGarrisonCap : minorCityGarrisonCap;
+      if (city.garrison >= cap) continue;
+      await this.repo.updatePlace(city.id, { garrison: city.garrison + 1 });
+    }
+  }
+
+  private async resolveTroopTransfers(): Promise<void> {
+    const remaining: TroopTransfer[] = [];
+    for (const transfer of this.troopTransfers) {
+      if (transfer.arrivalTick > this.currentTick) {
+        remaining.push(transfer);
+        continue;
+      }
+      // Transfer arrived — check if destination still belongs to the same faction
+      const dest = await this.repo.getPlace(transfer.destinationCityId);
+      if (dest && dest.controllerId) {
+        const destFaction = this.getFactionOf(dest.controllerId);
+        if (destFaction === transfer.factionId) {
+          await this.repo.updatePlace(dest.id, { garrison: dest.garrison + transfer.amount });
+        }
+        // If faction changed, troops are lost
+      }
+    }
+    this.troopTransfers = remaining;
+  }
+
   private async processWorldEvents(): Promise<WorldEvent[]> {
     if (Math.random() > this.config.events.worldEventChance) return [];
     const cities = (await this.repo.getAllPlaces()).filter((c) => c.status !== "dead" && c.controllerId);
@@ -1551,6 +1602,9 @@ export class SimulationService {
     await this.produceGold();
     await this.produceFood();
 
+    // Natural garrison recovery
+    await this.applyGarrisonRecovery();
+
     // Execute player commands
     await this.executeCommands();
 
@@ -1577,6 +1631,9 @@ export class SimulationService {
 
     // Generate random movements for remaining idle characters (10%)
     await this.generateMovements();
+
+    // Resolve troop transfers (reinforcements arrive before battles)
+    await this.resolveTroopTransfers();
 
     // Resolve arrivals and battles (enhanced: garrison combat)
     const battleResults = await this.resolveArrivals();
@@ -1877,6 +1934,41 @@ export class SimulationService {
         await this.repo.updatePlace(city.id, {
           gold: city.gold - this.config.costs.reinforce,
           garrison: city.garrison + 1,
+        });
+        continue;
+      }
+
+      // Transfer troops between cities
+      if (cmd.type === "transfer_troops" && cmd.destinationCityId && cmd.transferAmount) {
+        const source = await this.repo.getPlace(cmd.targetCityId);
+        if (!source || !source.controllerId) continue;
+        const dest = await this.repo.getPlace(cmd.destinationCityId);
+        if (!dest || !dest.controllerId) continue;
+        const amount = cmd.transferAmount;
+        const totalCost = this.config.costs.transferTroops * amount;
+        if (source.garrison < amount || source.gold < totalCost) continue;
+        // Verify road connection
+        const roads = await this.repo.getAllRoads();
+        const adjacency = buildAdjacencyMap(roads);
+        const road = findRoad(adjacency, source.id, dest.id);
+        if (!road) continue;
+        // Deduct garrison and gold immediately
+        await this.repo.updatePlace(source.id, {
+          garrison: source.garrison - amount,
+          gold: source.gold - totalCost,
+        });
+        // Calculate travel time
+        const travelTime = road.travelTime + SEASON_TRAVEL_PENALTY[getSeason(this.currentTick)];
+        this.troopTransferCounter++;
+        const faction = this.getFactionOf(source.controllerId);
+        this.troopTransfers.push({
+          id: `transfer-${this.troopTransferCounter}`,
+          sourceCityId: source.id,
+          destinationCityId: dest.id,
+          amount,
+          departureTick: this.currentTick,
+          arrivalTick: this.currentTick + travelTime,
+          factionId: faction ?? "",
         });
         continue;
       }
@@ -2230,6 +2322,47 @@ export class SimulationService {
           gold: weakest.gold - npcReinforceCost,
           garrison: weakest.garrison + 1,
         });
+      }
+
+      // 1b. Transfer garrison from surplus to deficit cities
+      const npcTransferCost = Math.round(this.config.costs.transferTroops * npcCostMult);
+      const surplusThreshold = intent === "defend" ? 5 : 3;
+      const deficitThreshold = intent === "defend" ? 3 : 2;
+      const surplusCities = factionCities.filter((c) => c.garrison > surplusThreshold);
+      const deficitCities = factionCities.filter((c) => c.garrison < deficitThreshold).sort((a, b) => a.garrison - b.garrison);
+      if (deficitCities.length > 0 && surplusCities.length > 0) {
+        const roads = await this.repo.getAllRoads();
+        const adjacency = buildAdjacencyMap(roads);
+        for (const deficit of deficitCities) {
+          const need = deficitThreshold - deficit.garrison;
+          // Find nearest adjacent surplus city that can afford the transfer
+          const donor = surplusCities.find((s) => {
+            if (s.garrison <= surplusThreshold) return false; // already depleted
+            const road = findRoad(adjacency, s.id, deficit.id);
+            return road && s.gold >= npcTransferCost;
+          });
+          if (!donor) continue;
+          const available = donor.garrison - surplusThreshold;
+          const affordable = Math.floor(donor.gold / npcTransferCost);
+          const amount = Math.min(available, need, affordable);
+          if (amount <= 0) continue;
+          const totalCost = npcTransferCost * amount;
+          donor.garrison -= amount;
+          donor.gold -= totalCost;
+          await this.repo.updatePlace(donor.id, { garrison: donor.garrison, gold: donor.gold });
+          const road = findRoad(adjacency, donor.id, deficit.id)!;
+          const travelTime = road.travelTime + SEASON_TRAVEL_PENALTY[getSeason(this.currentTick)];
+          this.troopTransferCounter++;
+          this.troopTransfers.push({
+            id: `transfer-${this.troopTransferCounter}`,
+            sourceCityId: donor.id,
+            destinationCityId: deficit.id,
+            amount,
+            departureTick: this.currentTick,
+            arrivalTick: this.currentTick + travelTime,
+            factionId: faction.id,
+          });
+        }
       }
 
       // 2. Develop cities (priority higher when developing)
@@ -3837,6 +3970,8 @@ export class SimulationService {
       treaties: [...this.treaties],
       treatyCounter: this.treatyCounter,
       designatedHeir: this.designatedHeir,
+      troopTransfers: [...this.troopTransfers],
+      troopTransferCounter: this.troopTransferCounter,
       savedAt: new Date().toISOString(),
     };
 
@@ -3924,6 +4059,8 @@ export class SimulationService {
     this.treaties = data.treaties ?? [];
     this.treatyCounter = data.treatyCounter ?? 0;
     this.designatedHeir = data.designatedHeir ?? null;
+    this.troopTransfers = data.troopTransfers ?? [];
+    this.troopTransferCounter = data.troopTransferCounter ?? 0;
 
     // Restore difficulty (v1 saves default to "normal")
     this.difficulty = data.difficulty ?? "normal";
@@ -4125,6 +4262,8 @@ interface SaveData {
   treaties: Treaty[];
   treatyCounter: number;
   designatedHeir: string | null;
+  troopTransfers?: TroopTransfer[];
+  troopTransferCounter?: number;
   difficulty?: Difficulty;
   savedAt: string;
 }

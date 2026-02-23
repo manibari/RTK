@@ -72,11 +72,12 @@ describe("Simulation Balance Integration", () => {
   describe("getBalanceConfig returns consistent difficulty values", () => {
     it("normal config has expected economy values", () => {
       const config = getBalanceConfig("normal");
-      expect(config.economy.majorCityBaseIncome).toBe(40);
-      expect(config.economy.minorCityBaseIncome).toBe(20);
+      expect(config.economy.majorCityBaseIncome).toBe(50);
+      expect(config.economy.minorCityBaseIncome).toBe(25);
       expect(config.economy.developmentMultiplierPerLevel).toBe(0.2);
-      expect(config.costs.reinforce).toBe(150);
+      expect(config.costs.reinforce).toBe(80);
       expect(config.costs.develop).toBe(400);
+      expect(config.costs.transferTroops).toBe(30);
     });
 
     it("hard config has expected NPC AI values", () => {
@@ -94,6 +95,40 @@ describe("Simulation Balance Integration", () => {
       expect(config.victory.economicGoldShareThreshold).toBeLessThan(
         BALANCE_NORMAL.victory.economicGoldShareThreshold,
       );
+    });
+  });
+
+  describe("garrison config values are consistent across difficulties", () => {
+    it("all presets have valid garrison values", () => {
+      for (const preset of [BALANCE_EASY, BALANCE_NORMAL, BALANCE_HARD]) {
+        expect(preset.garrison.recoveryInterval).toBeGreaterThan(0);
+        expect(preset.garrison.majorCityGarrisonCap).toBeGreaterThan(0);
+        expect(preset.garrison.minorCityGarrisonCap).toBeGreaterThan(0);
+        expect(preset.garrison.majorCityGarrisonCap).toBeGreaterThanOrEqual(
+          preset.garrison.minorCityGarrisonCap,
+        );
+      }
+    });
+
+    it("easier difficulties recover garrison faster", () => {
+      expect(BALANCE_EASY.garrison.recoveryInterval).toBeLessThan(
+        BALANCE_HARD.garrison.recoveryInterval,
+      );
+    });
+
+    it("easier difficulties have higher garrison caps", () => {
+      expect(BALANCE_EASY.garrison.majorCityGarrisonCap).toBeGreaterThan(
+        BALANCE_HARD.garrison.majorCityGarrisonCap,
+      );
+      expect(BALANCE_EASY.garrison.minorCityGarrisonCap).toBeGreaterThan(
+        BALANCE_HARD.garrison.minorCityGarrisonCap,
+      );
+    });
+
+    it("normal preset has expected garrison values", () => {
+      expect(BALANCE_NORMAL.garrison.recoveryInterval).toBe(3);
+      expect(BALANCE_NORMAL.garrison.majorCityGarrisonCap).toBe(8);
+      expect(BALANCE_NORMAL.garrison.minorCityGarrisonCap).toBe(5);
     });
   });
 
