@@ -33,5 +33,8 @@ coverage/
 # Neo4j local data
 neo4j-data/
 
+# Game save files
+packages/api/saves/
+
 # Local AI config (not shared)
 .claude.local.md
