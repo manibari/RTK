@@ -274,6 +274,47 @@ describe("BalanceConfig", () => {
     });
   });
 
+  describe("troop carrying config", () => {
+    it("troopHardCap is 8 across all difficulties", () => {
+      for (const [, config] of configs) {
+        expect(config.combat.troopHardCap).toBe(8);
+      }
+    });
+
+    it("troopSoftCapBase: easy >= normal = hard", () => {
+      expect(BALANCE_EASY.combat.troopSoftCapBase).toBeGreaterThanOrEqual(
+        BALANCE_NORMAL.combat.troopSoftCapBase,
+      );
+      expect(BALANCE_NORMAL.combat.troopSoftCapBase).toBe(
+        BALANCE_HARD.combat.troopSoftCapBase,
+      );
+    });
+
+    it("troopOverloadPenaltyRate: easy <= normal <= hard", () => {
+      expect(BALANCE_EASY.combat.troopOverloadPenaltyRate).toBeLessThanOrEqual(
+        BALANCE_NORMAL.combat.troopOverloadPenaltyRate,
+      );
+      expect(BALANCE_NORMAL.combat.troopOverloadPenaltyRate).toBeLessThanOrEqual(
+        BALANCE_HARD.combat.troopOverloadPenaltyRate,
+      );
+    });
+
+    it("all presets have valid troop values", () => {
+      for (const [, config] of configs) {
+        expect(config.combat.troopHardCap).toBeGreaterThan(0);
+        expect(config.combat.troopSoftCapBase).toBeGreaterThan(0);
+        expect(config.combat.troopOverloadPenaltyRate).toBeGreaterThan(0);
+        expect(config.combat.troopOverloadPenaltyRate).toBeLessThan(1);
+      }
+    });
+
+    it("normal preset has expected troop values", () => {
+      expect(BALANCE_NORMAL.combat.troopHardCap).toBe(8);
+      expect(BALANCE_NORMAL.combat.troopSoftCapBase).toBe(2);
+      expect(BALANCE_NORMAL.combat.troopOverloadPenaltyRate).toBe(0.10);
+    });
+  });
+
   describe("all numeric values are positive and sensible", () => {
     for (const [name, config] of configs) {
       it(`${name}: economy values are positive`, () => {

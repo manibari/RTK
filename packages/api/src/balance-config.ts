@@ -43,6 +43,9 @@ export interface BalanceConfig {
     aggressiveDeathChance: number;
     baseSiegeDelay: number;
     conquestGarrisonPenalty: number; // garrison lost by captured city on conquest
+    troopHardCap: number;            // absolute max troops per character
+    troopSoftCapBase: number;        // base soft cap before leadership bonus
+    troopOverloadPenaltyRate: number; // combat penalty per excess troop
   };
 
   events: {
@@ -123,6 +126,9 @@ export const BALANCE_EASY: BalanceConfig = {
     aggressiveDeathChance: 0.25,
     baseSiegeDelay: 3,
     conquestGarrisonPenalty: 1,
+    troopHardCap: 8,
+    troopSoftCapBase: 3,
+    troopOverloadPenaltyRate: 0.08,
   },
 
   events: {
@@ -203,6 +209,9 @@ export const BALANCE_NORMAL: BalanceConfig = {
     aggressiveDeathChance: 0.25,
     baseSiegeDelay: 3,
     conquestGarrisonPenalty: 2,
+    troopHardCap: 8,
+    troopSoftCapBase: 2,
+    troopOverloadPenaltyRate: 0.10,
   },
 
   events: {
@@ -283,6 +292,9 @@ export const BALANCE_HARD: BalanceConfig = {
     aggressiveDeathChance: 0.25,
     baseSiegeDelay: 3,
     conquestGarrisonPenalty: 2,
+    troopHardCap: 8,
+    troopSoftCapBase: 2,
+    troopOverloadPenaltyRate: 0.12,
   },
 
   events: {

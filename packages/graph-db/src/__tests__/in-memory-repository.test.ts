@@ -107,7 +107,7 @@ describe("InMemoryGraphRepository", () => {
     it("adds and queries active movements", async () => {
       await repo.addMovement({
         characterId: "a", originCityId: "c1", destinationCityId: "c2",
-        departureTick: 1, arrivalTick: 3,
+        departureTick: 1, arrivalTick: 3, troopsCarried: 0,
       });
 
       expect(await repo.getActiveMovements(0)).toHaveLength(0);
@@ -124,7 +124,7 @@ describe("InMemoryGraphRepository", () => {
       await repo.createCharacter({ id: "a", name: "A", traits: [], cityId: "c1", military: 0, intelligence: 0, charm: 0 });
       await repo.addMovement({
         characterId: "a", originCityId: "c1", destinationCityId: "c2",
-        departureTick: 1, arrivalTick: 2,
+        departureTick: 1, arrivalTick: 2, troopsCarried: 0,
       });
 
       const data = await repo.getMapData(1);

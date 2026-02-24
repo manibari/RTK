@@ -146,12 +146,18 @@ export function evaluateNPCDecisions(
       return true;
     });
 
+    // Include neutral cities (uncontrolled, 0 garrison) as targets
+    const neutralCities = cities.filter(
+      (c) => c.status !== "dead" && !c.controllerId,
+    );
+    const allTargetCities = [...enemyCities, ...neutralCities];
+
     // Compute faction strategic intent
-    const intent = evaluateStrategicIntent(faction, factionCities, enemyCities, defendersPerCity);
+    const intent = evaluateStrategicIntent(faction, factionCities, allTargetCities, defendersPerCity);
 
     // Pick a coordinated target: all attackers from this faction aim at the same city
     const focusTarget = intent === "expand"
-      ? pickBestTarget(enemyCities, defendersPerCity, 2) // moderate caution for faction-level target
+      ? pickBestTarget(allTargetCities, defendersPerCity, 2) // moderate caution for faction-level target
       : null;
 
     for (const memberId of faction.members) {
@@ -163,7 +169,7 @@ export function evaluateNPCDecisions(
         char as CharacterNode & { cityId: string },
         faction,
         factionCities,
-        enemyCities,
+        allTargetCities,
         defendersPerCity,
         cityMap,
         relationships,

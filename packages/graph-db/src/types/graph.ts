@@ -86,6 +86,7 @@ export interface Movement {
   destinationCityId: string;
   departureTick: number;
   arrivalTick: number;
+  troopsCarried: number; // garrison troops taken from origin city
 }
 
 export interface CharacterGraph {

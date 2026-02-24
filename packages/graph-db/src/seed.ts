@@ -49,6 +49,20 @@ const characters: CharacterNode[] = [
   { id: "zhang_jiao", name: "張角", biography: "太平道教主，黃巾起義領袖，蒼天已死黃天當立，揭開三國序幕。", avatarUrl: "/avatars/zhang_jiao.svg", traits: ["charismatic", "cunning", "ambitious"], cityId: "pingyuan", military: 1, intelligence: 3, charm: 4, skills: { ...S0, leadership: 2, espionage: 1 }, bornTick: -576 },
   { id: "hua_tuo", name: "華佗", biography: "神醫華佗，發明麻沸散，欲為曹操開顱治病，被疑而殺。", avatarUrl: "/avatars/hua_tuo.svg", traits: ["wise", "humble", "cautious"], cityId: "lujiang", military: 0, intelligence: 4, charm: 3, skills: { ...S0, commerce: 2 }, bornTick: -576 },
   { id: "yuan_shao", name: "袁紹", biography: "四世三公，北方霸主，官渡之戰敗於曹操，從此一蹶不振。", avatarUrl: "/avatars/yuan_shao.svg", traits: ["ambitious", "proud", "diplomatic"], cityId: "ye", military: 1, intelligence: 2, charm: 3, skills: { ...S0, leadership: 2, commerce: 1 }, bornTick: -544 },
+
+  // ── Additional neutral characters ──
+  { id: "lu_xun", name: "陸遜", biography: "東吳後期大都督，夷陵之戰火燒連營七百里，大破劉備。", avatarUrl: "/avatars/lu_xun.svg", traits: ["strategic", "cautious", "wise"], cityId: "hangzhou", military: 2, intelligence: 4, charm: 2, skills: { ...S0, tactics: 2, leadership: 2 }, bornTick: -320 },
+  { id: "cao_ren", name: "曹仁", biography: "曹操族弟，善守城池，樊城之戰力拒關羽，魏之屏障。", avatarUrl: "/avatars/cao_ren.svg", traits: ["brave", "loyal", "cautious"], cityId: "wan", military: 3, intelligence: 2, charm: 1, skills: { ...S0, tactics: 2, leadership: 2 }, bornTick: -480 },
+  { id: "zhang_he", name: "張郃", biography: "五子良將之一，善巧變，以精於山地戰聞名。", avatarUrl: "/avatars/zhang_he.svg", traits: ["strategic", "brave", "cautious"], cityId: "jinyang", military: 3, intelligence: 2, charm: 1, skills: { ...S0, tactics: 2, leadership: 1 }, bornTick: -448 },
+  { id: "xu_chu", name: "許褚", biography: "虎侯，曹操貼身護衛，裸衣鬥馬超，力大無窮。", avatarUrl: "/avatars/xu_chu.svg", traits: ["brave", "loyal", "impulsive"], cityId: "pingyuan", military: 5, intelligence: 0, charm: 0, skills: { ...S0, tactics: 1 }, bornTick: -480 },
+  { id: "sun_ce", name: "孫策", biography: "小霸王，以傳國玉璽借兵，橫掃江東六郡，英年早逝。", avatarUrl: "/avatars/sun_ce.svg", traits: ["brave", "ambitious", "charismatic"], cityId: "nanchang", military: 3, intelligence: 2, charm: 3, skills: { ...S0, tactics: 1, leadership: 2 }, bornTick: -384 },
+  { id: "gongsun_zan", name: "公孫瓚", biography: "白馬將軍，雄踞幽州，白馬義從威震塞外。", avatarUrl: "/avatars/gongsun_zan.svg", traits: ["brave", "ambitious", "proud"], cityId: "ji", military: 3, intelligence: 1, charm: 2, skills: { ...S0, tactics: 1, leadership: 2 }, bornTick: -544 },
+  { id: "liu_biao", name: "劉表", biography: "荊州牧，單騎入荊州平定亂局，守成有餘進取不足。", avatarUrl: "/avatars/liu_biao.svg", traits: ["cautious", "diplomatic", "wise"], cityId: "jingzhou", military: 0, intelligence: 3, charm: 3, skills: { ...S0, commerce: 2, leadership: 1 }, bornTick: -576 },
+  { id: "meng_huo", name: "孟獲", biography: "南蠻王，七擒七縱終心悅誠服，歸順蜀漢。", avatarUrl: "/avatars/meng_huo.svg", traits: ["brave", "proud", "impulsive"], cityId: "guiyang_city", military: 3, intelligence: 0, charm: 2, skills: { ...S0, tactics: 1 }, bornTick: -320 },
+  { id: "zhu_rong", name: "祝融夫人", biography: "南蠻女將，火神祝融之後，善使飛刀，武藝高強。", avatarUrl: "/avatars/zhu_rong.svg", traits: ["brave", "loyal", "impulsive"], cityId: "guiyang_city", military: 3, intelligence: 1, charm: 2, skills: { ...S0, tactics: 1 }, bornTick: -320 },
+  { id: "tao_qian", name: "陶謙", biography: "徐州牧，三讓徐州於劉備，以仁厚著稱。", avatarUrl: "/avatars/tao_qian.svg", traits: ["humble", "diplomatic", "cautious"], cityId: "beihai", military: 0, intelligence: 2, charm: 3, skills: { ...S0, commerce: 2, leadership: 1 }, bornTick: -576 },
+  { id: "lu_zhi", name: "盧植", biography: "海內大儒，劉備之師，曾討黃巾平叛亂。", avatarUrl: "/avatars/lu_zhi.svg", traits: ["wise", "loyal", "humble"], cityId: "liaodong", military: 2, intelligence: 3, charm: 2, skills: { ...S0, leadership: 1, tactics: 1 }, bornTick: -640 },
+  { id: "cheng_yu", name: "程昱", biography: "曹操謀臣，多奇計，善斷大事，性格剛戾。", avatarUrl: "/avatars/cheng_yu.svg", traits: ["cunning", "strategic", "ambitious"], cityId: "jinan", military: 0, intelligence: 4, charm: 1, skills: { ...S0, espionage: 2, tactics: 1 }, bornTick: -512 },
 ];
 
 const cities: PlaceNode[] = [
@@ -180,6 +194,40 @@ const relationships: RelationshipEdge[] = [
   { sourceId: "yuan_shao", targetId: "cao_cao", intimacy: 25, relationshipType: "rival" },
   // 法正↔劉備
   { sourceId: "fa_zheng", targetId: "liu_bei", intimacy: 80, relationshipType: "friend" },
+
+  // ── New neutral character relationships ──
+  // 陸遜↔孫權（主臣）
+  { sourceId: "lu_xun", targetId: "sun_quan", intimacy: 75, relationshipType: "friend" },
+  // 曹仁↔曹操（族弟）
+  { sourceId: "cao_ren", targetId: "cao_cao", intimacy: 85, relationshipType: "friend" },
+  // 張郃↔袁紹（舊主）
+  { sourceId: "zhang_he", targetId: "yuan_shao", intimacy: 50, relationshipType: "neutral" },
+  // 張郃↔曹操（新主）
+  { sourceId: "zhang_he", targetId: "cao_cao", intimacy: 60, relationshipType: "friend" },
+  // 許褚↔曹操（護衛）
+  { sourceId: "xu_chu", targetId: "cao_cao", intimacy: 80, relationshipType: "friend" },
+  // 許褚↔典韋（同為護衛）
+  { sourceId: "xu_chu", targetId: "dian_wei", intimacy: 70, relationshipType: "friend" },
+  // 孫策↔孫權（兄弟）
+  { sourceId: "sun_ce", targetId: "sun_quan", intimacy: 90, relationshipType: "friend" },
+  // 孫策↔周瑜（義兄弟）
+  { sourceId: "sun_ce", targetId: "zhou_yu", intimacy: 90, relationshipType: "friend" },
+  // 公孫瓚↔劉備（同窗）
+  { sourceId: "gongsun_zan", targetId: "liu_bei", intimacy: 65, relationshipType: "friend" },
+  // 公孫瓚↔袁紹（死敵）
+  { sourceId: "gongsun_zan", targetId: "yuan_shao", intimacy: 15, relationshipType: "rival" },
+  // 劉表↔劉備（宗親）
+  { sourceId: "liu_biao", targetId: "liu_bei", intimacy: 55, relationshipType: "neutral" },
+  // 孟獲↔祝融夫人（夫妻）
+  { sourceId: "meng_huo", targetId: "zhu_rong", intimacy: 90, relationshipType: "friend" },
+  // 陶謙↔劉備（讓徐州）
+  { sourceId: "tao_qian", targetId: "liu_bei", intimacy: 80, relationshipType: "friend" },
+  // 盧植↔劉備（師徒）
+  { sourceId: "lu_zhi", targetId: "liu_bei", intimacy: 70, relationshipType: "friend" },
+  // 程昱↔曹操（謀臣）
+  { sourceId: "cheng_yu", targetId: "cao_cao", intimacy: 75, relationshipType: "friend" },
+  // 程昱↔荀彧（同僚）
+  { sourceId: "cheng_yu", targetId: "xun_yu", intimacy: 65, relationshipType: "friend" },
 ];
 
 const roads: RoadEdge[] = [

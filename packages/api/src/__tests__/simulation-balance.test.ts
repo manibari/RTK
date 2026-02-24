@@ -6,7 +6,7 @@ import {
   BALANCE_NORMAL,
   BALANCE_HARD,
 } from "../balance-config.js";
-import { evaluateNPCSpyDecisions } from "../ai/npc-ai.js";
+import { evaluateNPCDecisions, evaluateNPCSpyDecisions } from "../ai/npc-ai.js";
 
 describe("Simulation Balance Integration", () => {
   describe("drawEventCard respects eventCardChance", () => {
@@ -166,6 +166,60 @@ describe("Simulation Balance Integration", () => {
       expect(BALANCE_HARD.npcAI.underdogCityThreshold).toBeLessThanOrEqual(
         BALANCE_NORMAL.npcAI.underdogCityThreshold,
       );
+    });
+  });
+
+  describe("troop soft cap formula", () => {
+    it("soft cap = min(hardCap, softCapBase + leadership)", () => {
+      const config = BALANCE_NORMAL.combat;
+      // leadership 0: softCap = min(8, 2+0) = 2
+      expect(Math.min(config.troopHardCap, config.troopSoftCapBase + 0)).toBe(2);
+      // leadership 1: softCap = min(8, 2+1) = 3
+      expect(Math.min(config.troopHardCap, config.troopSoftCapBase + 1)).toBe(3);
+      // leadership 3: softCap = min(8, 2+3) = 5
+      expect(Math.min(config.troopHardCap, config.troopSoftCapBase + 3)).toBe(5);
+      // leadership 6: softCap = min(8, 2+6) = 8
+      expect(Math.min(config.troopHardCap, config.troopSoftCapBase + 6)).toBe(8);
+      // leadership 10: softCap = min(8, 2+10) = 8 (capped)
+      expect(Math.min(config.troopHardCap, config.troopSoftCapBase + 10)).toBe(8);
+    });
+
+    it("overload penalty is clamped at 0.5 minimum", () => {
+      const rate = BALANCE_NORMAL.combat.troopOverloadPenaltyRate;
+      // excess of 3: penalty = 1 - 0.10 * 3 = 0.7
+      expect(Math.max(0.5, 1 - rate * 3)).toBe(0.7);
+      // excess of 6: penalty = 1 - 0.10 * 6 = 0.4, clamped to 0.5
+      expect(Math.max(0.5, 1 - rate * 6)).toBe(0.5);
+    });
+  });
+
+  describe("NPC targets neutral cities", () => {
+    it("NPC decisions include attacks on neutral (uncontrolled) cities", () => {
+      const factions = [
+        { id: "shu", leaderId: "l1", members: ["l1"] },
+        { id: "wei", leaderId: "l2", members: ["l2", "m1"] },
+      ];
+      const characters = [
+        { id: "l1", name: "L1", cityId: "c1", traits: ["brave"], military: 5, intelligence: 3, charm: 3, skills: { leadership: 2, tactics: 1, commerce: 0, espionage: 0 } } as any,
+        { id: "l2", name: "L2", cityId: "c2", traits: ["ambitious", "brave"], military: 4, intelligence: 3, charm: 3, skills: { leadership: 2, tactics: 1, commerce: 0, espionage: 0 } } as any,
+        { id: "m1", name: "M1", cityId: "c2", traits: ["brave", "impulsive"], military: 4, intelligence: 2, charm: 1, skills: { leadership: 1, tactics: 2, commerce: 0, espionage: 0 } } as any,
+      ];
+      const cities = [
+        { id: "c1", name: "C1", controllerId: "l1", status: "allied", tier: "major", garrison: 5, development: 2, food: 50 } as any,
+        { id: "c2", name: "C2", controllerId: "l2", status: "hostile", tier: "major", garrison: 5, development: 2, food: 50 } as any,
+        { id: "neutral1", name: "N1", controllerId: undefined, status: "neutral", tier: "minor", garrison: 0, development: 0, food: 50 } as any,
+      ];
+
+      // Run many trials to check neutral cities appear as targets
+      let neutralTargeted = 0;
+      for (let i = 0; i < 50; i++) {
+        const decisions = evaluateNPCDecisions(factions, characters, cities, "shu");
+        for (const d of decisions) {
+          if (d.targetCityId === "neutral1") neutralTargeted++;
+        }
+      }
+      // Neutral city should be targeted at least some of the time
+      expect(neutralTargeted).toBeGreaterThan(0);
     });
   });
 

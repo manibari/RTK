@@ -247,6 +247,7 @@ export interface PlayerCommand {
   cityPath?: CityPath; // for set_path
   destinationCityId?: string; // for transfer_troops
   transferAmount?: number; // for transfer_troops
+  troopsToCarry?: number; // for attack/move — how many garrison to bring
 }
 
 // ── District system ──
@@ -295,7 +296,7 @@ export interface FactionTechState {
 }
 
 // Neutral characters — IDs not in any faction
-const NEUTRAL_IDS = ["xu_shu", "pang_tong", "huang_zhong", "ma_chao", "sima_yi", "yan_liang", "wen_chou", "zhang_jiao", "hua_tuo", "yuan_shao"];
+const NEUTRAL_IDS = ["xu_shu", "pang_tong", "huang_zhong", "ma_chao", "sima_yi", "yan_liang", "wen_chou", "zhang_jiao", "hua_tuo", "yuan_shao", "lu_xun", "cao_ren", "zhang_he", "xu_chu", "sun_ce", "gongsun_zan", "liu_biao", "meng_huo", "zhu_rong", "tao_qian", "lu_zhi", "cheng_yu"];
 
 // Role bonuses
 const ROLE_LABELS: Record<CharacterRole, string> = {
@@ -1888,12 +1889,28 @@ export class SimulationService {
         this.pendingTactics.set(decision.characterId, decision.tactic);
       }
 
+      // NPC troop carrying: auto-calculate within soft cap
+      let troopsCarried = 0;
+      if (decision.action === "attack") {
+        const originCity = await this.repo.getPlace(char.cityId);
+        if (originCity && originCity.garrison > 1) {
+          const { troopHardCap, troopSoftCapBase } = this.config.combat;
+          const leadership = getSkills(char).leadership;
+          const softCap = Math.min(troopHardCap, troopSoftCapBase + leadership);
+          troopsCarried = Math.min(softCap, originCity.garrison - 1);
+          if (troopsCarried > 0) {
+            await this.repo.updatePlace(originCity.id, { garrison: originCity.garrison - troopsCarried });
+          }
+        }
+      }
+
       await this.repo.addMovement({
         characterId: decision.characterId,
         originCityId: char.cityId,
         destinationCityId: decision.targetCityId,
         departureTick: this.currentTick,
         arrivalTick: this.currentTick + travelTime,
+        troopsCarried,
       });
 
       await this.repo.createCharacter({ ...char, cityId: decision.targetCityId });
@@ -2223,12 +2240,27 @@ export class SimulationService {
       this.commandedThisTick.add(cmd.characterId);
       const travelTime = this.travelTimeForRoad(cmd.characterId, road);
 
+      // Troop carrying: deduct garrison from origin city on departure
+      let troopsCarried = 0;
+      if (cmd.troopsToCarry != null && cmd.troopsToCarry > 0) {
+        const originCity = await this.repo.getPlace(char.cityId);
+        if (originCity) {
+          const { troopHardCap } = this.config.combat;
+          const maxCarry = Math.min(cmd.troopsToCarry, troopHardCap, Math.max(0, originCity.garrison - 1));
+          troopsCarried = maxCarry;
+          if (troopsCarried > 0) {
+            await this.repo.updatePlace(originCity.id, { garrison: originCity.garrison - troopsCarried });
+          }
+        }
+      }
+
       await this.repo.addMovement({
         characterId: cmd.characterId,
         originCityId: char.cityId,
         destinationCityId: cmd.targetCityId,
         departureTick: this.currentTick,
         arrivalTick: this.currentTick + travelTime,
+        troopsCarried,
       });
 
       await this.repo.createCharacter({ ...char, cityId: cmd.targetCityId });
@@ -2263,6 +2295,7 @@ export class SimulationService {
         destinationCityId: destId,
         departureTick: this.currentTick,
         arrivalTick: this.currentTick + travelTime,
+        troopsCarried: 0,
       });
 
       await this.repo.createCharacter({ ...char, cityId: destId });
@@ -3073,6 +3106,17 @@ export class SimulationService {
         // Determine tactic (player or NPC picks)
         const leadTactic = this.pendingTactics.get(attackerIds[0]) ?? (attackFaction !== "shu" ? this.npcPickTactic() : "balanced");
         const tacticMod = TACTIC_MODIFIERS[leadTactic];
+
+        // Collect troops carried by each attacker
+        const troopsPerAttacker = new Map<string, number>();
+        let totalTroops = 0;
+        for (const a of cityArrivals) {
+          if (attackerIds.includes(a.characterId)) {
+            troopsPerAttacker.set(a.characterId, a.troopsCarried ?? 0);
+            totalTroops += a.troopsCarried ?? 0;
+          }
+        }
+
         for (const id of attackerIds) {
           this.pendingTactics.delete(id);
           const c = await this.repo.getCharacter(id);
@@ -3081,6 +3125,24 @@ export class SimulationService {
             attackPower += base * (1 + this.roleAttackBonus(c));
             attackChars.push(c);
           }
+        }
+
+        // Troop contribution to attack power
+        attackPower += totalTroops;
+
+        // Overload penalty: check if any attacker exceeds soft cap
+        const { troopHardCap, troopSoftCapBase, troopOverloadPenaltyRate } = this.config.combat;
+        let worstExcess = 0;
+        for (const c of attackChars) {
+          const carried = troopsPerAttacker.get(c.id) ?? 0;
+          const softCap = Math.min(troopHardCap, troopSoftCapBase + getSkills(c).leadership);
+          if (carried > softCap) {
+            worstExcess = Math.max(worstExcess, carried - softCap);
+          }
+        }
+        if (worstExcess > 0) {
+          const penalty = Math.max(0.5, 1 - troopOverloadPenaltyRate * worstExcess);
+          attackPower *= penalty;
         }
         // Apply tactic modifiers: attack bonus/penalty directly, defense modifier reduces effective enemy defense
         attackPower *= (1 + tacticMod.attack);
@@ -3113,10 +3175,14 @@ export class SimulationService {
 
         if (attackerWins) {
           const newStatus = this.factionToStatus(attackFaction);
+          // Post-battle: attacker's troops become garrison of captured city
+          const newGarrison = totalTroops > 0
+            ? totalTroops
+            : Math.max(0, city.garrison - this.config.combat.conquestGarrisonPenalty);
           await this.repo.updatePlace(city.id, {
             controllerId: leadAttacker.id,
             status: newStatus,
-            garrison: Math.max(0, city.garrison - this.config.combat.conquestGarrisonPenalty),
+            garrison: newGarrison,
             siegedBy: undefined, siegeTick: undefined, // Clear siege on capture
           });
           // Set low loyalty for captured city
@@ -4025,9 +4091,9 @@ export class SimulationService {
       await this.repo.createPlace(p);
     }
 
-    // Restore movements
+    // Restore movements (backward-compatible: default troopsCarried to 0)
     for (const m of data.movements) {
-      await this.repo.addMovement(m);
+      await this.repo.addMovement({ ...m, troopsCarried: m.troopsCarried ?? 0 });
     }
 
     // Restore events
@@ -4256,7 +4322,7 @@ interface SaveData {
   characters: CharacterNode[];
   places: PlaceNode[];
   relationships: RelationshipEdge[];
-  movements: { characterId: string; originCityId: string; destinationCityId: string; departureTick: number; arrivalTick: number }[];
+  movements: { characterId: string; originCityId: string; destinationCityId: string; departureTick: number; arrivalTick: number; troopsCarried?: number }[];
   events: Omit<StoredEvent, "id">[];
   dailySummaries: [number, string][];
   factionHistory: [string, FactionHistoryEntry[]][];
