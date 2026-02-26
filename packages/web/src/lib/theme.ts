@@ -1,45 +1,45 @@
 // Centralized color tokens for warm ancient Chinese theme
 
 export const theme = {
-  // Background hierarchy
-  bg1: "#1a1410",       // root background
-  bg2: "#2a2218",       // card / panel background
-  bg3: "#3d3226",       // border / divider
-  bg1a: "rgba(26,20,16,0.85)",  // overlay with transparency
-  bg2a: "rgba(42,34,24,0.92)",  // sidebar overlay
-  bg1t: "rgba(26,20,16,0.6)",   // subtle bg (list items)
+  // Background hierarchy (warm parchment-dark)
+  bg1: "#352a1e",       // root background
+  bg2: "#483c2e",       // card / panel background
+  bg3: "#6b5a46",       // border / divider
+  bg1a: "rgba(53,42,30,0.88)",  // overlay with transparency
+  bg2a: "rgba(72,60,46,0.92)",  // sidebar overlay
+  bg1t: "rgba(53,42,30,0.6)",   // subtle bg (list items)
 
   // Text hierarchy
-  textPrimary: "#e8dcc8",
-  textBody: "#d4c8b0",
-  textSecondary: "#b8a88a",
-  textMuted: "#8b7355",
+  textPrimary: "#f0e6d6",
+  textBody: "#ddd0b8",
+  textSecondary: "#c4b494",
+  textMuted: "#9c8868",
 
   // Semantic colors
-  accent: "#d4a853",
-  success: "#5d9b6b",
-  danger: "#c4443a",
-  info: "#4a8b8b",
-  special: "#9b6b9b",
-  indigo: "#5b5b8b",
-  warning: "#c4843a",
+  accent: "#e0b860",
+  success: "#6daf7d",
+  danger: "#d4554a",
+  info: "#5a9f9f",
+  special: "#b080b0",
+  indigo: "#7070a0",
+  warning: "#d49448",
 
   // Faction colors
-  factionShu: "#5b8bb8",
-  factionWei: "#c4443a",
-  factionWu: "#5d9b6b",
-  factionLuBu: "#9b6b9b",
+  factionShu: "#6da0d0",
+  factionWei: "#d45550",
+  factionWu: "#6daf7d",
+  factionLuBu: "#b080b0",
 
   // Season colors
-  seasonSpring: "#5d9b6b",
-  seasonSummer: "#c4443a",
-  seasonAutumn: "#d4a853",
-  seasonWinter: "#4a8b8b",
+  seasonSpring: "#6daf7d",
+  seasonSummer: "#d4554a",
+  seasonAutumn: "#e0b860",
+  seasonWinter: "#5a9f9f",
 
   // Functional aliases
-  accentDark: "#1a1410",   // text on accent bg
-  btnDanger: "#c4443a",
-  btnSuccess: "#5d9b6b",
+  accentDark: "#352a1e",   // text on accent bg
+  btnDanger: "#d4554a",
+  btnSuccess: "#6daf7d",
 } as const;
 
 // Faction color map for components

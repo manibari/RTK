@@ -102,10 +102,10 @@ const REL_TYPE_COLORS: Record<string, { label: string; color: string }> = {
 
 // --- Faction portrait gradients ---
 const FACTION_GRADIENTS: Record<string, string> = {
-  shu: `linear-gradient(135deg, ${theme.factionShu}40, ${theme.factionShu}10)`,
-  wei: `linear-gradient(135deg, ${theme.factionWei}40, ${theme.factionWei}10)`,
-  wu: `linear-gradient(135deg, ${theme.factionWu}40, ${theme.factionWu}10)`,
-  lu_bu: `linear-gradient(135deg, ${theme.factionLuBu}40, ${theme.factionLuBu}10)`,
+  shu: `linear-gradient(135deg, ${theme.factionShu}80, ${theme.factionShu}25)`,
+  wei: `linear-gradient(135deg, ${theme.factionWei}80, ${theme.factionWei}25)`,
+  wu: `linear-gradient(135deg, ${theme.factionWu}80, ${theme.factionWu}25)`,
+  lu_bu: `linear-gradient(135deg, ${theme.factionLuBu}80, ${theme.factionLuBu}25)`,
 };
 
 const FACTION_NAMES: Record<string, string> = {
@@ -640,20 +640,22 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 8,
   },
   portraitCircle: {
-    width: 100,
-    height: 100,
+    width: 110,
+    height: 110,
     borderRadius: "50%",
-    border: "3px solid",
+    border: "4px solid",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: `${theme.bg1}80`,
+    backgroundColor: `rgba(0,0,0,0.35)`,
     flexShrink: 0,
+    boxShadow: "0 4px 20px rgba(0,0,0,0.4), inset 0 0 20px rgba(255,255,255,0.05)",
   },
   portraitKanji: {
-    fontSize: 48,
-    fontWeight: 800,
+    fontSize: 54,
+    fontWeight: 900,
     lineHeight: 1,
+    textShadow: "0 2px 8px rgba(0,0,0,0.5)",
   },
   namePlate: {
     flex: 1,
