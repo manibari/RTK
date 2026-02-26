@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { theme } from "../lib/theme";
 
 export interface ToastMessage {
   id: number;
@@ -58,22 +59,22 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 8,
     padding: "10px 14px",
-    backgroundColor: "#1e293b",
+    backgroundColor: theme.bg2,
     borderRadius: 8,
-    borderLeft: "4px solid #64748b",
+    borderLeft: `4px solid ${theme.textMuted}`,
     boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
     animation: "slideIn 0.2s ease-out",
   },
   text: {
     flex: 1,
     fontSize: 13,
-    color: "#e2e8f0",
+    color: theme.textPrimary,
     lineHeight: 1.4,
   },
   dismiss: {
     background: "none",
     border: "none",
-    color: "#64748b",
+    color: theme.textMuted,
     fontSize: 14,
     cursor: "pointer",
     padding: 2,

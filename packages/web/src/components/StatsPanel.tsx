@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { trpc } from "../lib/trpc";
+import { theme } from "../lib/theme";
 
 interface FactionStat {
   id: string;
@@ -85,7 +86,7 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
     if (result.success) {
       fetchStats();
     }
-    onMessage?.(result.reason, result.success ? "#22c55e" : "#ef4444");
+    onMessage?.(result.reason, result.success ? theme.success : theme.danger);
   };
 
   const handleBreak = async (factionId: string) => {
@@ -93,7 +94,7 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
     if (result.success) {
       fetchStats();
     }
-    onMessage?.(result.reason, result.success ? "#f59e0b" : "#ef4444");
+    onMessage?.(result.reason, result.success ? theme.accent : theme.danger);
   };
 
   const handleResearch = async (techId: string) => {
@@ -104,10 +105,10 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
         targetCityId: "",
         techId,
       });
-      onMessage?.(`開始研發 ${TECHNOLOGIES.find((t) => t.id === techId)?.name ?? techId}`, "#3b82f6");
+      onMessage?.(`開始研發 ${TECHNOLOGIES.find((t) => t.id === techId)?.name ?? techId}`, theme.info);
       fetchStats();
     } catch {
-      onMessage?.("研發指令失敗", "#ef4444");
+      onMessage?.("研發指令失敗", theme.danger);
     }
   };
 
@@ -157,7 +158,7 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
             <div style={styles.statRow}>
               <span style={styles.statLabel}>軍力</span>
               <div style={styles.barWrap}>
-                <div style={{ ...styles.bar, width: `${(f.power / maxPower) * 100}%`, backgroundColor: "#ef4444" }} />
+                <div style={{ ...styles.bar, width: `${(f.power / maxPower) * 100}%`, backgroundColor: theme.danger }} />
               </div>
               <span style={styles.statValue}>{f.power}</span>
             </div>
@@ -165,7 +166,7 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
             <div style={styles.statRow}>
               <span style={styles.statLabel}>金幣</span>
               <div style={styles.barWrap}>
-                <div style={{ ...styles.bar, width: `${(f.gold / maxGold) * 100}%`, backgroundColor: "#f59e0b" }} />
+                <div style={{ ...styles.bar, width: `${(f.gold / maxGold) * 100}%`, backgroundColor: theme.accent }} />
               </div>
               <span style={styles.statValue}>{f.gold}</span>
             </div>
@@ -173,7 +174,7 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
             <div style={styles.statRow}>
               <span style={styles.statLabel}>士氣</span>
               <div style={styles.barWrap}>
-                <div style={{ ...styles.bar, width: `${f.morale}%`, backgroundColor: f.morale >= 60 ? "#22c55e" : f.morale >= 30 ? "#f59e0b" : "#ef4444" }} />
+                <div style={{ ...styles.bar, width: `${f.morale}%`, backgroundColor: f.morale >= 60 ? theme.success : f.morale >= 30 ? theme.accent : theme.danger }} />
               </div>
               <span style={styles.statValue}>{f.morale}</span>
             </div>
@@ -181,13 +182,13 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
             <div style={styles.statRow}>
               <span style={styles.statLabel}>疲乏</span>
               <div style={styles.barWrap}>
-                <div style={{ ...styles.bar, width: `${f.exhaustion}%`, backgroundColor: f.exhaustion >= 70 ? "#ef4444" : f.exhaustion >= 40 ? "#f59e0b" : "#64748b" }} />
+                <div style={{ ...styles.bar, width: `${f.exhaustion}%`, backgroundColor: f.exhaustion >= 70 ? theme.danger : f.exhaustion >= 40 ? theme.accent : theme.textMuted }} />
               </div>
               <span style={styles.statValue}>{f.exhaustion}</span>
             </div>
 
             {f.legacy > 0 && (
-              <div style={{ fontSize: 11, color: "#a855f7", marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: theme.special, marginTop: 2 }}>
                 遺產加成: +{f.legacy}
               </div>
             )}
@@ -195,7 +196,7 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
             {/* Power trend sparkline */}
             {history[f.id] && history[f.id].length > 1 && (
               <div style={styles.sparklineWrap}>
-                <span style={{ fontSize: 11, color: "#64748b" }}>軍力趨勢</span>
+                <span style={{ fontSize: 11, color: theme.textMuted }}>軍力趨勢</span>
                 <Sparkline data={history[f.id].map((e) => e.power)} color={f.color} />
               </div>
             )}
@@ -207,11 +208,11 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
               return (
               <div style={styles.diplomacyRow}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, width: "100%" }}>
-                  <span style={{ fontSize: 11, color: "#94a3b8" }}>信任</span>
-                  <div style={{ flex: 1, height: 4, backgroundColor: "#0f172a", borderRadius: 2, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${trust}%`, backgroundColor: trust >= 60 ? "#22c55e" : trust >= 30 ? "#f59e0b" : "#ef4444", borderRadius: 2 }} />
+                  <span style={{ fontSize: 11, color: theme.textSecondary }}>信任</span>
+                  <div style={{ flex: 1, height: 4, backgroundColor: theme.bg1, borderRadius: 2, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${trust}%`, backgroundColor: trust >= 60 ? theme.success : trust >= 30 ? theme.accent : theme.danger, borderRadius: 2 }} />
                   </div>
-                  <span style={{ fontSize: 11, color: "#94a3b8" }}>{trust}</span>
+                  <span style={{ fontSize: 11, color: theme.textSecondary }}>{trust}</span>
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
                   {isAllied(f.id) ? (
@@ -224,7 +225,7 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
                     </button>
                   )}
                   <button
-                    style={{ ...styles.breakBtn, backgroundColor: "#6366f1", borderColor: "#6366f1", fontSize: 10 }}
+                    style={{ ...styles.breakBtn, backgroundColor: theme.indigo, borderColor: theme.indigo, fontSize: 10 }}
                     onClick={async () => {
                       try {
                         await trpc.simulation.queueCommand.mutate({
@@ -233,10 +234,10 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
                           targetCityId: "",
                           targetFactionId: f.id,
                         });
-                        onMessage?.(`對 ${f.id} 發動離間計（150金）`, "#6366f1");
+                        onMessage?.(`對 ${f.id} 發動離間計（150金）`, theme.indigo);
                         fetchStats();
                       } catch {
-                        onMessage?.("離間計指令失敗", "#ef4444");
+                        onMessage?.("離間計指令失敗", theme.danger);
                       }
                     }}
                   >
@@ -248,18 +249,18 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
                       try {
                         await trpc.simulation.queueCommand.mutate({ type: "propose_nap", characterId: "liu_bei", targetCityId: "", targetFactionId: f.id });
                         onMessage?.(`向 ${f.id} 提議互不侵犯條約`, "#0891b2");
-                      } catch { onMessage?.("指令失敗", "#ef4444"); }
+                      } catch { onMessage?.("指令失敗", theme.danger); }
                     }}
                   >
                     互不侵犯
                   </button>
                   <button
-                    style={{ ...styles.breakBtn, backgroundColor: "#059669", borderColor: "#059669", fontSize: 10 }}
+                    style={{ ...styles.breakBtn, backgroundColor: theme.info, borderColor: theme.info, fontSize: 10 }}
                     onClick={async () => {
                       try {
                         await trpc.simulation.queueCommand.mutate({ type: "propose_defense_pact", characterId: "liu_bei", targetCityId: "", targetFactionId: f.id });
-                        onMessage?.(`向 ${f.id} 提議互助防禦條約`, "#059669");
-                      } catch { onMessage?.("指令失敗", "#ef4444"); }
+                        onMessage?.(`向 ${f.id} 提議互助防禦條約`, theme.info);
+                      } catch { onMessage?.("指令失敗", theme.danger); }
                     }}
                   >
                     互助防禦
@@ -272,7 +273,7 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
             {/* Technology */}
             {techs[f.id] && (
               <div style={styles.techSection}>
-                <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>科技</span>
+                <span style={{ fontSize: 12, color: theme.textSecondary, fontWeight: 600 }}>科技</span>
                 <div style={styles.techList}>
                   {TECHNOLOGIES.map((tech) => {
                     const state = techs[f.id];
@@ -282,7 +283,7 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
                     return (
                       <div key={tech.id} style={styles.techItem}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: 12, color: completed ? "#22c55e" : researching ? "#f59e0b" : "#64748b", fontWeight: 600 }}>
+                          <span style={{ fontSize: 12, color: completed ? theme.success : researching ? theme.accent : theme.textMuted, fontWeight: 600 }}>
                             {completed ? "✓ " : ""}{tech.name}
                           </span>
                           {f.id === "shu" && !completed && !researching && !state.current && (
@@ -296,7 +297,7 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
                             <div style={{ ...styles.techFill, width: `${progress * 100}%` }} />
                           </div>
                         )}
-                        <span style={{ fontSize: 10, color: "#64748b" }}>{tech.description}</span>
+                        <span style={{ fontSize: 10, color: theme.textMuted }}>{tech.description}</span>
                       </div>
                     );
                   })}
@@ -305,9 +306,9 @@ export function StatsPanel({ currentTick, onMessage }: StatsPanelProps) {
             )}
             {/* Faction tradition */}
             {traditions[f.id] && (
-              <div style={{ marginTop: 8, padding: "4px 8px", backgroundColor: "#1e1b4b", borderRadius: 4 }}>
-                <span style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600 }}>{traditions[f.id]!.label}</span>
-                <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: 6 }}>{traditions[f.id]!.description}</span>
+              <div style={{ marginTop: 8, padding: "4px 8px", backgroundColor: "#2a2230", borderRadius: 4 }}>
+                <span style={{ fontSize: 12, color: theme.special, fontWeight: 600 }}>{traditions[f.id]!.label}</span>
+                <span style={{ fontSize: 10, color: theme.textSecondary, marginLeft: 6 }}>{traditions[f.id]!.description}</span>
               </div>
             )}
           </div>
@@ -382,8 +383,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tick: {
     fontSize: 14,
-    color: "#f59e0b",
-    backgroundColor: "#1e293b",
+    color: theme.accent,
+    backgroundColor: theme.bg2,
     padding: "4px 10px",
     borderRadius: 6,
     fontWeight: 600,
@@ -393,7 +394,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#64748b",
+    color: theme.textMuted,
     fontSize: 18,
   },
   grid: {
@@ -402,7 +403,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 16,
   },
   card: {
-    backgroundColor: "#1e293b",
+    backgroundColor: theme.bg2,
     borderRadius: 8,
     padding: 16,
   },
@@ -418,7 +419,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   factionId: {
     fontSize: 11,
-    color: "#64748b",
+    color: theme.textMuted,
     fontWeight: 600,
   },
   statRow: {
@@ -429,14 +430,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   statLabel: {
     fontSize: 12,
-    color: "#94a3b8",
+    color: theme.textSecondary,
     width: 36,
     flexShrink: 0,
   },
   barWrap: {
     flex: 1,
     height: 8,
-    backgroundColor: "#0f172a",
+    backgroundColor: theme.bg1,
     borderRadius: 4,
     overflow: "hidden",
   },
@@ -448,7 +449,7 @@ const styles: Record<string, React.CSSProperties> = {
   statValue: {
     fontSize: 13,
     fontWeight: 600,
-    color: "#e2e8f0",
+    color: theme.textPrimary,
     width: 40,
     textAlign: "right" as const,
   },
@@ -458,20 +459,20 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     marginTop: 8,
     paddingTop: 8,
-    borderTop: "1px solid #334155",
+    borderTop: `1px solid ${theme.bg3}`,
   },
   diplomacyRow: {
     marginTop: 10,
     paddingTop: 10,
-    borderTop: "1px solid #334155",
+    borderTop: `1px solid ${theme.bg3}`,
   },
   allyBtn: {
     width: "100%",
     padding: "6px 0",
     borderRadius: 4,
     border: "none",
-    backgroundColor: "#22c55e",
-    color: "#0f172a",
+    backgroundColor: theme.success,
+    color: theme.bg1,
     fontSize: 13,
     fontWeight: 700,
     cursor: "pointer",
@@ -481,7 +482,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "6px 0",
     borderRadius: 4,
     border: "none",
-    backgroundColor: "#ef4444",
+    backgroundColor: theme.danger,
     color: "#fff",
     fontSize: 13,
     fontWeight: 700,
@@ -494,7 +495,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 16,
     fontWeight: 600,
     marginBottom: 12,
-    color: "#e2e8f0",
+    color: theme.textPrimary,
   },
   allianceList: {
     display: "flex",
@@ -505,19 +506,19 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#1e293b",
+    backgroundColor: theme.bg2,
     padding: "8px 14px",
     borderRadius: 6,
     fontSize: 14,
   },
   allianceArrow: {
-    color: "#64748b",
+    color: theme.textMuted,
     fontSize: 16,
   },
   techSection: {
     marginTop: 10,
     paddingTop: 10,
-    borderTop: "1px solid #334155",
+    borderTop: `1px solid ${theme.bg3}`,
   },
   techList: {
     display: "flex",
@@ -532,13 +533,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   techBar: {
     height: 4,
-    backgroundColor: "#0f172a",
+    backgroundColor: theme.bg1,
     borderRadius: 2,
     overflow: "hidden",
   },
   techFill: {
     height: "100%",
-    backgroundColor: "#f59e0b",
+    backgroundColor: theme.accent,
     borderRadius: 2,
     transition: "width 0.3s",
   },
@@ -547,7 +548,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "2px 6px",
     borderRadius: 4,
     border: "none",
-    backgroundColor: "#3b82f6",
+    backgroundColor: theme.info,
     color: "#fff",
     fontWeight: 600,
     cursor: "pointer",

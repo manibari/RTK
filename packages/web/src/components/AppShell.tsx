@@ -2,25 +2,20 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { trpc } from "../lib/trpc";
+import { theme, SEASON_INFO } from "../lib/theme";
 import { GraphPage } from "./GraphPage";
 import { MapPage } from "./MapPage";
 import { GameLog } from "./GameLog";
 import { StatsPanel } from "./StatsPanel";
 import { HeroHall } from "./HeroHall";
+import { CharacterPage } from "./CharacterPage";
 import { ToastStack, createToastId, type ToastMessage } from "./ToastStack";
 import { VictoryScreen } from "./VictoryScreen";
 import type { TimelineMarker } from "./Timeline";
 
-type ViewTab = "graph" | "map" | "log" | "stats" | "heroes";
+type ViewTab = "graph" | "map" | "log" | "stats" | "heroes" | "character";
 type SimSpeed = 1 | 2 | 5;
 type Season = "spring" | "summer" | "autumn" | "winter";
-
-const SEASON_INFO: Record<Season, { label: string; color: string }> = {
-  spring: { label: "春", color: "#22c55e" },
-  summer: { label: "夏", color: "#ef4444" },
-  autumn: { label: "秋", color: "#f59e0b" },
-  winter: { label: "冬", color: "#3b82f6" },
-};
 
 interface BattleRound {
   phase: string;
@@ -97,6 +92,8 @@ export function AppShell() {
   const [pendingCard, setPendingCard] = useState<PendingEventCard | null>(null);
   const [headline, setHeadline] = useState<{ text: string; color: string } | null>(null);
   const headlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [characterPageId, setCharacterPageId] = useState<string | null>(null);
+  const [prevTab, setPrevTab] = useState<ViewTab>("heroes");
   const [victoryProgress, setVictoryProgress] = useState<{
     conquest: { playerCities: number; totalMajor: number };
     diplomacy: { consecutiveTicks: number; required: number; allAllied: boolean };
@@ -160,6 +157,12 @@ export function AppShell() {
     headlineTimerRef.current = setTimeout(() => setHeadline(null), 4000);
   }, []);
 
+  const handleViewCharacter = useCallback((id: string) => {
+    setCharacterPageId(id);
+    setPrevTab(activeTab === "character" ? prevTab : activeTab);
+    setActiveTab("character");
+  }, [activeTab, prevTab]);
+
   const handleAdvanceDay = useCallback(async () => {
     if (gameStatus !== "ongoing") return undefined;
     setAdvancing(true);
@@ -185,40 +188,40 @@ export function AppShell() {
           const text = b.captured
             ? `${b.attackerName} 攻陷 ${b.cityName}${powerStr}`
             : `${b.attackerName} 未能攻下 ${b.cityName}${powerStr}`;
-          addToast(text, b.captured ? "#ef4444" : "#64748b");
-          if (b.captured) showHeadline(`⚔ ${b.attackerName} 攻陷 ${b.cityName}！`, "#ef4444");
+          addToast(text, b.captured ? theme.danger : theme.textMuted);
+          if (b.captured) showHeadline(`⚔ ${b.attackerName} 攻陷 ${b.cityName}！`, theme.danger);
         }
       }
       if (result.diplomacyEvents?.length > 0) {
         setAllDiplomacy((prev) => [...prev, ...result.diplomacyEvents]);
         for (const d of result.diplomacyEvents) {
-          const color = d.type === "alliance_formed" ? "#22c55e" : "#f59e0b";
+          const color = d.type === "alliance_formed" ? theme.success : theme.accent;
           addToast(d.description, color);
         }
       }
       if (result.recruitmentResults?.length > 0) {
         for (const r of result.recruitmentResults as RecruitmentResult[]) {
           if (r.success) {
-            addToast(`${r.recruiterName} 招降了 ${r.targetName}`, "#a855f7");
+            addToast(`${r.recruiterName} 招降了 ${r.targetName}`, theme.special);
           }
         }
       }
       if (result.betrayalEvents?.length > 0) {
         for (const b of result.betrayalEvents) {
-          addToast(`${b.characterName} 背叛了 ${b.oldFaction}，投奔 ${b.newFaction}`, "#f97316");
-          showHeadline(`${b.characterName} 叛變！投奔 ${b.newFaction}`, "#f97316");
+          addToast(`${b.characterName} 背叛了 ${b.oldFaction}，投奔 ${b.newFaction}`, theme.warning);
+          showHeadline(`${b.characterName} 叛變！投奔 ${b.newFaction}`, theme.warning);
         }
       }
       if (result.spyReports?.length > 0) {
         for (const s of result.spyReports) {
           if (s.success && s.missionType === "intel") {
-            addToast(`${s.characterName} 偵查 ${s.targetCityName}：守備${s.intel?.garrison} 金幣${s.intel?.gold}`, "#6366f1");
+            addToast(`${s.characterName} 偵查 ${s.targetCityName}：守備${s.intel?.garrison} 金幣${s.intel?.gold}`, theme.indigo);
           } else if (s.success && s.missionType === "sabotage") {
-            addToast(`${s.characterName} 破壞 ${s.targetCityName}：${s.sabotageEffect}`, "#6366f1");
+            addToast(`${s.characterName} 破壞 ${s.targetCityName}：${s.sabotageEffect}`, theme.indigo);
           } else if (s.caught) {
-            addToast(`${s.characterName} 在 ${s.targetCityName} 被捕！`, "#ef4444");
+            addToast(`${s.characterName} 在 ${s.targetCityName} 被捕！`, theme.danger);
           } else {
-            addToast(`${s.characterName} 任務失敗`, "#64748b");
+            addToast(`${s.characterName} 任務失敗`, theme.textMuted);
           }
         }
       }
@@ -227,27 +230,27 @@ export function AppShell() {
           const suffix = d.wasLeader && d.successorName ? `，${d.successorName} 繼任` : "";
           const heirSuffix = d.heirName ? `｜後嗣 ${d.heirName} 加入` : "";
           const causeText = d.cause === "old_age" ? "壽終正寢" : "戰死";
-          addToast(`${d.characterName} ${causeText}${suffix}${heirSuffix}`, d.cause === "old_age" ? "#64748b" : "#991b1b");
-          if (d.wasLeader) showHeadline(`${d.characterName} ${causeText}${suffix}`, "#991b1b");
+          addToast(`${d.characterName} ${causeText}${suffix}${heirSuffix}`, d.cause === "old_age" ? theme.textMuted : "#7a3030");
+          if (d.wasLeader) showHeadline(`${d.characterName} ${causeText}${suffix}`, "#7a3030");
         }
       }
       if (result.worldEvents?.length > 0) {
         for (const w of result.worldEvents) {
-          const colors: Record<string, string> = { plague: "#a855f7", drought: "#f59e0b", bandits: "#f97316" };
-          addToast(w.description, colors[w.type] ?? "#64748b");
+          const colors: Record<string, string> = { plague: theme.special, drought: theme.accent, bandits: theme.warning };
+          addToast(w.description, colors[w.type] ?? theme.textMuted);
         }
       }
       if (result.seasonalEvent) {
-        const seasonColors: Record<string, string> = { spring: "#22c55e", summer: "#ef4444", autumn: "#f59e0b", winter: "#3b82f6" };
-        addToast(`【${result.seasonalEvent.title}】${result.seasonalEvent.description}｜${result.seasonalEvent.effects}`, seasonColors[result.seasonalEvent.season] ?? "#64748b");
+        const seasonColors: Record<string, string> = { spring: theme.success, summer: theme.danger, autumn: theme.accent, winter: theme.info };
+        addToast(`【${result.seasonalEvent.title}】${result.seasonalEvent.description}｜${result.seasonalEvent.effects}`, seasonColors[result.seasonalEvent.season] ?? theme.textMuted);
       }
       if (result.rebellionEvents?.length > 0) {
         for (const r of result.rebellionEvents) {
           const text = r.flippedToNeutral
             ? `${r.cityName} 爆發叛亂，城市脫離控制！`
             : `${r.cityName} 民變！守備-${r.garrisonLost}`;
-          addToast(text, "#dc2626");
-          if (r.flippedToNeutral) showHeadline(`${r.cityName} 叛亂！城市失守！`, "#dc2626");
+          addToast(text, theme.danger);
+          if (r.flippedToNeutral) showHeadline(`${r.cityName} 叛亂！城市失守！`, theme.danger);
         }
       }
       if (result.dailySummary) {
@@ -297,7 +300,7 @@ export function AppShell() {
     try {
       const result = await trpc.simulation.resolveEventCard.mutate({ choiceIndex });
       if (result.success) {
-        addToast(result.description, "#3b82f6");
+        addToast(result.description, theme.info);
       }
     } catch {
       // silently fail
@@ -321,15 +324,15 @@ export function AppShell() {
     setSummaries(new Map());
     setToasts([]);
     setVictoryProgress(null);
-    addToast("遊戲已重置", "#22c55e");
+    addToast("遊戲已重置", theme.success);
   }, [addToast]);
 
   const handleSave = useCallback(async (slot: number) => {
     try {
       const result = await trpc.simulation.saveGame.mutate({ slot });
-      addToast(`已存檔至 Slot ${slot}（Day ${result.tick}）`, "#3b82f6");
+      addToast(`已存檔至 Slot ${slot}（Day ${result.tick}）`, theme.info);
     } catch {
-      addToast("存檔失敗", "#ef4444");
+      addToast("存檔失敗", theme.danger);
     }
   }, [addToast]);
 
@@ -344,9 +347,9 @@ export function AppShell() {
       setAllBattles([]);
       setAllDiplomacy([]);
       setSummaries(new Map());
-      addToast(`已讀取 Slot ${slot}（Day ${result.tick}）`, "#3b82f6");
+      addToast(`已讀取 Slot ${slot}（Day ${result.tick}）`, theme.info);
     } catch {
-      addToast("讀取失敗", "#ef4444");
+      addToast("讀取失敗", theme.danger);
     }
   }, [addToast]);
 
@@ -354,10 +357,10 @@ export function AppShell() {
   const timelineMarkers: TimelineMarker[] = useMemo(() => {
     const markers: TimelineMarker[] = [];
     for (const b of allBattles) {
-      markers.push({ tick: b.tick, color: b.captured ? "#ef4444" : "#94a3b8", type: "battle" });
+      markers.push({ tick: b.tick, color: b.captured ? theme.danger : theme.textSecondary, type: "battle" });
     }
     for (const d of allDiplomacy) {
-      markers.push({ tick: d.tick, color: d.type === "alliance_formed" ? "#22c55e" : "#f59e0b", type: "diplomacy" });
+      markers.push({ tick: d.tick, color: d.type === "alliance_formed" ? theme.success : theme.accent, type: "diplomacy" });
     }
     return markers;
   }, [allBattles, allDiplomacy]);
@@ -422,15 +425,15 @@ export function AppShell() {
           {victoryProgress && gameStatus === "ongoing" && (
             <>
               <div style={styles.vpChip} title={`征服：${victoryProgress.conquest.playerCities}/${victoryProgress.conquest.totalMajor} 主城`}>
-                <span style={{ color: "#ef4444" }}>⚔</span>
+                <span style={{ color: theme.danger }}>⚔</span>
                 <span>{victoryProgress.conquest.playerCities}/{victoryProgress.conquest.totalMajor}</span>
               </div>
               <div style={styles.vpChip} title={`外交：${victoryProgress.diplomacy.allAllied ? "全員結盟" : "未結盟"} ${victoryProgress.diplomacy.consecutiveTicks}/${victoryProgress.diplomacy.required} 回合`}>
-                <span style={{ color: "#22c55e" }}>🤝</span>
+                <span style={{ color: theme.success }}>🤝</span>
                 <span>{victoryProgress.diplomacy.consecutiveTicks}/{victoryProgress.diplomacy.required}</span>
               </div>
               <div style={styles.vpChip} title={`經濟：金幣佔比 ${Math.round(victoryProgress.economy.goldShare * 100)}% ${victoryProgress.economy.consecutiveTicks}/${victoryProgress.economy.required} 回合`}>
-                <span style={{ color: "#f59e0b" }}>💰</span>
+                <span style={{ color: theme.accent }}>💰</span>
                 <span>{Math.round(victoryProgress.economy.goldShare * 100)}%</span>
               </div>
               <div style={styles.divider} />
@@ -439,7 +442,7 @@ export function AppShell() {
           <button
             style={{
               ...styles.autoSimBtn,
-              backgroundColor: autoSim ? "#ef4444" : "#22c55e",
+              backgroundColor: autoSim ? theme.danger : theme.success,
             }}
             onClick={toggleAutoSim}
             disabled={gameStatus !== "ongoing"}
@@ -521,9 +524,16 @@ export function AppShell() {
           />
         ) : activeTab === "stats" ? (
           <StatsPanel currentTick={currentTick} onMessage={addToast} />
-        ) : (
-          <HeroHall currentTick={currentTick} />
-        )}
+        ) : activeTab === "heroes" ? (
+          <HeroHall currentTick={currentTick} onViewCharacter={handleViewCharacter} />
+        ) : activeTab === "character" && characterPageId ? (
+          <CharacterPage
+            characterId={characterPageId}
+            onBack={() => { setActiveTab(prevTab); setCharacterPageId(null); }}
+            onViewCharacter={handleViewCharacter}
+            currentTick={currentTick}
+          />
+        ) : null}
       </div>
 
       {/* Event card modal */}
@@ -558,8 +568,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     height: "100vh",
-    backgroundColor: "#0f172a",
-    color: "#e2e8f0",
+    backgroundColor: theme.bg1,
+    color: theme.textPrimary,
     fontFamily: "system-ui, sans-serif",
   },
   banner: {
@@ -567,16 +577,16 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "center",
     fontSize: 18,
     fontWeight: 700,
-    color: "#0f172a",
+    color: theme.bg1,
     flexShrink: 0,
   },
   resetBtn: {
     marginLeft: 16,
     padding: "6px 16px",
     borderRadius: 6,
-    border: "2px solid #0f172a",
+    border: `2px solid ${theme.bg1}`,
     backgroundColor: "transparent",
-    color: "#0f172a",
+    color: theme.bg1,
     fontSize: 14,
     fontWeight: 700,
     cursor: "pointer",
@@ -585,8 +595,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    borderBottom: "1px solid #334155",
-    backgroundColor: "#0f172a",
+    borderBottom: `1px solid ${theme.bg3}`,
+    backgroundColor: theme.bg1,
     flexShrink: 0,
   },
   tabGroup: {
@@ -599,7 +609,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     padding: "4px 10px",
     borderRadius: 6,
-    color: "#0f172a",
+    color: theme.bg1,
     marginRight: 8,
     marginLeft: 12,
   },
@@ -607,7 +617,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "10px 24px",
     fontSize: 14,
     fontWeight: 600,
-    color: "#64748b",
+    color: theme.textMuted,
     backgroundColor: "transparent",
     border: "none",
     borderBottom: "2px solid transparent",
@@ -617,17 +627,17 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "10px 24px",
     fontSize: 14,
     fontWeight: 600,
-    color: "#f59e0b",
+    color: theme.accent,
     backgroundColor: "transparent",
     border: "none",
-    borderBottom: "2px solid #f59e0b",
+    borderBottom: `2px solid ${theme.accent}`,
     cursor: "pointer",
   },
   logBadge: {
     marginLeft: 6,
     fontSize: 11,
-    backgroundColor: "#f59e0b",
-    color: "#0f172a",
+    backgroundColor: theme.accent,
+    color: theme.bg1,
     padding: "1px 6px",
     borderRadius: 8,
     fontWeight: 700,
@@ -645,9 +655,9 @@ const styles: Record<string, React.CSSProperties> = {
   saveBtn: {
     padding: "4px 8px",
     borderRadius: "4px 0 0 4px",
-    border: "1px solid #334155",
-    backgroundColor: "#1e293b",
-    color: "#94a3b8",
+    border: `1px solid ${theme.bg3}`,
+    backgroundColor: theme.bg2,
+    color: theme.textSecondary,
     fontSize: 11,
     fontWeight: 600,
     cursor: "pointer",
@@ -655,10 +665,10 @@ const styles: Record<string, React.CSSProperties> = {
   loadBtn: {
     padding: "4px 8px",
     borderRadius: "0 4px 4px 0",
-    border: "1px solid #334155",
+    border: `1px solid ${theme.bg3}`,
     borderLeft: "none",
-    backgroundColor: "#1e293b",
-    color: "#94a3b8",
+    backgroundColor: theme.bg2,
+    color: theme.textSecondary,
     fontSize: 11,
     fontWeight: 600,
     cursor: "pointer",
@@ -666,7 +676,7 @@ const styles: Record<string, React.CSSProperties> = {
   divider: {
     width: 1,
     height: 20,
-    backgroundColor: "#334155",
+    backgroundColor: theme.bg3,
   },
   vpChip: {
     display: "flex",
@@ -674,11 +684,11 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 4,
     padding: "3px 8px",
     borderRadius: 6,
-    backgroundColor: "#1e293b",
-    border: "1px solid #334155",
+    backgroundColor: theme.bg2,
+    border: `1px solid ${theme.bg3}`,
     fontSize: 11,
     fontWeight: 600,
-    color: "#e2e8f0",
+    color: theme.textPrimary,
     cursor: "default",
     whiteSpace: "nowrap" as const,
   },
@@ -686,7 +696,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "6px 14px",
     borderRadius: 6,
     border: "none",
-    color: "#0f172a",
+    color: theme.bg1,
     fontSize: 13,
     fontWeight: 700,
     cursor: "pointer",
@@ -694,14 +704,14 @@ const styles: Record<string, React.CSSProperties> = {
   speedSelect: {
     padding: "4px 8px",
     borderRadius: 4,
-    border: "1px solid #334155",
-    backgroundColor: "#1e293b",
-    color: "#e2e8f0",
+    border: `1px solid ${theme.bg3}`,
+    backgroundColor: theme.bg2,
+    color: theme.textPrimary,
     fontSize: 13,
   },
   simIndicator: {
     fontSize: 12,
-    color: "#22c55e",
+    color: theme.success,
     fontWeight: 600,
     animation: "pulse 1.5s ease-in-out infinite",
   },
@@ -721,15 +731,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardPanel: {
     width: 380,
-    backgroundColor: "#1e293b",
+    backgroundColor: theme.bg2,
     borderRadius: 12,
     padding: 28,
-    color: "#e2e8f0",
-    border: "2px solid #f59e0b",
+    color: theme.textPrimary,
+    border: `2px solid ${theme.accent}`,
   },
   cardTick: {
     fontSize: 12,
-    color: "#f59e0b",
+    color: theme.accent,
     fontWeight: 600,
     marginBottom: 8,
   },
@@ -737,11 +747,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 20,
     fontWeight: 700,
     margin: "0 0 12px",
-    color: "#f59e0b",
+    color: theme.accent,
   },
   cardDesc: {
     fontSize: 14,
-    color: "#cbd5e1",
+    color: theme.textBody,
     lineHeight: 1.6,
     margin: "0 0 20px",
   },
@@ -753,9 +763,9 @@ const styles: Record<string, React.CSSProperties> = {
   cardChoiceBtn: {
     padding: "10px 16px",
     borderRadius: 8,
-    border: "1px solid #334155",
-    backgroundColor: "#0f172a",
-    color: "#e2e8f0",
+    border: `1px solid ${theme.bg3}`,
+    backgroundColor: theme.bg1,
+    color: theme.textPrimary,
     fontSize: 14,
     fontWeight: 600,
     cursor: "pointer",

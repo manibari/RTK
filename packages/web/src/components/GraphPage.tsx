@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { trpc } from "../lib/trpc";
+import { theme } from "../lib/theme";
 import { RadialGraph } from "./RadialGraph";
 import { Sidebar } from "./Sidebar";
 import { Timeline, type TimelineMarker } from "./Timeline";
@@ -276,8 +277,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tick: {
     fontSize: 14,
-    color: "#f59e0b",
-    backgroundColor: "#1e293b",
+    color: theme.accent,
+    backgroundColor: theme.bg2,
     padding: "4px 10px",
     borderRadius: 6,
     fontWeight: 600,
@@ -289,28 +290,28 @@ const styles: Record<string, React.CSSProperties> = {
   },
   label: {
     fontSize: 14,
-    color: "#94a3b8",
+    color: theme.textSecondary,
   },
   select: {
     padding: "6px 12px",
     borderRadius: 6,
-    border: "1px solid #334155",
-    backgroundColor: "#1e293b",
-    color: "#e2e8f0",
+    border: `1px solid ${theme.bg3}`,
+    backgroundColor: theme.bg2,
+    color: theme.textPrimary,
     fontSize: 14,
   },
   button: {
     padding: "8px 16px",
     borderRadius: 6,
     border: "none",
-    backgroundColor: "#f59e0b",
-    color: "#0f172a",
+    backgroundColor: theme.accent,
+    color: theme.bg1,
     fontSize: 14,
     fontWeight: 700,
   },
   error: {
     padding: "12px 16px",
-    backgroundColor: "#991b1b",
+    backgroundColor: "#7a3030",
     borderRadius: 8,
     marginBottom: 12,
   },
@@ -320,6 +321,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     fontSize: 18,
-    color: "#64748b",
+    color: theme.textMuted,
   },
 };

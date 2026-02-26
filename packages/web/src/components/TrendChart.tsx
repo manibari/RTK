@@ -1,5 +1,7 @@
 "use client";
 
+import { theme } from "../lib/theme";
+
 interface TimelinePoint {
   tick: number;
   intimacy: number;
@@ -17,7 +19,7 @@ export function TrendChart({ data, viewTick, height = 140 }: TrendChartProps) {
   if (data.length < 2) {
     return (
       <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ color: "#64748b", fontSize: 12 }}>至少需要 2 天資料才能繪製趨勢圖</span>
+        <span style={{ color: theme.textMuted, fontSize: 12 }}>至少需要 2 天資料才能繪製趨勢圖</span>
       </div>
     );
   }
@@ -57,8 +59,8 @@ export function TrendChart({ data, viewTick, height = 140 }: TrendChartProps) {
       {/* Grid lines */}
       {yLabels.map((v) => (
         <g key={v}>
-          <line x1={PADDING.left} y1={toY(v)} x2={width - PADDING.right} y2={toY(v)} stroke="#1e293b" strokeWidth={1} />
-          <text x={PADDING.left - 4} y={toY(v) + 4} textAnchor="end" fill="#64748b" fontSize={9}>
+          <line x1={PADDING.left} y1={toY(v)} x2={width - PADDING.right} y2={toY(v)} stroke={theme.bg2} strokeWidth={1} />
+          <text x={PADDING.left - 4} y={toY(v) + 4} textAnchor="end" fill={theme.textMuted} fontSize={9}>
             {v}
           </text>
         </g>
@@ -66,25 +68,25 @@ export function TrendChart({ data, viewTick, height = 140 }: TrendChartProps) {
 
       {/* X-axis labels */}
       {xLabels.map((t) => (
-        <text key={t} x={toX(t)} y={height - 4} textAnchor="middle" fill="#64748b" fontSize={9}>
+        <text key={t} x={toX(t)} y={height - 4} textAnchor="middle" fill={theme.textMuted} fontSize={9}>
           {t}
         </text>
       ))}
 
       {/* Line */}
-      <polyline points={polyline} fill="none" stroke="#f59e0b" strokeWidth={2} strokeLinejoin="round" />
+      <polyline points={polyline} fill="none" stroke={theme.accent} strokeWidth={2} strokeLinejoin="round" />
 
       {/* Data dots */}
       {data.map((d) => (
-        <circle key={d.tick} cx={toX(d.tick)} cy={toY(d.intimacy)} r={2.5} fill="#f59e0b" />
+        <circle key={d.tick} cx={toX(d.tick)} cy={toY(d.intimacy)} r={2.5} fill={theme.accent} />
       ))}
 
       {/* View tick indicator */}
       {viewPoint && (
         <>
-          <line x1={toX(viewPoint.tick)} y1={PADDING.top} x2={toX(viewPoint.tick)} y2={height - PADDING.bottom} stroke="#f59e0b" strokeWidth={1} strokeDasharray="3,3" opacity={0.5} />
-          <circle cx={toX(viewPoint.tick)} cy={toY(viewPoint.intimacy)} r={5} fill="#f59e0b" stroke="#0f172a" strokeWidth={2} />
-          <text x={toX(viewPoint.tick)} y={toY(viewPoint.intimacy) - 10} textAnchor="middle" fill="#f59e0b" fontSize={11} fontWeight="bold">
+          <line x1={toX(viewPoint.tick)} y1={PADDING.top} x2={toX(viewPoint.tick)} y2={height - PADDING.bottom} stroke={theme.accent} strokeWidth={1} strokeDasharray="3,3" opacity={0.5} />
+          <circle cx={toX(viewPoint.tick)} cy={toY(viewPoint.intimacy)} r={5} fill={theme.accent} stroke={theme.bg1} strokeWidth={2} />
+          <text x={toX(viewPoint.tick)} y={toY(viewPoint.intimacy) - 10} textAnchor="middle" fill={theme.accent} fontSize={11} fontWeight="bold">
             {viewPoint.intimacy}
           </text>
         </>

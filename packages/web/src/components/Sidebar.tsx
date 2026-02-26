@@ -2,6 +2,7 @@
 
 import type { PairEvent, TimelinePoint } from "./GraphPage";
 import { TrendChart } from "./TrendChart";
+import { theme } from "../lib/theme";
 
 interface RelationshipDetail {
   sourceId: string;
@@ -27,9 +28,9 @@ interface SidebarProps {
 }
 
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
-  friend: { label: "友好", color: "#4ade80" },
-  rival: { label: "敵對", color: "#f87171" },
-  neutral: { label: "中立", color: "#9ca3af" },
+  friend: { label: "友好", color: "#7db88a" },
+  rival: { label: "敵對", color: "#c47171" },
+  neutral: { label: "中立", color: "#9c9c9c" },
 };
 
 export function Sidebar({ selectedEdge, characters, pairEvents, timeline, viewTick, dailySummary, currentTick }: SidebarProps) {
@@ -109,7 +110,7 @@ export function Sidebar({ selectedEdge, characters, pairEvents, timeline, viewTi
                     <span
                       style={{
                         ...styles.eventDelta,
-                        color: isPositive ? "#4ade80" : "#f87171",
+                        color: isPositive ? "#7db88a" : "#c47171",
                       }}
                     >
                       {isPositive ? "+" : ""}{evt.intimacyChange}
@@ -132,15 +133,15 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     width: 320,
     padding: 24,
-    backgroundColor: "#1e293b",
-    borderLeft: "1px solid #334155",
-    color: "#e2e8f0",
+    backgroundColor: theme.bg2,
+    borderLeft: `1px solid ${theme.bg3}`,
+    color: theme.textPrimary,
     overflowY: "auto",
     display: "flex",
     flexDirection: "column",
   },
   hint: {
-    color: "#64748b",
+    color: theme.textMuted,
     fontStyle: "italic",
   },
   title: {
@@ -151,20 +152,20 @@ const styles: Record<string, React.CSSProperties> = {
   },
   summaryBox: {
     padding: "12px 14px",
-    backgroundColor: "#0f172a",
+    backgroundColor: theme.bg1,
     borderRadius: 8,
-    borderLeft: "3px solid #f59e0b",
+    borderLeft: `3px solid ${theme.accent}`,
   },
   summaryDay: {
     fontSize: 11,
-    color: "#f59e0b",
+    color: theme.accent,
     fontWeight: 600,
   },
   summaryText: {
     fontSize: 14,
     lineHeight: 1.6,
     margin: "8px 0 0",
-    color: "#cbd5e1",
+    color: theme.textBody,
   },
   pair: {
     display: "flex",
@@ -181,7 +182,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "2px 10px",
     borderRadius: 12,
     fontSize: 12,
-    color: "#0f172a",
+    color: theme.bg1,
     fontWeight: 700,
   },
   meter: {
@@ -192,11 +193,11 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     fontSize: 13,
     marginBottom: 4,
-    color: "#94a3b8",
+    color: theme.textSecondary,
   },
   meterTrack: {
     height: 8,
-    backgroundColor: "#334155",
+    backgroundColor: theme.bg3,
     borderRadius: 4,
     overflow: "hidden" as const,
   },
@@ -208,7 +209,7 @@ const styles: Record<string, React.CSSProperties> = {
   section: {
     marginBottom: 12,
     paddingTop: 12,
-    borderTop: "1px solid #334155",
+    borderTop: `1px solid ${theme.bg3}`,
   },
   subtitle: {
     fontSize: 14,
@@ -219,12 +220,12 @@ const styles: Record<string, React.CSSProperties> = {
   eventSection: {
     marginTop: 4,
     paddingTop: 12,
-    borderTop: "1px solid #334155",
+    borderTop: `1px solid ${theme.bg3}`,
     flex: 1,
   },
   noEvents: {
     fontSize: 13,
-    color: "#64748b",
+    color: theme.textMuted,
     fontStyle: "italic",
   },
   eventList: {
@@ -234,7 +235,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   eventItem: {
     padding: "8px 10px",
-    backgroundColor: "#0f172a",
+    backgroundColor: theme.bg1,
     borderRadius: 6,
   },
   eventHeader: {
@@ -245,7 +246,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   eventDay: {
     fontSize: 11,
-    color: "#f59e0b",
+    color: theme.accent,
     fontWeight: 600,
   },
   eventDelta: {
@@ -254,7 +255,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   eventNarrative: {
     fontSize: 13,
-    color: "#cbd5e1",
+    color: theme.textBody,
     margin: 0,
     lineHeight: 1.5,
   },

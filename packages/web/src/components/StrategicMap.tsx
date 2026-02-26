@@ -5,6 +5,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Delaunay } from "d3-delaunay";
 import { CHINA_OUTLINE } from "../data/china-outline";
+import { theme, FACTION_TERRITORY_COLORS as THEME_TERRITORY_COLORS } from "../lib/theme";
 
 interface PlaceNode {
   id: string;
@@ -66,18 +67,18 @@ interface StrategicMapProps {
 }
 
 const FALLBACK_COLORS: Record<string, string> = {
-  allied: "#3b82f6",
-  hostile: "#ef4444",
-  neutral: "#ffffff",
+  allied: theme.info,
+  hostile: theme.danger,
+  neutral: theme.textPrimary,
   dead: "#1e1e1e",
 };
 
 // Faction-specific territory colors
 const FACTION_TERRITORY_COLORS: Record<string, string> = {
-  liu_bei: "#3b82f6",  // blue (shu)
-  cao_cao: "#ef4444",  // red (wei)
-  sun_quan: "#22c55e", // green (wu)
-  lu_bu: "#a855f7",    // purple
+  liu_bei: theme.factionShu,
+  cao_cao: theme.factionWei,
+  sun_quan: theme.factionWu,
+  lu_bu: theme.factionLuBu,
 };
 
 const CHINA_CENTER: [number, number] = [33.0, 108.0];
@@ -163,10 +164,15 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
       attributionControl: false,
     });
 
-    // Dark tile layer
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    // Warm-toned tile layer
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png", {
       maxZoom: 19,
     }).addTo(map);
+
+    const tilePane = map.getPane("tilePane");
+    if (tilePane) {
+      tilePane.style.filter = "sepia(0.4) brightness(0.35) contrast(1.1) saturate(0.6)";
+    }
 
     layersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -234,8 +240,8 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
     const roadData = roads ?? data.roads;
     if (roadData) {
       const ROAD_STYLES: Record<RoadType, { color: string; dashArray?: string; weight: number }> = {
-        official: { color: "#78716c", weight: 2 },
-        mountain: { color: "#92400e", dashArray: "3 5", weight: 1 },
+        official: { color: "#8b7355", weight: 2 },
+        mountain: { color: "#6b4226", dashArray: "3 5", weight: 1 },
         waterway: { color: "#0ea5e9", dashArray: "6 3", weight: 2 },
       };
 
@@ -263,7 +269,7 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
         if (!a || !b) continue;
 
         const tradeLine = L.polyline([a, b], {
-          color: "#22c55e",
+          color: theme.success,
           weight: 2,
           dashArray: "4 6",
           opacity: 0.5,
@@ -284,7 +290,7 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
       const progress = totalTicks > 0 ? Math.min(1, Math.max(0, elapsed / totalTicks)) : 1;
 
       const routeLine = L.polyline([origin, dest], {
-        color: "#f59e0b",
+        color: theme.accent,
         weight: 2,
         dashArray: "6 4",
         opacity: 0.5,
@@ -297,8 +303,8 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
       const char = data.characters.find((c) => c.id === mov.characterId);
       const unitMarker = L.circleMarker([currentLat, currentLng], {
         radius: 5,
-        color: "#f59e0b",
-        fillColor: "#f59e0b",
+        color: theme.accent,
+        fillColor: theme.accent,
         fillOpacity: 1,
         weight: 2,
       });
@@ -332,9 +338,9 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
         weight: city.tier === "major" ? 2 : 1,
       });
 
-      const siegeInfo = city.siegedBy ? `<br/><span style="color:#ef4444">⚔ 被圍城中</span>` : "";
-      const supplyInfo = supplyStatus && city.controllerId && supplyStatus[city.id] === false ? `<br/><span style="color:#f97316">⚠ 補給中斷</span>` : "";
-      const droughtInfo = droughtCities?.includes(city.id) ? `<br/><span style="color:#a16207">☀ 旱災</span>` : "";
+      const siegeInfo = city.siegedBy ? `<br/><span style="color:${theme.danger}">⚔ 被圍城中</span>` : "";
+      const supplyInfo = supplyStatus && city.controllerId && supplyStatus[city.id] === false ? `<br/><span style="color:${theme.warning}">⚠ 補給中斷</span>` : "";
+      const droughtInfo = droughtCities?.includes(city.id) ? `<br/><span style="color:#8b6b3a">☀ 旱災</span>` : "";
       const tooltipContent = `<div style="font-size:13px">
         <strong>${city.name}</strong><br/>
         <span style="color:${color}">${statusLabel(city.status)}</span>${siegeInfo}${supplyInfo}${droughtInfo}
@@ -358,7 +364,7 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
       if (city.siegedBy) {
         const pulseRing = L.circleMarker([city.lat, city.lng], {
           radius: radius + 6,
-          color: "#ef4444",
+          color: theme.danger,
           fillColor: "transparent",
           fillOpacity: 0,
           weight: 2,
@@ -372,7 +378,7 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
       if (supplyStatus && city.controllerId && supplyStatus[city.id] === false) {
         const supplyRing = L.circleMarker([city.lat, city.lng], {
           radius: radius + 4,
-          color: "#f97316",
+          color: theme.warning,
           fillColor: "transparent",
           fillOpacity: 0,
           weight: 2,
@@ -386,7 +392,7 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
       if (droughtCities?.includes(city.id)) {
         const droughtRing = L.circleMarker([city.lat, city.lng], {
           radius: radius + 8,
-          color: "#a16207",
+          color: "#8b6b3a",
           fillColor: "transparent",
           fillOpacity: 0,
           weight: 2,
@@ -411,7 +417,7 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
       if (highlightCityIds?.has(city.id)) {
         const highlightRing = L.circleMarker([city.lat, city.lng], {
           radius: radius + 5,
-          color: "#06b6d4",
+          color: theme.info,
           fillColor: "transparent",
           fillOpacity: 0,
           weight: 2,
@@ -448,14 +454,14 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
           50% { opacity: 1; stroke-width: 3; }
         }
         .dark-tooltip {
-          background: #1e293b !important;
-          border: 1px solid #334155 !important;
-          color: #e2e8f0 !important;
+          background: ${theme.bg2} !important;
+          border: 1px solid ${theme.bg3} !important;
+          color: ${theme.textPrimary} !important;
           border-radius: 6px !important;
           padding: 4px 8px !important;
         }
         .dark-tooltip .leaflet-tooltip-tip {
-          border-top-color: #334155 !important;
+          border-top-color: ${theme.bg3} !important;
         }
       `}</style>
       <div ref={containerRef} style={styles.container} />

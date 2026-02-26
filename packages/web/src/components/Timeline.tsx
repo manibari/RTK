@@ -1,5 +1,7 @@
 "use client";
 
+import { theme } from "../lib/theme";
+
 export interface TimelineMarker {
   tick: number;
   color: string;
@@ -76,9 +78,9 @@ const styles: Record<string, React.CSSProperties> = {
     width: 32,
     height: 32,
     borderRadius: 6,
-    border: "1px solid #334155",
-    backgroundColor: "#1e293b",
-    color: "#e2e8f0",
+    border: `1px solid ${theme.bg3}`,
+    backgroundColor: theme.bg2,
+    color: theme.textPrimary,
     fontSize: 14,
     display: "flex",
     alignItems: "center",
@@ -86,7 +88,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   label: {
     fontSize: 13,
-    color: "#94a3b8",
+    color: theme.textSecondary,
     minWidth: 50,
     fontVariantNumeric: "tabular-nums",
   },
@@ -97,7 +99,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   slider: {
     width: "100%",
-    accentColor: "#f59e0b",
+    accentColor: theme.accent,
     height: 6,
   },
 };

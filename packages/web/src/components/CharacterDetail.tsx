@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { trpc } from "../lib/trpc";
+import { theme } from "../lib/theme";
 
 interface CharacterSkills {
   leadership: number;
@@ -36,17 +37,17 @@ interface MentorPair {
 }
 
 const ROLE_LABELS: Record<CharacterRole, { label: string; color: string }> = {
-  general: { label: "將軍", color: "#ef4444" },
-  governor: { label: "太守", color: "#22c55e" },
-  diplomat: { label: "外交官", color: "#3b82f6" },
-  spymaster: { label: "間諜頭子", color: "#a855f7" },
+  general: { label: "將軍", color: theme.danger },
+  governor: { label: "太守", color: theme.success },
+  diplomat: { label: "外交官", color: theme.info },
+  spymaster: { label: "間諜頭子", color: theme.special },
 };
 
 const SKILL_LABELS: Record<string, { label: string; color: string }> = {
-  leadership: { label: "統率", color: "#f59e0b" },
-  tactics: { label: "戰術", color: "#ef4444" },
-  commerce: { label: "商才", color: "#22c55e" },
-  espionage: { label: "諜報", color: "#6366f1" },
+  leadership: { label: "統率", color: theme.accent },
+  tactics: { label: "戰術", color: theme.danger },
+  commerce: { label: "商才", color: theme.success },
+  espionage: { label: "諜報", color: theme.indigo },
 };
 
 interface RelationshipInfo {
@@ -75,13 +76,14 @@ interface CharacterDetailProps {
   currentTick?: number;
   onClose: () => void;
   onCharacterClick?: (id: string) => void;
+  onViewFullProfile?: (id: string) => void;
   onAssignRole?: (characterId: string, role: CharacterRole) => void;
 }
 
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
-  friend: { label: "友好", color: "#4ade80" },
-  rival: { label: "敵對", color: "#f87171" },
-  neutral: { label: "中立", color: "#9ca3af" },
+  friend: { label: "友好", color: "#7db88a" },
+  rival: { label: "敵對", color: "#c47171" },
+  neutral: { label: "中立", color: "#9c9c9c" },
 };
 
 const ACHIEVEMENT_LABELS: Record<string, string> = {
@@ -100,6 +102,7 @@ export function CharacterDetail({
   currentTick,
   onClose,
   onCharacterClick,
+  onViewFullProfile,
   onAssignRole,
 }: CharacterDetailProps) {
   const [character, setCharacter] = useState<CharacterInfo | null>(null);
@@ -164,20 +167,20 @@ export function CharacterDetail({
             <h2 style={styles.name}>
               {character.name}
               {character.bornTick != null && currentTick != null && (
-                <span style={{ fontSize: 13, color: "#94a3b8", fontWeight: 400, marginLeft: 8 }}>
+                <span style={{ fontSize: 13, color: theme.textSecondary, fontWeight: 400, marginLeft: 8 }}>
                   {Math.floor((currentTick - character.bornTick) / 16)}歲
                 </span>
               )}
             </h2>
             <div style={styles.meta}>
               {factionName && (
-                <span style={{ ...styles.factionTag, backgroundColor: factionColor ?? "#64748b" }}>
+                <span style={{ ...styles.factionTag, backgroundColor: factionColor ?? theme.textMuted }}>
                   {factionName}
                 </span>
               )}
               {cityName && <span style={styles.cityTag}>{cityName}</span>}
               {character.parentId && (
-                <span style={{ ...styles.cityTag, backgroundColor: "#6366f1", color: "#fff", cursor: "pointer" }} onClick={() => onCharacterClick?.(character.parentId!)}>
+                <span style={{ ...styles.cityTag, backgroundColor: theme.indigo, color: "#fff", cursor: "pointer" }} onClick={() => onCharacterClick?.(character.parentId!)}>
                   之後
                 </span>
               )}
@@ -205,7 +208,7 @@ export function CharacterDetail({
             )}
             {isPlayerFaction && characterId !== "liu_bei" && (
               <button
-                style={{ marginTop: 4, padding: "2px 8px", fontSize: 11, backgroundColor: "#7c3aed", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+                style={{ marginTop: 4, padding: "2px 8px", fontSize: 11, backgroundColor: theme.special, color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
                 onClick={async () => {
                   try {
                     await trpc.simulation.queueCommand.mutate({ type: "designate_heir", characterId: "liu_bei", targetCityId: "", targetCharacterId: characterId });
@@ -216,6 +219,24 @@ export function CharacterDetail({
               </button>
             )}
           </div>
+          {onViewFullProfile && (
+            <button
+              style={{
+                padding: "4px 12px",
+                fontSize: 11,
+                backgroundColor: theme.accent,
+                color: theme.bg1,
+                border: "none",
+                borderRadius: 6,
+                fontWeight: 700,
+                cursor: "pointer",
+                marginLeft: "auto",
+              }}
+              onClick={() => { onViewFullProfile(characterId); onClose(); }}
+            >
+              查看完整資料
+            </button>
+          )}
           <button style={styles.closeBtn} onClick={onClose}>✕</button>
         </div>
 
@@ -232,15 +253,15 @@ export function CharacterDetail({
           )}
           <div style={styles.ratingGrid}>
             <div style={styles.ratingItem}>
-              <span style={{ ...styles.ratingLabel, color: "#ef4444" }}>武</span>
+              <span style={{ ...styles.ratingLabel, color: theme.danger }}>武</span>
               <span style={styles.ratingValue}>{character.military}</span>
             </div>
             <div style={styles.ratingItem}>
-              <span style={{ ...styles.ratingLabel, color: "#3b82f6" }}>智</span>
+              <span style={{ ...styles.ratingLabel, color: theme.info }}>智</span>
               <span style={styles.ratingValue}>{character.intelligence}</span>
             </div>
             <div style={styles.ratingItem}>
-              <span style={{ ...styles.ratingLabel, color: "#f59e0b" }}>魅</span>
+              <span style={{ ...styles.ratingLabel, color: theme.accent }}>魅</span>
               <span style={styles.ratingValue}>{character.charm}</span>
             </div>
           </div>
@@ -264,15 +285,15 @@ export function CharacterDetail({
           )}
           {/* Prestige & Achievements */}
           {prestige > 0 && (
-            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #334155" }}>
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${theme.bg3}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 13, color: "#a855f7", fontWeight: 700 }}>威望</span>
-                <span style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0" }}>{prestige}</span>
+                <span style={{ fontSize: 13, color: theme.special, fontWeight: 700 }}>威望</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: theme.textPrimary }}>{prestige}</span>
               </div>
               {achievements.length > 0 && (
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
                   {achievements.map((a) => (
-                    <span key={a} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 8, backgroundColor: "#a855f7", color: "#fff", fontWeight: 600 }}>
+                    <span key={a} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 8, backgroundColor: theme.special, color: "#fff", fontWeight: 600 }}>
                       {ACHIEVEMENT_LABELS[a] ?? a}
                     </span>
                   ))}
@@ -281,12 +302,12 @@ export function CharacterDetail({
             </div>
           )}
           {/* Favorability */}
-          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #334155", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 13, color: favorability >= 60 ? "#22c55e" : favorability >= 30 ? "#f59e0b" : "#ef4444", fontWeight: 700 }}>支持度</span>
-            <div style={{ flex: 1, height: 6, backgroundColor: "#0f172a", borderRadius: 3, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${favorability}%`, backgroundColor: favorability >= 60 ? "#22c55e" : favorability >= 30 ? "#f59e0b" : "#ef4444", borderRadius: 3 }} />
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${theme.bg3}`, display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 13, color: favorability >= 60 ? theme.success : favorability >= 30 ? theme.accent : theme.danger, fontWeight: 700 }}>支持度</span>
+            <div style={{ flex: 1, height: 6, backgroundColor: theme.bg1, borderRadius: 3, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${favorability}%`, backgroundColor: favorability >= 60 ? theme.success : favorability >= 30 ? theme.accent : theme.danger, borderRadius: 3 }} />
             </div>
-            <span style={{ fontSize: 12, color: "#94a3b8" }}>{favorability}</span>
+            <span style={{ fontSize: 12, color: theme.textSecondary }}>{favorability}</span>
           </div>
         </div>
 
@@ -309,10 +330,10 @@ export function CharacterDetail({
             <div style={styles.section}>
               <h3 style={styles.subtitle}>師徒</h3>
               {asMentor && (
-                <div style={{ fontSize: 13, color: "#f59e0b", marginBottom: 4 }}>
+                <div style={{ fontSize: 13, color: theme.accent, marginBottom: 4 }}>
                   師父 → 學徒：
                   <span
-                    style={{ color: "#e2e8f0", cursor: "pointer", fontWeight: 600, marginLeft: 4 }}
+                    style={{ color: theme.textPrimary, cursor: "pointer", fontWeight: 600, marginLeft: 4 }}
                     onClick={() => onCharacterClick?.(asMentor.apprenticeId)}
                   >
                     {allChars.get(asMentor.apprenticeId)?.name ?? asMentor.apprenticeId}
@@ -320,10 +341,10 @@ export function CharacterDetail({
                 </div>
               )}
               {asApprentice && (
-                <div style={{ fontSize: 13, color: "#3b82f6", marginBottom: 4 }}>
+                <div style={{ fontSize: 13, color: theme.info, marginBottom: 4 }}>
                   學徒 ← 師父：
                   <span
-                    style={{ color: "#e2e8f0", cursor: "pointer", fontWeight: 600, marginLeft: 4 }}
+                    style={{ color: theme.textPrimary, cursor: "pointer", fontWeight: 600, marginLeft: 4 }}
                     onClick={() => onCharacterClick?.(asApprentice.mentorId)}
                   >
                     {allChars.get(asApprentice.mentorId)?.name ?? asApprentice.mentorId}
@@ -428,13 +449,13 @@ const styles: Record<string, React.CSSProperties> = {
   panel: {
     width: 420,
     maxHeight: "80vh",
-    backgroundColor: "#1e293b",
+    backgroundColor: theme.bg2,
     borderRadius: 12,
     padding: 24,
     overflowY: "auto",
-    color: "#e2e8f0",
+    color: theme.textPrimary,
   },
-  loading: { textAlign: "center", color: "#64748b" },
+  loading: { textAlign: "center", color: theme.textMuted },
   avatar: {
     width: 64,
     height: 64,
@@ -445,7 +466,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   biography: {
     fontSize: 13,
-    color: "#94a3b8",
+    color: theme.textSecondary,
     lineHeight: 1.5,
     marginTop: 8,
     marginBottom: 8,
@@ -463,20 +484,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     padding: "2px 8px",
     borderRadius: 10,
-    color: "#0f172a",
+    color: theme.bg1,
     fontWeight: 700,
   },
   cityTag: {
     fontSize: 11,
     padding: "2px 8px",
     borderRadius: 10,
-    backgroundColor: "#334155",
-    color: "#94a3b8",
+    backgroundColor: theme.bg3,
+    color: theme.textSecondary,
   },
   closeBtn: {
     background: "none",
     border: "none",
-    color: "#64748b",
+    color: theme.textMuted,
     fontSize: 18,
     cursor: "pointer",
     padding: 4,
@@ -484,26 +505,26 @@ const styles: Record<string, React.CSSProperties> = {
   section: {
     marginBottom: 16,
     paddingTop: 12,
-    borderTop: "1px solid #334155",
+    borderTop: `1px solid ${theme.bg3}`,
   },
   subtitle: { fontSize: 14, fontWeight: 600, marginTop: 0, marginBottom: 8 },
   traitList: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 },
   ratingGrid: { display: "flex", gap: 12, marginTop: 4 },
   ratingItem: { display: "flex", alignItems: "center", gap: 4 },
   ratingLabel: { fontSize: 13, fontWeight: 700 },
-  ratingValue: { fontSize: 14, fontWeight: 600, color: "#e2e8f0" },
-  skillGrid: { display: "flex", flexDirection: "column", gap: 4, marginTop: 10, paddingTop: 8, borderTop: "1px solid #334155" },
+  ratingValue: { fontSize: 14, fontWeight: 600, color: theme.textPrimary },
+  skillGrid: { display: "flex", flexDirection: "column", gap: 4, marginTop: 10, paddingTop: 8, borderTop: `1px solid ${theme.bg3}` },
   skillItem: { display: "flex", alignItems: "center", gap: 6 },
   skillLabel: { fontSize: 11, fontWeight: 700, width: 28 },
-  skillBar: { flex: 1, height: 6, backgroundColor: "#0f172a", borderRadius: 3, overflow: "hidden" },
+  skillBar: { flex: 1, height: 6, backgroundColor: theme.bg1, borderRadius: 3, overflow: "hidden" },
   skillFill: { height: "100%", borderRadius: 3, transition: "width 0.3s" },
-  skillValue: { fontSize: 11, color: "#94a3b8", width: 16, textAlign: "right" },
+  skillValue: { fontSize: 11, color: theme.textSecondary, width: 16, textAlign: "right" },
   trait: {
     fontSize: 12,
     padding: "3px 10px",
     borderRadius: 12,
-    backgroundColor: "#334155",
-    color: "#cbd5e1",
+    backgroundColor: theme.bg3,
+    color: theme.textBody,
   },
   relList: { display: "flex", flexDirection: "column", gap: 6 },
   relItem: {
@@ -513,16 +534,16 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     padding: "4px 8px",
     borderRadius: 4,
-    backgroundColor: "#0f172a",
+    backgroundColor: theme.bg1,
     cursor: "pointer",
     fontSize: 13,
   },
   relName: { fontWeight: 600 },
   relType: { fontSize: 11, fontWeight: 700 },
-  relIntimacy: { fontSize: 12, color: "#94a3b8", textAlign: "right" },
-  relBar: { height: 4, backgroundColor: "#334155", borderRadius: 2, overflow: "hidden" },
+  relIntimacy: { fontSize: 12, color: theme.textSecondary, textAlign: "right" },
+  relBar: { height: 4, backgroundColor: theme.bg3, borderRadius: 2, overflow: "hidden" },
   relFill: { height: "100%", borderRadius: 2, transition: "width 0.3s" },
-  empty: { fontSize: 13, color: "#64748b", fontStyle: "italic" },
+  empty: { fontSize: 13, color: theme.textMuted, fontStyle: "italic" },
   eventList: { display: "flex", flexDirection: "column", gap: 4 },
   eventItem: {
     display: "flex",
@@ -530,12 +551,12 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     fontSize: 12,
     padding: "3px 8px",
-    backgroundColor: "#0f172a",
+    backgroundColor: theme.bg1,
     borderRadius: 4,
   },
-  eventDay: { color: "#f59e0b", fontWeight: 600, minWidth: 48 },
+  eventDay: { color: theme.accent, fontWeight: 600, minWidth: 48 },
   eventDelta: { fontWeight: 700, minWidth: 30 },
-  eventOther: { color: "#94a3b8" },
+  eventOther: { color: theme.textSecondary },
   roleTag: {
     fontSize: 11,
     padding: "2px 8px",
@@ -548,9 +569,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     padding: "3px 8px",
     borderRadius: 4,
-    border: "1px solid #334155",
-    backgroundColor: "#0f172a",
-    color: "#e2e8f0",
+    border: `1px solid ${theme.bg3}`,
+    backgroundColor: theme.bg1,
+    color: theme.textPrimary,
     cursor: "pointer",
   },
 };

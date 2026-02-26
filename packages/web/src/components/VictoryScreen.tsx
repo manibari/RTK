@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { trpc } from "../lib/trpc";
+import { theme } from "../lib/theme";
 
 type WinType = "conquest" | "diplomacy" | "economy";
 type GameStatus = "victory" | "defeat";
@@ -51,7 +52,7 @@ export function VictoryScreen({ status, onRestart }: VictoryScreenProps) {
     return (
       <div style={styles.overlay}>
         <div style={styles.panel}>
-          <h1 style={{ ...styles.title, color: "#ef4444" }}>戰敗</h1>
+          <h1 style={{ ...styles.title, color: theme.danger }}>戰敗</h1>
           <p style={styles.desc}>你的勢力已被消滅...</p>
           <button style={styles.restartBtn} onClick={onRestart}>重新開始</button>
         </div>
@@ -121,12 +122,12 @@ const styles: Record<string, React.CSSProperties> = {
     width: 420,
     maxHeight: "80vh",
     overflowY: "auto",
-    backgroundColor: "#1e293b",
+    backgroundColor: theme.bg2,
     borderRadius: 16,
     padding: 32,
-    color: "#e2e8f0",
+    color: theme.textPrimary,
     textAlign: "center",
-    border: "2px solid #f59e0b",
+    border: `2px solid ${theme.accent}`,
   },
   badge: {
     display: "inline-block",
@@ -134,37 +135,37 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     padding: "4px 16px",
     borderRadius: 20,
-    backgroundColor: "#f59e0b",
-    color: "#0f172a",
+    backgroundColor: theme.accent,
+    color: theme.bg1,
     marginBottom: 12,
   },
   title: {
     fontSize: 28,
     fontWeight: 800,
     margin: "0 0 8px",
-    color: "#f59e0b",
+    color: theme.accent,
   },
   desc: {
     fontSize: 15,
-    color: "#cbd5e1",
+    color: theme.textBody,
     margin: "0 0 8px",
     lineHeight: 1.5,
   },
   tickInfo: {
     fontSize: 14,
-    color: "#94a3b8",
+    color: theme.textSecondary,
     marginBottom: 20,
   },
   section: {
     textAlign: "left",
     marginBottom: 16,
     paddingTop: 12,
-    borderTop: "1px solid #334155",
+    borderTop: `1px solid ${theme.bg3}`,
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: 700,
-    color: "#e2e8f0",
+    color: theme.textPrimary,
     marginTop: 0,
     marginBottom: 8,
   },
@@ -173,7 +174,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 8,
     padding: "6px 8px",
-    backgroundColor: "#0f172a",
+    backgroundColor: theme.bg1,
     borderRadius: 6,
     marginBottom: 4,
     flexWrap: "wrap",
@@ -181,17 +182,17 @@ const styles: Record<string, React.CSSProperties> = {
   rank: {
     fontSize: 13,
     fontWeight: 700,
-    color: "#f59e0b",
+    color: theme.accent,
     width: 24,
   },
   charName: {
     fontSize: 14,
     fontWeight: 600,
-    color: "#e2e8f0",
+    color: theme.textPrimary,
   },
   prestige: {
     fontSize: 12,
-    color: "#a855f7",
+    color: theme.special,
     fontWeight: 600,
     marginLeft: "auto",
   },
@@ -205,7 +206,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 10,
     padding: "1px 6px",
     borderRadius: 8,
-    backgroundColor: "#a855f7",
+    backgroundColor: theme.special,
     color: "#fff",
     fontWeight: 600,
   },
@@ -214,26 +215,26 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     alignItems: "center",
     padding: "4px 8px",
-    backgroundColor: "#0f172a",
+    backgroundColor: theme.bg1,
     borderRadius: 4,
     marginBottom: 4,
   },
   factionId: {
     fontSize: 13,
     fontWeight: 700,
-    color: "#94a3b8",
+    color: theme.textSecondary,
   },
   factionStat: {
     fontSize: 12,
-    color: "#64748b",
+    color: theme.textMuted,
   },
   restartBtn: {
     marginTop: 16,
     padding: "10px 32px",
     borderRadius: 8,
     border: "none",
-    backgroundColor: "#22c55e",
-    color: "#0f172a",
+    backgroundColor: theme.success,
+    color: theme.bg1,
     fontSize: 15,
     fontWeight: 700,
     cursor: "pointer",

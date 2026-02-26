@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { trpc } from "../lib/trpc";
+import { theme } from "../lib/theme";
 import { Timeline, type TimelineMarker } from "./Timeline";
 import { CharacterDetail } from "./CharacterDetail";
 
@@ -490,7 +491,7 @@ export function MapPage({
           <>
             <h2 style={styles.sideTitle}>{selectedCity.name}</h2>
             {selectedCity.description && (
-              <p style={{ fontSize: 13, color: "#94a3b8", marginTop: -4, marginBottom: 8, fontStyle: "italic" }}>{selectedCity.description}</p>
+              <p style={{ fontSize: 13, color: theme.textSecondary, marginTop: -4, marginBottom: 8, fontStyle: "italic" }}>{selectedCity.description}</p>
             )}
             <div style={styles.cityInfo}>
               <div style={styles.infoRow}>
@@ -517,32 +518,32 @@ export function MapPage({
                 const vuln = vulnerability[selectedCity.id];
                 const StatBar = ({ label, value, max, color, text }: { label: string; value: number; max: number; color: string; text?: string }) => (
                   <div style={{ marginBottom: 4 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#94a3b8", marginBottom: 2 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: theme.textSecondary, marginBottom: 2 }}>
                       <span>{label}</span>
                       <span style={{ color, fontWeight: 600 }}>{text ?? value}</span>
                     </div>
-                    <div style={{ height: 6, backgroundColor: "#0f172a", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ height: 6, backgroundColor: theme.bg1, borderRadius: 3, overflow: "hidden" }}>
                       <div style={{ height: "100%", width: `${Math.min(100, (value / max) * 100)}%`, backgroundColor: color, borderRadius: 3, transition: "width 0.3s ease" }} />
                     </div>
                   </div>
                 );
-                const goldColor = gold < 100 ? "#ef4444" : gold < 300 ? "#f59e0b" : "#f59e0b";
-                const foodColor = food < 30 ? "#ef4444" : food < 60 ? "#f59e0b" : "#22c55e";
-                const garrisonColor = garrison < 2 ? "#ef4444" : garrison < 5 ? "#f59e0b" : "#3b82f6";
-                const loyaltyColor = loyalty < 20 ? "#ef4444" : loyalty < 40 ? "#f59e0b" : "#22c55e";
+                const goldColor = gold < 100 ? theme.danger : gold < 300 ? theme.accent : theme.accent;
+                const foodColor = food < 30 ? theme.danger : food < 60 ? theme.accent : theme.success;
+                const garrisonColor = garrison < 2 ? theme.danger : garrison < 5 ? theme.accent : theme.info;
+                const loyaltyColor = loyalty < 20 ? theme.danger : loyalty < 40 ? theme.accent : theme.success;
                 return (
                   <div style={{ marginTop: 4 }}>
                     <StatBar label="金幣" value={gold} max={800} color={goldColor} />
                     <StatBar label="守備" value={garrison} max={10} color={garrisonColor} />
-                    <StatBar label="開發" value={dev} max={5} color="#a855f7" text={`Lv.${dev}/5`} />
+                    <StatBar label="開發" value={dev} max={5} color={theme.special} text={`Lv.${dev}/5`} />
                     <StatBar label="糧食" value={food} max={200} color={foodColor} />
                     {selectedCity.controllerId && (
                       <StatBar label="忠誠" value={Math.round(loyalty)} max={100} color={loyaltyColor} />
                     )}
                     {vuln && (() => {
-                      const colors: Record<string, string> = { strong: "#22c55e", moderate: "#f59e0b", weak: "#ef4444" };
+                      const colors: Record<string, string> = { strong: theme.success, moderate: theme.accent, weak: theme.danger };
                       const labels: Record<string, string> = { strong: "堅固", moderate: "普通", weak: "脆弱" };
-                      return <StatBar label="防禦" value={vuln.score} max={50} color={colors[vuln.level] ?? "#94a3b8"} text={`${labels[vuln.level]}(${vuln.score})`} />;
+                      return <StatBar label="防禦" value={vuln.score} max={50} color={colors[vuln.level] ?? theme.textSecondary} text={`${labels[vuln.level]}(${vuln.score})`} />;
                     })()}
                   </div>
                 );
@@ -551,7 +552,7 @@ export function MapPage({
               {selectedCity.units && (selectedCity.units.infantry + selectedCity.units.cavalry + selectedCity.units.archers > 0) && (
                 <div style={styles.infoRow}>
                   <span style={styles.infoLabel}>兵種</span>
-                  <span style={{ fontSize: 12, color: "#cbd5e1" }}>
+                  <span style={{ fontSize: 12, color: theme.textBody }}>
                     步{selectedCity.units.infantry} 騎{selectedCity.units.cavalry} 弓{selectedCity.units.archers}
                   </span>
                 </div>
@@ -561,7 +562,7 @@ export function MapPage({
                 const controllerFaction = factions.find((f) => f.members.includes(selectedCity.controllerId ?? ""));
                 if (controllerFaction && controllerFaction.cities.length === 1 && controllerFaction.cities[0] === selectedCity.id) {
                   return (
-                    <div style={{ ...styles.infoRow, color: "#f97316" }}>
+                    <div style={{ ...styles.infoRow, color: theme.warning }}>
                       <span style={styles.infoLabel}>警告</span>
                       <span style={{ fontWeight: 700, animation: "pulse 1.5s ease-in-out infinite" }}>最後據點！</span>
                     </div>
@@ -572,7 +573,7 @@ export function MapPage({
               {selectedCity.specialty && (
                 <div style={styles.infoRow}>
                   <span style={styles.infoLabel}>特產</span>
-                  <span style={{ color: "#22c55e", fontWeight: 600 }}>
+                  <span style={{ color: theme.success, fontWeight: 600 }}>
                     {SPECIALTY_LABELS[selectedCity.specialty] ?? selectedCity.specialty}
                   </span>
                 </div>
@@ -580,7 +581,7 @@ export function MapPage({
               {selectedCity.specialty && (
                 <div style={{ ...styles.infoRow, fontSize: 11 }}>
                   <span style={styles.infoLabel}>效果</span>
-                  <span style={{ color: "#94a3b8" }}>
+                  <span style={{ color: theme.textSecondary }}>
                     {SPECIALTY_EFFECTS[selectedCity.specialty] ?? ""}
                     {selectedCity.improvement ? " (強化)" : ""}
                   </span>
@@ -589,11 +590,11 @@ export function MapPage({
               {selectedCity.improvement && (
                 <div style={styles.infoRow}>
                   <span style={styles.infoLabel}>改良</span>
-                  <span style={{ color: "#f59e0b", fontWeight: 600 }}>{selectedCity.improvement}</span>
+                  <span style={{ color: theme.accent, fontWeight: 600 }}>{selectedCity.improvement}</span>
                 </div>
               )}
               {selectedCity.siegedBy && (
-                <div style={{ ...styles.infoRow, color: "#ef4444" }}>
+                <div style={{ ...styles.infoRow, color: theme.danger }}>
                   <span style={styles.infoLabel}>圍城中</span>
                   <span style={{ fontWeight: 700 }}>{selectedCity.siegedBy}</span>
                 </div>
@@ -601,7 +602,7 @@ export function MapPage({
               {selectedCity.controllerId && supplyStatus[selectedCity.id] !== undefined && (
                 <div style={styles.infoRow}>
                   <span style={styles.infoLabel}>補給</span>
-                  <span style={{ color: supplyStatus[selectedCity.id] ? "#22c55e" : "#ef4444", fontWeight: 600 }}>
+                  <span style={{ color: supplyStatus[selectedCity.id] ? theme.success : theme.danger, fontWeight: 600 }}>
                     {supplyStatus[selectedCity.id] ? "已補給" : "補給中斷 (-30%金)"}
                   </span>
                 </div>
@@ -614,16 +615,16 @@ export function MapPage({
                 <p style={styles.cmdLabel}>指令目標：{selectedCity.name}</p>
                 {prediction && selectedCity.status !== "allied" && (
                   <div style={styles.predictionRow}>
-                    <span style={{ color: prediction.winRate >= 50 ? "#22c55e" : "#ef4444", fontWeight: 700, fontSize: 14 }}>
+                    <span style={{ color: prediction.winRate >= 50 ? theme.success : theme.danger, fontWeight: 700, fontSize: 14 }}>
                       勝率 {prediction.winRate}%
                     </span>
-                    <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                    <span style={{ fontSize: 11, color: theme.textSecondary }}>
                       攻:{prediction.attackPower} vs 守:{prediction.defensePower}
                     </span>
                   </div>
                 )}
                 {selectedCity && reachableCityIds.size > 0 && !reachableCityIds.has(selectedCity.id) ? (
-                  <div style={{ fontSize: 12, color: "#94a3b8", padding: "6px 0" }}>
+                  <div style={{ fontSize: 12, color: theme.textSecondary, padding: "6px 0" }}>
                     無道路連接
                   </div>
                 ) : (
@@ -637,7 +638,7 @@ export function MapPage({
                   </div>
                 )}
                 <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 11, color: "#94a3b8" }}>戰術：</span>
+                  <span style={{ fontSize: 11, color: theme.textSecondary }}>戰術：</span>
                   <select
                     style={styles.tacticSelect}
                     value={tactic}
@@ -656,7 +657,7 @@ export function MapPage({
                     <button style={styles.sabotageBtn} onClick={() => handleSpy("sabotage")}>
                       破壞（100金）
                     </button>
-                    <button style={{ ...styles.sabotageBtn, backgroundColor: "#059669" }} onClick={() => handleSpy("blockade")}>
+                    <button style={{ ...styles.sabotageBtn, backgroundColor: theme.info }} onClick={() => handleSpy("blockade")}>
                       封鎖（100金）
                     </button>
                   </div>
@@ -664,7 +665,7 @@ export function MapPage({
                 {/* Siege engine button: when selected char is at a city being besieged by shu */}
                 {selectedCity.siegedBy && (
                   <button
-                    style={{ ...styles.reinforceBtn, backgroundColor: "#a855f7", marginTop: 6 }}
+                    style={{ ...styles.reinforceBtn, backgroundColor: theme.special, marginTop: 6 }}
                     onClick={() => {
                       trpc.simulation.queueCommand.mutate({
                         type: "build_siege",
@@ -680,7 +681,7 @@ export function MapPage({
                 {selectedCity.status === "hostile" && (
                   <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
                     <button
-                      style={{ ...styles.reinforceBtn, backgroundColor: "#f59e0b", fontSize: 11, flex: 1 }}
+                      style={{ ...styles.reinforceBtn, backgroundColor: theme.accent, fontSize: 11, flex: 1 }}
                       onClick={() => {
                         trpc.simulation.queueCommand.mutate({
                           type: "demand",
@@ -695,7 +696,7 @@ export function MapPage({
                     </button>
                     {selectedCity.siegedBy && (
                       <button
-                        style={{ ...styles.reinforceBtn, backgroundColor: "#fb923c", fontSize: 11, flex: 1 }}
+                        style={{ ...styles.reinforceBtn, backgroundColor: theme.warning, fontSize: 11, flex: 1 }}
                         onClick={() => {
                           trpc.simulation.queueCommand.mutate({
                             type: "demand",
@@ -770,7 +771,7 @@ export function MapPage({
                     <div style={{ marginTop: 8 }}>
                       <p style={{ ...styles.cmdLabel, marginBottom: 4 }}>區域 ({districts.length}/2)</p>
                       {districts.map((d, i) => (
-                        <div key={i} style={{ fontSize: 11, color: "#94a3b8" }}>
+                        <div key={i} style={{ fontSize: 11, color: theme.textSecondary }}>
                           {DISTRICT_LABELS[d.type] ?? d.type} — {DISTRICT_EFFECTS[d.type] ?? ""}
                         </div>
                       ))}
@@ -811,7 +812,7 @@ export function MapPage({
                         (selectedCity.gold ?? 0) >= cost && (
                           <button
                             key={type}
-                            style={{ ...styles.reinforceBtn, fontSize: 10, flex: 1, backgroundColor: type === "cavalry" ? "#a855f7" : type === "archers" ? "#22c55e" : "#3b82f6" }}
+                            style={{ ...styles.reinforceBtn, fontSize: 10, flex: 1, backgroundColor: type === "cavalry" ? theme.special : type === "archers" ? theme.success : theme.info }}
                             onClick={() => {
                               trpc.simulation.queueCommand.mutate({
                                 type: "train_unit",
@@ -839,7 +840,7 @@ export function MapPage({
                         {([["fortress", "要塞", "防禦+20%"], ["trade_hub", "商都", "收入+50%"], ["cultural", "文化", "士氣+5,聲望+2"], ["breadbasket", "糧倉", "糧食+50%"]] as const).map(([path, label, desc]) => (
                           <button
                             key={path}
-                            style={{ ...styles.reinforceBtn, fontSize: 10, flex: 1, backgroundColor: "#7c3aed" }}
+                            style={{ ...styles.reinforceBtn, fontSize: 10, flex: 1, backgroundColor: theme.special }}
                             title={desc}
                             onClick={() => {
                               trpc.simulation.queueCommand.mutate({
@@ -874,7 +875,7 @@ export function MapPage({
                       key={c.id}
                       style={{
                         ...styles.charItem,
-                        border: selectedChar === c.id ? "1px solid #f59e0b" : isNeutral ? "1px solid #64748b" : "1px solid transparent",
+                        border: selectedChar === c.id ? `1px solid ${theme.accent}` : isNeutral ? `1px solid ${theme.textMuted}` : "1px solid transparent",
                         cursor: "pointer",
                       }}
                       onClick={() => !isNeutral && setSelectedChar(selectedChar === c.id ? null : c.id)}
@@ -944,17 +945,17 @@ export function MapPage({
                         <span style={styles.battleDay}>Day {b.tick}</span>
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                           {b.tactic && (
-                            <span style={{ fontSize: 10, color: "#a855f7", fontWeight: 600 }}>
+                            <span style={{ fontSize: 10, color: theme.special, fontWeight: 600 }}>
                               {b.tactic === "aggressive" ? "猛攻" : b.tactic === "defensive" ? "堅守" : "平衡"}
                             </span>
                           )}
                           {b.attackPower != null && (
-                            <span style={{ fontSize: 10, color: "#64748b" }}>
+                            <span style={{ fontSize: 10, color: theme.textMuted }}>
                               [{b.attackPower} vs {b.defensePower}]
                             </span>
                           )}
                           {b.rounds && (
-                            <span style={{ fontSize: 10, color: "#64748b" }}>{expandedBattle === i ? "▲" : "▼"}</span>
+                            <span style={{ fontSize: 10, color: theme.textMuted }}>{expandedBattle === i ? "▲" : "▼"}</span>
                           )}
                         </div>
                       </div>
@@ -964,13 +965,13 @@ export function MapPage({
                         {b.defenderName && ` (守將：${b.defenderName})`}
                       </p>
                       {expandedBattle === i && b.rounds && (
-                        <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #334155", display: "flex", flexDirection: "column", gap: 3 }}>
+                        <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${theme.bg3}`, display: "flex", flexDirection: "column", gap: 3 }}>
                           {b.rounds.map((r, ri) => (
-                            <div key={ri} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, padding: "2px 4px", backgroundColor: "#0f172a", borderRadius: 3 }}>
-                              <span style={{ color: "#e2e8f0", fontWeight: 600, width: 60, flexShrink: 0 }}>{r.phase}</span>
-                              <span style={{ color: "#ef4444" }}>攻+{r.attackerDelta}</span>
-                              <span style={{ color: "#3b82f6" }}>守+{r.defenderDelta}</span>
-                              {r.note && <span style={{ color: "#94a3b8", marginLeft: "auto", fontSize: 10 }}>{r.note}</span>}
+                            <div key={ri} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, padding: "2px 4px", backgroundColor: theme.bg1, borderRadius: 3 }}>
+                              <span style={{ color: theme.textPrimary, fontWeight: 600, width: 60, flexShrink: 0 }}>{r.phase}</span>
+                              <span style={{ color: theme.danger }}>攻+{r.attackerDelta}</span>
+                              <span style={{ color: theme.info }}>守+{r.defenderDelta}</span>
+                              {r.note && <span style={{ color: theme.textSecondary, marginLeft: "auto", fontSize: 10 }}>{r.note}</span>}
                             </div>
                           ))}
                         </div>
@@ -1019,11 +1020,11 @@ export function MapPage({
 
 function statusColor(status: string): string {
   switch (status) {
-    case "allied": return "#3b82f6";
-    case "hostile": return "#ef4444";
-    case "neutral": return "#ffffff";
-    case "dead": return "#4b5563";
-    default: return "#9ca3af";
+    case "allied": return theme.info;
+    case "hostile": return theme.danger;
+    case "neutral": return theme.textPrimary;
+    case "dead": return theme.textMuted;
+    default: return theme.textSecondary;
   }
 }
 
@@ -1040,73 +1041,73 @@ function statusLabel(status: string): string {
 const styles: Record<string, React.CSSProperties> = {
   layout: { position: "relative", flex: 1, height: "100%", overflow: "hidden" },
   mapContainer: { position: "absolute", inset: 0, display: "flex", flexDirection: "column" },
-  loading: { height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#64748b" },
+  loading: { height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: theme.textMuted },
   headerOverlay: {
     position: "absolute", top: 12, left: 12, zIndex: 500,
     display: "flex", alignItems: "center", gap: 10,
-    backgroundColor: "rgba(15,23,42,0.85)", backdropFilter: "blur(8px)",
+    backgroundColor: theme.bg1a, backdropFilter: "blur(8px)",
     padding: "8px 16px", borderRadius: 10,
     pointerEvents: "auto",
   },
-  title: { fontSize: 18, fontWeight: "bold", margin: 0, color: "#e2e8f0" },
-  tick: { fontSize: 13, color: "#f59e0b", fontWeight: 600 },
-  cmdBadge: { fontSize: 12, color: "#0f172a", backgroundColor: "#f59e0b", padding: "2px 8px", borderRadius: 10, fontWeight: 700 },
-  button: { padding: "6px 14px", borderRadius: 6, border: "none", backgroundColor: "#f59e0b", color: "#0f172a", fontSize: 13, fontWeight: 700 },
+  title: { fontSize: 18, fontWeight: "bold", margin: 0, color: theme.textPrimary },
+  tick: { fontSize: 13, color: theme.accent, fontWeight: 600 },
+  cmdBadge: { fontSize: 12, color: theme.bg1, backgroundColor: theme.accent, padding: "2px 8px", borderRadius: 10, fontWeight: 700 },
+  button: { padding: "6px 14px", borderRadius: 6, border: "none", backgroundColor: theme.accent, color: theme.bg1, fontSize: 13, fontWeight: 700 },
   timelineOverlay: {
     position: "absolute", bottom: 12, left: 12, zIndex: 500,
-    backgroundColor: "rgba(15,23,42,0.85)", backdropFilter: "blur(8px)",
+    backgroundColor: theme.bg1a, backdropFilter: "blur(8px)",
     padding: "6px 12px", borderRadius: 10,
     pointerEvents: "auto",
   },
   sidebarToggle: {
     position: "absolute", top: 12, right: 12, zIndex: 600,
     width: 36, height: 36, borderRadius: 8,
-    backgroundColor: "rgba(15,23,42,0.85)", border: "1px solid #334155",
-    color: "#e2e8f0", cursor: "pointer", fontSize: 18,
+    backgroundColor: theme.bg1a, border: `1px solid ${theme.bg3}`,
+    color: theme.textPrimary, cursor: "pointer", fontSize: 18,
     display: "flex", alignItems: "center", justifyContent: "center",
   },
   sidebarOverlay: {
     position: "absolute", top: 56, right: 12, bottom: 12,
     width: 280, zIndex: 500,
-    backgroundColor: "rgba(30,41,59,0.92)", backdropFilter: "blur(12px)",
+    backgroundColor: theme.bg2a, backdropFilter: "blur(12px)",
     borderRadius: 12, padding: 16, overflowY: "auto",
-    color: "#e2e8f0",
+    color: theme.textPrimary,
     pointerEvents: "auto",
   },
   sideTitle: { fontSize: 18, fontWeight: "bold", marginTop: 0, marginBottom: 16 },
-  sideSubtitle: { fontSize: 14, fontWeight: 600, marginTop: 16, marginBottom: 8, paddingTop: 12, borderTop: "1px solid #334155" },
+  sideSubtitle: { fontSize: 14, fontWeight: 600, marginTop: 16, marginBottom: 8, paddingTop: 12, borderTop: `1px solid ${theme.bg3}` },
   cityInfo: { display: "flex", flexDirection: "column", gap: 8 },
   infoRow: { display: "flex", justifyContent: "space-between", fontSize: 14 },
-  infoLabel: { color: "#94a3b8" },
-  hint: { color: "#64748b", fontStyle: "italic" },
-  emptyText: { fontSize: 13, color: "#64748b", fontStyle: "italic" },
+  infoLabel: { color: theme.textSecondary },
+  hint: { color: theme.textMuted, fontStyle: "italic" },
+  emptyText: { fontSize: 13, color: theme.textMuted, fontStyle: "italic" },
   charList: { display: "flex", flexDirection: "column", gap: 6 },
-  charItem: { padding: "6px 10px", backgroundColor: "rgba(15,23,42,0.6)", borderRadius: 6 },
+  charItem: { padding: "6px 10px", backgroundColor: theme.bg1t, borderRadius: 6 },
   charName: { fontSize: 14, fontWeight: 600, display: "block" },
-  charTraits: { fontSize: 12, color: "#94a3b8", display: "block", marginTop: 2 },
-  selectedTag: { fontSize: 10, color: "#f59e0b", fontWeight: 700, marginTop: 4, display: "block" },
-  detailBtn: { fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "1px solid #334155", backgroundColor: "transparent", color: "#94a3b8", cursor: "pointer" },
-  cmdSection: { marginTop: 12, padding: "10px 12px", backgroundColor: "rgba(15,23,42,0.6)", borderRadius: 8, borderLeft: "3px solid #f59e0b" },
-  cmdLabel: { fontSize: 12, color: "#f59e0b", margin: "0 0 8px" },
+  charTraits: { fontSize: 12, color: theme.textSecondary, display: "block", marginTop: 2 },
+  selectedTag: { fontSize: 10, color: theme.accent, fontWeight: 700, marginTop: 4, display: "block" },
+  detailBtn: { fontSize: 11, padding: "2px 8px", borderRadius: 4, border: `1px solid ${theme.bg3}`, backgroundColor: "transparent", color: theme.textSecondary, cursor: "pointer" },
+  cmdSection: { marginTop: 12, padding: "10px 12px", backgroundColor: theme.bg1t, borderRadius: 8, borderLeft: `3px solid ${theme.accent}` },
+  cmdLabel: { fontSize: 12, color: theme.accent, margin: "0 0 8px" },
   predictionRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   cmdButtons: { display: "flex", gap: 8 },
-  cmdMove: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
-  cmdAttack: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#ef4444", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
-  reinforceBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
-  developBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#a855f7", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
-  improvementBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#22c55e", color: "#0f172a", fontSize: 13, fontWeight: 700, cursor: "pointer" },
-  spyBtn: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#6366f1", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
-  sabotageBtn: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: "#a855f7", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  cmdMove: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: theme.info, color: theme.textPrimary, fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  cmdAttack: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: theme.danger, color: theme.textPrimary, fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  reinforceBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: theme.info, color: theme.textPrimary, fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  developBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: theme.special, color: theme.textPrimary, fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  improvementBtn: { width: "100%", padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: theme.success, color: theme.bg1, fontSize: 13, fontWeight: 700, cursor: "pointer" },
+  spyBtn: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: theme.indigo, color: theme.textPrimary, fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  sabotageBtn: { flex: 1, padding: "6px 0", borderRadius: 4, border: "none", backgroundColor: theme.special, color: theme.textPrimary, fontSize: 13, fontWeight: 600, cursor: "pointer" },
   factionList: { display: "flex", flexDirection: "column", gap: 6 },
   factionItem: { display: "flex", alignItems: "center", gap: 8, fontSize: 13 },
   factionDot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0 },
   factionName: { fontWeight: 600 },
-  factionStats: { color: "#94a3b8", marginLeft: "auto" },
+  factionStats: { color: theme.textSecondary, marginLeft: "auto" },
   battleList: { display: "flex", flexDirection: "column", gap: 6 },
-  battleItem: { padding: "6px 10px", backgroundColor: "rgba(15,23,42,0.6)", borderRadius: 6, borderLeft: "3px solid #ef4444" },
-  battleDay: { fontSize: 11, color: "#f59e0b", fontWeight: 600 },
-  battleText: { fontSize: 13, color: "#cbd5e1", margin: "4px 0 0", lineHeight: 1.4 },
-  neutralTag: { fontSize: 10, color: "#94a3b8", marginLeft: 6, fontWeight: 400, fontStyle: "italic" },
-  hireBtn: { fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "none", backgroundColor: "#f59e0b", color: "#0f172a", fontWeight: 700, cursor: "pointer" },
-  tacticSelect: { fontSize: 12, padding: "3px 8px", borderRadius: 4, border: "1px solid #334155", backgroundColor: "#0f172a", color: "#e2e8f0", cursor: "pointer", flex: 1 },
+  battleItem: { padding: "6px 10px", backgroundColor: theme.bg1t, borderRadius: 6, borderLeft: `3px solid ${theme.danger}` },
+  battleDay: { fontSize: 11, color: theme.accent, fontWeight: 600 },
+  battleText: { fontSize: 13, color: theme.textBody, margin: "4px 0 0", lineHeight: 1.4 },
+  neutralTag: { fontSize: 10, color: theme.textSecondary, marginLeft: 6, fontWeight: 400, fontStyle: "italic" },
+  hireBtn: { fontSize: 11, padding: "2px 8px", borderRadius: 4, border: "none", backgroundColor: theme.accent, color: theme.bg1, fontWeight: 700, cursor: "pointer" },
+  tacticSelect: { fontSize: 12, padding: "3px 8px", borderRadius: 4, border: `1px solid ${theme.bg3}`, backgroundColor: theme.bg1, color: theme.textPrimary, cursor: "pointer", flex: 1 },
 };

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { trpc } from "../lib/trpc";
+import { theme } from "../lib/theme";
 
 interface HeroEntry {
   id: string;
@@ -14,10 +15,10 @@ interface HeroEntry {
 }
 
 const FACTION_COLORS: Record<string, string> = {
-  shu: "#3b82f6",
-  wei: "#ef4444",
-  wu: "#22c55e",
-  lu_bu: "#a855f7",
+  shu: theme.factionShu,
+  wei: theme.factionWei,
+  wu: theme.factionWu,
+  lu_bu: theme.factionLuBu,
 };
 
 const FACTION_NAMES: Record<string, string> = {
@@ -36,9 +37,10 @@ const ACHIEVEMENT_LABELS: Record<string, string> = {
 
 interface HeroHallProps {
   currentTick: number;
+  onViewCharacter?: (id: string) => void;
 }
 
-export function HeroHall({ currentTick }: HeroHallProps) {
+export function HeroHall({ currentTick, onViewCharacter }: HeroHallProps) {
   const [heroes, setHeroes] = useState<HeroEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "alive" | "dead">("all");
@@ -91,7 +93,7 @@ export function HeroHall({ currentTick }: HeroHallProps) {
       ) : (
         <div style={styles.grid}>
           {filtered.map((hero) => (
-            <HeroCard key={hero.id} hero={hero} />
+            <HeroCard key={hero.id} hero={hero} onClick={onViewCharacter ? () => onViewCharacter(hero.id) : undefined} />
           ))}
         </div>
       )}
@@ -99,24 +101,25 @@ export function HeroHall({ currentTick }: HeroHallProps) {
   );
 }
 
-function HeroCard({ hero }: { hero: HeroEntry }) {
-  const factionColor = hero.factionId ? FACTION_COLORS[hero.factionId] ?? "#64748b" : "#64748b";
+function HeroCard({ hero, onClick }: { hero: HeroEntry; onClick?: () => void }) {
+  const factionColor = hero.factionId ? FACTION_COLORS[hero.factionId] ?? theme.textMuted : theme.textMuted;
   const factionName = hero.factionId ? FACTION_NAMES[hero.factionId] ?? hero.factionId : "無所屬";
 
   return (
     <div style={{
       ...styles.card,
-      borderColor: hero.alive ? factionColor : "#334155",
+      borderColor: hero.alive ? factionColor : theme.bg3,
       opacity: hero.alive ? 1 : 0.7,
-    }}>
+      cursor: onClick ? "pointer" : "default",
+    }} onClick={onClick}>
       <div style={styles.cardHeader}>
-        <span style={{ ...styles.heroName, color: hero.alive ? "#e2e8f0" : "#94a3b8" }}>
+        <span style={{ ...styles.heroName, color: hero.alive ? theme.textPrimary : theme.textSecondary }}>
           {hero.name}
         </span>
         <span style={{
           ...styles.statusBadge,
-          backgroundColor: hero.alive ? "#22c55e20" : "#64748b20",
-          color: hero.alive ? "#22c55e" : "#64748b",
+          backgroundColor: hero.alive ? `${theme.success}20` : `${theme.textMuted}20`,
+          color: hero.alive ? theme.success : theme.textMuted,
         }}>
           {hero.alive ? "在世" : hero.legacy ? "遺志" : "已故"}
         </span>
@@ -157,10 +160,10 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     padding: 20,
     overflow: "auto",
-    backgroundColor: "#0f172a",
+    backgroundColor: theme.bg1,
   },
   loading: {
-    color: "#64748b",
+    color: theme.textMuted,
     fontSize: 14,
     padding: 40,
     textAlign: "center",
@@ -176,7 +179,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: 20,
     fontWeight: 700,
-    color: "#f59e0b",
+    color: theme.accent,
   },
   filterGroup: {
     display: "flex",
@@ -185,9 +188,9 @@ const styles: Record<string, React.CSSProperties> = {
   filterBtn: {
     padding: "4px 12px",
     borderRadius: 6,
-    border: "1px solid #334155",
-    backgroundColor: "#1e293b",
-    color: "#94a3b8",
+    border: `1px solid ${theme.bg3}`,
+    backgroundColor: theme.bg2,
+    color: theme.textSecondary,
     fontSize: 12,
     fontWeight: 600,
     cursor: "pointer",
@@ -195,9 +198,9 @@ const styles: Record<string, React.CSSProperties> = {
   filterActive: {
     padding: "4px 12px",
     borderRadius: 6,
-    border: "1px solid #f59e0b",
-    backgroundColor: "#f59e0b20",
-    color: "#f59e0b",
+    border: `1px solid ${theme.accent}`,
+    backgroundColor: `${theme.accent}20`,
+    color: theme.accent,
     fontSize: 12,
     fontWeight: 600,
     cursor: "pointer",
@@ -205,11 +208,11 @@ const styles: Record<string, React.CSSProperties> = {
   count: {
     marginLeft: "auto",
     fontSize: 13,
-    color: "#64748b",
+    color: theme.textMuted,
   },
   empty: {
     textAlign: "center",
-    color: "#64748b",
+    color: theme.textMuted,
     padding: 60,
     fontSize: 14,
   },
@@ -219,9 +222,9 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
   },
   card: {
-    backgroundColor: "#1e293b",
+    backgroundColor: theme.bg2,
     borderRadius: 10,
-    border: "1px solid #334155",
+    border: `1px solid ${theme.bg3}`,
     borderLeftWidth: 3,
     padding: 14,
   },
@@ -260,7 +263,7 @@ const styles: Record<string, React.CSSProperties> = {
   prestige: {
     fontSize: 14,
     fontWeight: 700,
-    color: "#f59e0b",
+    color: theme.accent,
   },
   achievements: {
     display: "flex",
@@ -272,12 +275,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     padding: "2px 8px",
     borderRadius: 8,
-    backgroundColor: "#7c3aed20",
-    color: "#a78bfa",
+    backgroundColor: `${theme.special}20`,
+    color: theme.special,
   },
   legacyTag: {
     fontSize: 11,
-    color: "#f59e0b",
+    color: theme.accent,
     fontStyle: "italic",
   },
 };

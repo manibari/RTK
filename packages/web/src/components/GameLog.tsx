@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { theme } from "../lib/theme";
 
 interface BattleRound {
   phase: string;
@@ -74,16 +75,16 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
     const result = b.captured
       ? `${b.attackerName} 攻陷 ${b.cityName}${b.defenderName ? `（守將：${b.defenderName}）` : ""}${powerStr}`
       : `${b.attackerName} 未能攻下 ${b.cityName}${b.defenderName ? `（${b.defenderName} 防守成功）` : ""}${powerStr}`;
-    entries.push({ tick: b.tick, type: "battle", text: result, color: b.captured ? "#ef4444" : "#94a3b8", rounds: b.rounds, tactic: b.tactic });
+    entries.push({ tick: b.tick, type: "battle", text: result, color: b.captured ? theme.danger : theme.textSecondary, rounds: b.rounds, tactic: b.tactic });
   }
 
   for (const d of diplomacy) {
-    const color = d.type === "alliance_formed" ? "#22c55e" : d.type.includes("demand") ? "#f59e0b" : "#f59e0b";
+    const color = d.type === "alliance_formed" ? theme.success : d.type.includes("demand") ? theme.accent : theme.accent;
     entries.push({ tick: d.tick, type: "diplomacy", text: d.description, color });
   }
 
   for (const [tick, summary] of summaries) {
-    entries.push({ tick, type: "summary", text: summary, color: "#94a3b8" });
+    entries.push({ tick, type: "summary", text: summary, color: theme.textSecondary });
   }
 
   // Sort by tick descending
@@ -98,9 +99,9 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
   };
 
   const filterColors: Record<string, string> = {
-    battle: "#ef4444",
-    diplomacy: "#22c55e",
-    summary: "#94a3b8",
+    battle: theme.danger,
+    diplomacy: theme.success,
+    summary: theme.textSecondary,
   };
 
   return (
@@ -115,7 +116,7 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
               style={{
                 ...styles.filterBtn,
                 backgroundColor: activeFilters.has(f) ? filterColors[f] : "transparent",
-                color: activeFilters.has(f) ? "#0f172a" : "#94a3b8",
+                color: activeFilters.has(f) ? theme.bg1 : theme.textSecondary,
                 borderColor: filterColors[f],
               }}
               onClick={() => toggleFilter(f)}
@@ -141,7 +142,7 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
                 <span style={styles.entryDay}>Day {entry.tick}</span>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   {entry.tactic && (
-                    <span style={{ fontSize: 10, color: "#a855f7", fontWeight: 600 }}>
+                    <span style={{ fontSize: 10, color: theme.special, fontWeight: 600 }}>
                       {TACTIC_LABELS[entry.tactic] ?? entry.tactic}
                     </span>
                   )}
@@ -149,7 +150,7 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
                     {typeLabels[entry.type]}
                   </span>
                   {entry.rounds && (
-                    <span style={{ fontSize: 10, color: "#64748b" }}>{expandedIdx === i ? "▲" : "▼"}</span>
+                    <span style={{ fontSize: 10, color: theme.textMuted }}>{expandedIdx === i ? "▲" : "▼"}</span>
                   )}
                 </div>
               </div>
@@ -160,8 +161,8 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
                   {entry.rounds.map((r, ri) => (
                     <div key={ri} style={styles.roundRow}>
                       <span style={styles.roundPhase}>{r.phase}</span>
-                      <span style={{ color: "#ef4444", fontSize: 11 }}>攻+{r.attackerDelta}</span>
-                      <span style={{ color: "#3b82f6", fontSize: 11 }}>守+{r.defenderDelta}</span>
+                      <span style={{ color: theme.danger, fontSize: 11 }}>攻+{r.attackerDelta}</span>
+                      <span style={{ color: theme.info, fontSize: 11 }}>守+{r.defenderDelta}</span>
                       {r.note && <span style={styles.roundNote}>{r.note}</span>}
                     </div>
                   ))}
@@ -196,8 +197,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tick: {
     fontSize: 14,
-    color: "#f59e0b",
-    backgroundColor: "#1e293b",
+    color: theme.accent,
+    backgroundColor: theme.bg2,
     padding: "4px 10px",
     borderRadius: 6,
     fontWeight: 600,
@@ -217,7 +218,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   count: {
     fontSize: 13,
-    color: "#64748b",
+    color: theme.textMuted,
     marginLeft: "auto",
   },
   empty: {
@@ -225,7 +226,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#64748b",
+    color: theme.textMuted,
     fontStyle: "italic",
     fontSize: 16,
   },
@@ -236,7 +237,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   entry: {
     padding: "10px 14px",
-    backgroundColor: "#1e293b",
+    backgroundColor: theme.bg2,
     borderRadius: 8,
   },
   entryHeader: {
@@ -247,7 +248,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   entryDay: {
     fontSize: 11,
-    color: "#f59e0b",
+    color: theme.accent,
     fontWeight: 600,
   },
   entryType: {
@@ -256,14 +257,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   entryText: {
     fontSize: 14,
-    color: "#cbd5e1",
+    color: theme.textBody,
     margin: 0,
     lineHeight: 1.5,
   },
   roundsContainer: {
     marginTop: 8,
     paddingTop: 8,
-    borderTop: "1px solid #334155",
+    borderTop: `1px solid ${theme.bg3}`,
     display: "flex",
     flexDirection: "column",
     gap: 4,
@@ -274,17 +275,17 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     fontSize: 12,
     padding: "2px 6px",
-    backgroundColor: "#0f172a",
+    backgroundColor: theme.bg1,
     borderRadius: 4,
   },
   roundPhase: {
-    color: "#e2e8f0",
+    color: theme.textPrimary,
     fontWeight: 600,
     width: 72,
     flexShrink: 0,
   },
   roundNote: {
-    color: "#94a3b8",
+    color: theme.textSecondary,
     fontSize: 11,
     marginLeft: "auto",
   },

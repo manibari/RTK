@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import cytoscape, { type Core, type EventObject } from "cytoscape";
+import { theme } from "../lib/theme";
 interface CharacterNode {
   id: string;
   name: string;
@@ -22,9 +23,9 @@ interface GraphData {
 }
 
 const EDGE_COLORS = {
-  friend: "#4ade80",   // green
-  rival: "#f87171",    // red
-  neutral: "#9ca3af",  // gray
+  friend: "#7db88a",   // warm green
+  rival: "#c47171",    // warm red
+  neutral: "#9c9c9c",  // warm gray
 };
 
 function buildElements(data: GraphData) {
@@ -68,8 +69,8 @@ const STYLESHEET: cytoscape.StylesheetStyle[] = [
       label: "data(label)",
       "text-valign": "bottom",
       "text-margin-y": 8,
-      "background-color": "#64748b",
-      color: "#e2e8f0",
+      "background-color": theme.textMuted,
+      color: theme.textPrimary,
       "font-size": "14px",
       width: 40,
       height: 40,
@@ -78,7 +79,7 @@ const STYLESHEET: cytoscape.StylesheetStyle[] = [
   {
     selector: "node[?isCenter]",
     style: {
-      "background-color": "#f59e0b",
+      "background-color": theme.accent,
       width: 56,
       height: 56,
       "font-size": "16px",
@@ -89,12 +90,12 @@ const STYLESHEET: cytoscape.StylesheetStyle[] = [
     selector: "edge",
     style: {
       width: "mapData(intimacy, 0, 100, 1, 10)",
-      "line-color": "#9ca3af",
+      "line-color": "#9c9c9c",
       "curve-style": "bezier",
       label: "data(label)",
       "font-size": "11px",
-      color: "#94a3b8",
-      "text-background-color": "#1e293b",
+      color: theme.textSecondary,
+      "text-background-color": theme.bg2,
       "text-background-opacity": 0.8,
       "text-background-padding": "3px",
     },
@@ -175,7 +176,7 @@ export function RadialGraph({ data, onEdgeClick }: RadialGraphProps) {
         width: "100%",
         height: "100%",
         minHeight: 600,
-        backgroundColor: "#0f172a",
+        backgroundColor: theme.bg1,
         borderRadius: 12,
       }}
     />
