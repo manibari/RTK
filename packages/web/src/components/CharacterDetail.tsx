@@ -275,7 +275,7 @@ export function CharacterDetail({
                   <div key={key} style={styles.skillItem}>
                     <span style={{ ...styles.skillLabel, color: info.color }}>{info.label}</span>
                     <div style={styles.skillBar}>
-                      <div style={{ ...styles.skillFill, width: `${(val / 5) * 100}%`, backgroundColor: info.color }} />
+                      <div style={{ ...styles.skillFill, width: `${val}%`, backgroundColor: info.color }} />
                     </div>
                     <span style={styles.skillValue}>{val}</span>
                   </div>
@@ -457,8 +457,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   loading: { textAlign: "center", color: theme.textMuted },
   avatar: {
-    width: 64,
-    height: 64,
+    width: 80,
+    height: 80,
     borderRadius: 12,
     objectFit: "cover" as const,
     marginRight: 12,

@@ -22,6 +22,7 @@ interface PlaceNode {
 interface CharacterOnMap {
   id: string;
   name: string;
+  avatarUrl?: string;
   traits: string[];
   cityId: string;
 }
@@ -64,6 +65,8 @@ interface StrategicMapProps {
   roads?: RoadDisplay[];
   highlightCityIds?: Set<string>;
   onCityClick?: (cityId: string) => void;
+  onCharacterClick?: (characterId: string) => void;
+  playerFactionMembers?: Set<string>; // character IDs in player faction
 }
 
 const FALLBACK_COLORS: Record<string, string> = {
@@ -148,7 +151,7 @@ function intersect(
   return [(b2 * c1 - b1 * c2) / det, (a1 * c2 - a2 * c1) / det];
 }
 
-export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, supplyStatus, droughtCities, roads, highlightCityIds, onCityClick }: StrategicMapProps) {
+export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, supplyStatus, droughtCities, roads, highlightCityIds, onCityClick, onCharacterClick, playerFactionMembers }: StrategicMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layersRef = useRef<L.LayerGroup | null>(null);
@@ -427,7 +430,60 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
         highlightRing.addTo(layers);
       }
     }
-  }, [data, viewTick, onCityClick, factionColors, tradeRoutes, supplyStatus, droughtCities, roads, highlightCityIds]);
+
+    // === Character avatar markers (player faction only) ===
+    if (playerFactionMembers && playerFactionMembers.size > 0) {
+      // Group characters by city
+      const charsByCity = new Map<string, typeof data.characters>();
+      for (const ch of data.characters) {
+        if (!playerFactionMembers.has(ch.id) || !ch.cityId) continue;
+        const group = charsByCity.get(ch.cityId) ?? [];
+        group.push(ch);
+        charsByCity.set(ch.cityId, group);
+      }
+
+      for (const [cityId, chars] of charsByCity) {
+        const coords = cityCoords.get(cityId);
+        if (!coords) continue;
+        const cityNode = data.cities.find((c) => c.id === cityId);
+        const baseOffset = (cityNode?.tier === "major" ? 12 : 7) + 8;
+
+        chars.slice(0, 5).forEach((ch, idx) => {
+          // Arrange in an arc below the city
+          const angleStep = 30;
+          const angle = (180 + (idx - (Math.min(chars.length, 5) - 1) / 2) * angleStep) * Math.PI / 180;
+          const offsetLat = Math.sin(angle) * baseOffset * 0.008;
+          const offsetLng = Math.cos(angle) * baseOffset * 0.01;
+
+          const avatarHtml = ch.avatarUrl
+            ? `<img src="${ch.avatarUrl}" style="width:28px;height:28px;border-radius:50%;border:2px solid ${theme.factionShu};box-shadow:0 1px 4px rgba(0,0,0,0.5);cursor:pointer;object-fit:cover" />`
+            : `<div style="width:28px;height:28px;border-radius:50%;border:2px solid ${theme.factionShu};background:${theme.bg2};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${theme.factionShu};cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.5)">${ch.name.charAt(0)}</div>`;
+
+          const marker = L.marker([coords[0] + offsetLat, coords[1] + offsetLng], {
+            icon: L.divIcon({
+              className: "char-avatar-marker",
+              html: avatarHtml,
+              iconSize: [32, 32],
+              iconAnchor: [16, 16],
+            }),
+          });
+
+          marker.bindTooltip(ch.name, {
+            permanent: false,
+            direction: "top",
+            offset: [0, -16],
+            className: "dark-tooltip",
+          });
+
+          if (onCharacterClick) {
+            marker.on("click", () => onCharacterClick(ch.id));
+          }
+
+          marker.addTo(layers);
+        });
+      }
+    }
+  }, [data, viewTick, onCityClick, onCharacterClick, playerFactionMembers, factionColors, tradeRoutes, supplyStatus, droughtCities, roads, highlightCityIds]);
 
   return (
     <>

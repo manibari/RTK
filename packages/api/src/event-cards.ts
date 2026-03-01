@@ -64,7 +64,7 @@ const EVENT_CARD_POOL: Omit<EventCard, "id">[] = [
     title: "天降奇才",
     description: "一名遊歷四方的智者願意為你效力，但要求優厚的待遇。",
     choices: [
-      { label: "禮賢下士（-200金，智力+1）", effect: { goldDelta: -200, intelligenceDelta: 1 } },
+      { label: "禮賢下士（-200金，智力+5）", effect: { goldDelta: -200, intelligenceDelta: 5 } },
       { label: "婉拒好意", effect: {} },
     ],
   },
@@ -81,15 +81,15 @@ const EVENT_CARD_POOL: Omit<EventCard, "id">[] = [
     description: "一群山賊願意歸順你的勢力。",
     choices: [
       { label: "收編入伍（+2守備）", effect: { garrisonDelta: 2, scope: "one_city" } },
-      { label: "遣散回鄉（+魅力）", effect: { charmDelta: 1 } },
+      { label: "遣散回鄉（+魅力）", effect: { charmDelta: 5 } },
     ],
   },
   {
     title: "古兵書出土",
     description: "部下在古墓中發現了一部失傳的兵法書。",
     choices: [
-      { label: "研讀兵法（+武力）", effect: { militaryDelta: 1 } },
-      { label: "獻給謀士（+智力）", effect: { intelligenceDelta: 1 } },
+      { label: "研讀兵法（+武力）", effect: { militaryDelta: 5 } },
+      { label: "獻給謀士（+智力）", effect: { intelligenceDelta: 5 } },
     ],
   },
   {
@@ -106,7 +106,7 @@ const EVENT_CARD_POOL: Omit<EventCard, "id">[] = [
     description: "敵方派來使節，表達和談意願，並帶來豐厚禮品。",
     choices: [
       { label: "收下禮品（+400金）", effect: { goldDelta: 400 } },
-      { label: "以禮相待（+魅力，士氣+5）", effect: { charmDelta: 1, moraleDelta: 5 } },
+      { label: "以禮相待（+魅力，士氣+5）", effect: { charmDelta: 5, moraleDelta: 5 } },
     ],
   },
   {
@@ -121,8 +121,8 @@ const EVENT_CARD_POOL: Omit<EventCard, "id">[] = [
     title: "間諜被捕",
     description: "你的衛兵在城中抓到一名可疑人物，疑為敵方間諜。",
     choices: [
-      { label: "嚴刑拷問（+智力）", effect: { intelligenceDelta: 1 } },
-      { label: "禮遇釋放（+魅力，忠誠+5）", effect: { charmDelta: 1, loyaltyDelta: 5 } },
+      { label: "嚴刑拷問（+智力）", effect: { intelligenceDelta: 5 } },
+      { label: "禮遇釋放（+魅力，忠誠+5）", effect: { charmDelta: 5, loyaltyDelta: 5 } },
     ],
   },
   // ── New: Economy cards ──
@@ -156,7 +156,7 @@ const EVENT_CARD_POOL: Omit<EventCard, "id">[] = [
     description: "一群退役老兵自願重新入伍，為國效力。",
     choices: [
       { label: "接納入伍（+3守備，-200金）", effect: { garrisonDelta: 3, goldDelta: -200, scope: "one_city" } },
-      { label: "封賞告老（+魅力，-100金）", effect: { charmDelta: 1, goldDelta: -100 } },
+      { label: "封賞告老（+魅力，-100金）", effect: { charmDelta: 5, goldDelta: -100 } },
     ],
   },
   {
@@ -173,7 +173,7 @@ const EVENT_CARD_POOL: Omit<EventCard, "id">[] = [
     description: "百姓正準備舉辦盛大的祭典，邀請主公參加。",
     choices: [
       { label: "撥款贊助（-150金，士氣+15）", effect: { goldDelta: -150, moraleDelta: 15 } },
-      { label: "御駕親臨（+魅力，忠誠+5）", effect: { charmDelta: 1, loyaltyDelta: 5 } },
+      { label: "御駕親臨（+魅力，忠誠+5）", effect: { charmDelta: 5, loyaltyDelta: 5 } },
     ],
   },
   {
@@ -278,9 +278,9 @@ export function applyEventCardChoice(
   // Character stat changes apply to faction leader
   if (effect.militaryDelta || effect.intelligenceDelta || effect.charmDelta) {
     charUpdate = {};
-    if (effect.militaryDelta) charUpdate.military = Math.min(10, Math.max(0, leaderChar.military + effect.militaryDelta));
-    if (effect.intelligenceDelta) charUpdate.intelligence = Math.min(10, Math.max(0, leaderChar.intelligence + effect.intelligenceDelta));
-    if (effect.charmDelta) charUpdate.charm = Math.min(10, Math.max(0, leaderChar.charm + effect.charmDelta));
+    if (effect.militaryDelta) charUpdate.military = Math.min(100, Math.max(0, leaderChar.military + effect.militaryDelta));
+    if (effect.intelligenceDelta) charUpdate.intelligence = Math.min(100, Math.max(0, leaderChar.intelligence + effect.intelligenceDelta));
+    if (effect.charmDelta) charUpdate.charm = Math.min(100, Math.max(0, leaderChar.charm + effect.charmDelta));
   }
 
   return {

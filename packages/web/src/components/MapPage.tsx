@@ -80,6 +80,7 @@ const SPECIALTY_EFFECTS: Record<string, string> = {
 interface CharacterOnMap {
   id: string;
   name: string;
+  avatarUrl?: string;
   traits: string[];
   cityId: string;
   role?: string;
@@ -148,6 +149,7 @@ interface MapPageProps {
   advancing: boolean;
   onAdvanceDay: () => Promise<{ battleResults?: BattleResult[] } | undefined>;
   timelineMarkers?: TimelineMarker[];
+  onCharacterClick?: (characterId: string) => void;
 }
 
 export function MapPage({
@@ -159,6 +161,7 @@ export function MapPage({
   advancing,
   onAdvanceDay,
   timelineMarkers,
+  onCharacterClick,
 }: MapPageProps) {
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [selectedCity, setSelectedCity] = useState<PlaceNode | null>(null);
@@ -253,6 +256,12 @@ export function MapPage({
       (mapData?.characters ?? []).filter((c) => !allFactionMembers.has(c.id)).map((c) => c.id),
     );
   }, [factions, mapData]);
+
+  // Player faction member IDs for map avatar display
+  const playerFactionMembers = useMemo(() => {
+    const shu = factions.find((f) => f.id === "shu");
+    return new Set(shu?.members ?? []);
+  }, [factions]);
 
   // Compute reachable neighbor cities for selected character
   const reachableCityIds = useMemo(() => {
@@ -440,6 +449,8 @@ export function MapPage({
             roads={mapData?.roads}
             highlightCityIds={reachableCityIds.size > 0 ? reachableCityIds : undefined}
             onCityClick={handleCityClick}
+            onCharacterClick={onCharacterClick}
+            playerFactionMembers={playerFactionMembers}
           />
         )}
       </div>
@@ -1011,6 +1022,7 @@ export function MapPage({
           currentTick={currentTick}
           onClose={() => setDetailCharId(null)}
           onCharacterClick={(id) => setDetailCharId(id)}
+          onViewFullProfile={onCharacterClick}
           onAssignRole={(charId, role) => handleAssignRole(charId, role)}
         />
       )}

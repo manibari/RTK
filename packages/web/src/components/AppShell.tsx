@@ -514,6 +514,7 @@ export function AppShell() {
             advancing={advancing || autoSim || gameStatus !== "ongoing"}
             onAdvanceDay={handleAdvanceDay}
             timelineMarkers={timelineMarkers}
+            onCharacterClick={handleViewCharacter}
           />
         ) : activeTab === "log" ? (
           <GameLog
@@ -523,7 +524,7 @@ export function AppShell() {
             currentTick={currentTick}
           />
         ) : activeTab === "stats" ? (
-          <StatsPanel currentTick={currentTick} onMessage={addToast} />
+          <StatsPanel currentTick={currentTick} onMessage={addToast} onViewCharacter={handleViewCharacter} />
         ) : activeTab === "heroes" ? (
           <HeroHall currentTick={currentTick} onViewCharacter={handleViewCharacter} />
         ) : activeTab === "character" && characterPageId ? (

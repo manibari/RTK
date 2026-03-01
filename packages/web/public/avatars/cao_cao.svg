@@ -1,4 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="16" fill="#ef4444"/>
-  <text x="64" y="72" text-anchor="middle" fill="white" font-size="40" font-family="sans-serif" font-weight="bold">曹操</text>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#dc2626"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </radialGradient>
+    <radialGradient id="shadow" cx="50%" cy="50%" r="50%">
+      <stop offset="70%" stop-color="transparent"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.3)"/>
+    </radialGradient>
+  </defs>
+  <circle cx="64" cy="64" r="62" fill="url(#bg)"/>
+  <circle cx="64" cy="64" r="62" fill="url(#shadow)"/>
+  <circle cx="64" cy="64" r="58" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
+  <circle cx="64" cy="64" r="52" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+  <text x="64" y="72" text-anchor="middle" fill="white" font-size="36" font-family="serif" font-weight="bold" opacity="0.95">曹操</text>
 </svg>

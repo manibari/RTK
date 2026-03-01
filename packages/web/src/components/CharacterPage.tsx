@@ -176,7 +176,7 @@ export function CharacterPage({ characterId, onBack, onViewCharacter, currentTic
       else if (axis.key === "charm") val = character.charm;
       else if (axis.key === "tactics") val = character.skills?.tactics ?? 0;
       else if (axis.key === "leadership") val = character.skills?.leadership ?? 0;
-      return { ...axis, value: val * 20 }; // scale to 0-100
+      return { ...axis, value: val }; // already 0-100
     });
   }, [character]);
 
@@ -213,7 +213,18 @@ export function CharacterPage({ characterId, onBack, onViewCharacter, currentTic
         {/* === Portrait Section === */}
         <div style={{ ...styles.portraitSection, background: factionGradient }}>
           <div style={{ ...styles.portraitCircle, borderColor: factionColor }}>
-            <span style={{ ...styles.portraitKanji, color: factionColor }}>
+            {character.avatarUrl ? (
+              <img
+                src={character.avatarUrl}
+                alt={character.name}
+                style={styles.portraitImg}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                  (e.target as HTMLImageElement).nextElementSibling?.removeAttribute("style");
+                }}
+              />
+            ) : null}
+            <span style={{ ...styles.portraitKanji, color: factionColor, display: character.avatarUrl ? "none" : undefined }}>
               {character.name.charAt(0)}
             </span>
           </div>
@@ -265,7 +276,7 @@ export function CharacterPage({ characterId, onBack, onViewCharacter, currentTic
                     <div key={key} style={styles.skillRow}>
                       <span style={{ ...styles.skillLabel, color: info.color }}>{info.label}</span>
                       <div style={styles.skillTrack}>
-                        <div style={{ ...styles.skillFill, width: `${(val / 5) * 100}%`, backgroundColor: info.color }} />
+                        <div style={{ ...styles.skillFill, width: `${val}%`, backgroundColor: info.color }} />
                       </div>
                       <span style={styles.skillVal}>{val}</span>
                     </div>
@@ -650,6 +661,12 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: `rgba(0,0,0,0.35)`,
     flexShrink: 0,
     boxShadow: "0 4px 20px rgba(0,0,0,0.4), inset 0 0 20px rgba(255,255,255,0.05)",
+  },
+  portraitImg: {
+    width: "100%",
+    height: "100%",
+    borderRadius: "50%",
+    objectFit: "cover" as const,
   },
   portraitKanji: {
     fontSize: 54,

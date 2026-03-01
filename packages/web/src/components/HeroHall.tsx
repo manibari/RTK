@@ -7,6 +7,7 @@ import { theme } from "../lib/theme";
 interface HeroEntry {
   id: string;
   name: string;
+  avatarUrl?: string;
   alive: boolean;
   factionId: string | null;
   prestige: number;
@@ -113,6 +114,18 @@ function HeroCard({ hero, onClick }: { hero: HeroEntry; onClick?: () => void }) 
       cursor: onClick ? "pointer" : "default",
     }} onClick={onClick}>
       <div style={styles.cardHeader}>
+        {hero.avatarUrl ? (
+          <img
+            src={hero.avatarUrl}
+            alt={hero.name}
+            style={styles.miniAvatar}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+        ) : (
+          <div style={styles.miniAvatarFallback}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: factionColor }}>{hero.name.charAt(0)}</span>
+          </div>
+        )}
         <span style={{ ...styles.heroName, color: hero.alive ? theme.textPrimary : theme.textSecondary }}>
           {hero.name}
         </span>
@@ -230,13 +243,31 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardHeader: {
     display: "flex",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 10,
     marginBottom: 10,
+  },
+  miniAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: "50%",
+    objectFit: "cover" as const,
+    flexShrink: 0,
+  },
+  miniAvatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: "50%",
+    backgroundColor: theme.bg3,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   heroName: {
     fontSize: 15,
     fontWeight: 700,
+    flex: 1,
   },
   statusBadge: {
     fontSize: 11,

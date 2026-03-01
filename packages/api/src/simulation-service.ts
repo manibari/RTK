@@ -279,10 +279,10 @@ export interface Technology {
 
 export const TECHNOLOGIES: Technology[] = [
   { id: "iron_working", name: "鍛鐵術", description: "鍛冶場效果+50%", cost: 500, turns: 8 },
-  { id: "archery", name: "弓術", description: "全員智力+1", cost: 400, turns: 6 },
+  { id: "archery", name: "弓術", description: "全員智力+5", cost: 400, turns: 6 },
   { id: "logistics", name: "兵站學", description: "移動速度+1", cost: 600, turns: 9 },
   { id: "spy_network", name: "諜報網", description: "諜報成功率+20%", cost: 450, turns: 6 },
-  { id: "divine_strategy", name: "神算", description: "全員戰術+1", cost: 700, turns: 12 },
+  { id: "divine_strategy", name: "神算", description: "全員戰術+5", cost: 700, turns: 12 },
 ];
 
 export interface FactionResearch {
@@ -393,21 +393,22 @@ function createDefaultFactions(): { id: string; leaderId: string; members: strin
 let FACTIONS = createDefaultFactions();
 
 // Trait -> stat mapping for combat ratings
+// Trait -> stat mapping for combat ratings (0-100 scale: ×10 from old 0-10 scale)
 const TRAIT_STATS: Record<string, { military: number; intelligence: number; charm: number }> = {
-  brave: { military: 2, intelligence: 0, charm: 0 },
-  impulsive: { military: 1, intelligence: -1, charm: 0 },
-  loyal: { military: 1, intelligence: 1, charm: 1 },
-  wise: { military: 0, intelligence: 2, charm: 0 },
-  strategic: { military: 1, intelligence: 2, charm: 0 },
-  cautious: { military: 0, intelligence: 1, charm: 0 },
-  ambitious: { military: 1, intelligence: 1, charm: 1 },
-  charismatic: { military: 0, intelligence: 0, charm: 2 },
-  diplomatic: { military: 0, intelligence: 1, charm: 2 },
-  cunning: { military: 0, intelligence: 2, charm: 1 },
-  benevolent: { military: 0, intelligence: 0, charm: 2 },
-  proud: { military: 1, intelligence: 0, charm: -1 },
-  humble: { military: 0, intelligence: 0, charm: 1 },
-  treacherous: { military: 1, intelligence: 1, charm: -1 },
+  brave: { military: 20, intelligence: 0, charm: 0 },
+  impulsive: { military: 10, intelligence: -10, charm: 0 },
+  loyal: { military: 10, intelligence: 10, charm: 10 },
+  wise: { military: 0, intelligence: 20, charm: 0 },
+  strategic: { military: 10, intelligence: 20, charm: 0 },
+  cautious: { military: 0, intelligence: 10, charm: 0 },
+  ambitious: { military: 10, intelligence: 10, charm: 10 },
+  charismatic: { military: 0, intelligence: 0, charm: 20 },
+  diplomatic: { military: 0, intelligence: 10, charm: 20 },
+  cunning: { military: 0, intelligence: 20, charm: 10 },
+  benevolent: { military: 0, intelligence: 0, charm: 20 },
+  proud: { military: 10, intelligence: 0, charm: -10 },
+  humble: { military: 0, intelligence: 0, charm: 10 },
+  treacherous: { military: 10, intelligence: 10, charm: -10 },
 };
 
 export function getCombatRating(traits: string[]): { military: number; intelligence: number; charm: number } {
@@ -457,9 +458,9 @@ function getSkills(char: CharacterNode): CharacterSkills {
   return char.skills ?? { ...DEFAULT_SKILLS };
 }
 
-function gainSkill(char: CharacterNode, skill: keyof CharacterSkills, amount: number = 1): CharacterSkills {
+function gainSkill(char: CharacterNode, skill: keyof CharacterSkills, amount: number = 5): CharacterSkills {
   const skills = getSkills(char);
-  skills[skill] = Math.min(5, skills[skill] + amount);
+  skills[skill] = Math.min(100, skills[skill] + amount);
   return skills;
 }
 
@@ -1059,16 +1060,16 @@ export class SimulationService {
 
       const age = this.getAge(ch.id, ch.bornTick);
 
-      // Peak period (25-45): small chance to gain +1 to a random stat
+      // Peak period (25-45): small chance to gain +5 to a random stat
       if (age >= 25 && age <= 45 && Math.random() < 0.15) {
         const stat = Math.random() < 0.5 ? "military" : "intelligence";
-        const val = Math.min(10, ch[stat] + 1);
+        const val = Math.min(100, ch[stat] + 5);
         await this.repo.createCharacter({ ...ch, [stat]: val });
       }
 
       // Old age (55+): stat decay
       if (age >= 55 && Math.random() < 0.2) {
-        const mil = Math.max(0, ch.military - 1);
+        const mil = Math.max(0, ch.military - 5);
         await this.repo.createCharacter({ ...ch, military: mil });
       }
 
@@ -1333,7 +1334,7 @@ export class SimulationService {
 
       // Success rate based on intelligence + espionage skill
       const espionage = (agent.skills?.espionage ?? 0);
-      const successChance = 0.2 + (agent.intelligence * 0.05) + (espionage * 0.08);
+      const successChance = 0.2 + (agent.intelligence * 0.005) + (espionage * 0.004);
 
       // Find all alliances involving the target faction
       const targetAlliances = [...this.alliances].filter((k) => k.includes(targetFaction));
@@ -1896,7 +1897,7 @@ export class SimulationService {
         if (originCity && originCity.garrison > 1) {
           const { troopHardCap, troopSoftCapBase } = this.config.combat;
           const leadership = getSkills(char).leadership;
-          const softCap = Math.min(troopHardCap, troopSoftCapBase + leadership);
+          const softCap = Math.min(troopHardCap, troopSoftCapBase + Math.floor(leadership / 20));
           troopsCarried = Math.min(softCap, originCity.garrison - 1);
           if (troopsCarried > 0) {
             await this.repo.updatePlace(originCity.id, { garrison: originCity.garrison - troopsCarried });
@@ -2028,7 +2029,7 @@ export class SimulationService {
         const faction = this.getFactionOf(cmd.characterId);
         if (!faction) continue;
         // Success chance: 50% + charm*5% + leadership*5% (+25% with recruitment district)
-        let chance = Math.min(0.95, 0.5 + recruiter.charm * 0.05 + getSkills(recruiter).leadership * 0.05);
+        let chance = Math.min(0.95, 0.5 + recruiter.charm * 0.005 + getSkills(recruiter).leadership * 0.0025);
         if (this.hasDistrict(city, "recruitment")) chance = Math.min(0.95, chance + 0.25);
         const success = Math.random() < chance;
         await this.repo.updatePlace(city.id, { gold: city.gold - hireCost });
@@ -2117,13 +2118,13 @@ export class SimulationService {
         const faction = this.getFactionOf(char.id);
         if (!faction || city.siegedBy !== char.id) continue;
         const skills = getSkills(char);
-        if (skills.tactics < 2) continue;
+        if (skills.tactics < 40) continue;
         // Find a faction city to pay from
         const allCities = await this.repo.getAllPlaces();
         const payCity = allCities.find((c) => c.controllerId && this.getFactionOf(c.controllerId) === faction && c.gold >= 300);
         if (!payCity) continue;
-        const garrisonHit = skills.tactics >= 4 ? 3 : 2;
-        const foodHit = skills.tactics >= 4 ? 30 : 20;
+        const garrisonHit = skills.tactics >= 80 ? 3 : 2;
+        const foodHit = skills.tactics >= 80 ? 30 : 20;
         await this.repo.updatePlace(payCity.id, { gold: payCity.gold - 300 });
         await this.repo.updatePlace(city.id, {
           garrison: Math.max(0, city.garrison - garrisonHit),
@@ -2539,11 +2540,11 @@ export class SimulationService {
 
       // Apply one-time tech effects
       if (tech.id === "archery") {
-        // +1 intelligence to all faction characters
+        // +5 intelligence to all faction characters
         const allChars = await this.repo.getAllCharacters();
         for (const ch of allChars) {
-          if (faction.members.includes(ch.id) && ch.intelligence < 10) {
-            await this.repo.createCharacter({ ...ch, intelligence: ch.intelligence + 1 });
+          if (faction.members.includes(ch.id) && ch.intelligence < 100) {
+            await this.repo.createCharacter({ ...ch, intelligence: Math.min(100, ch.intelligence + 5) });
           }
         }
       }
@@ -2605,7 +2606,7 @@ export class SimulationService {
         if (neutralsHere.length === 0) continue;
 
         const target = neutralsHere[0];
-        const chance = Math.min(0.9, 0.5 + leader.charm * 0.05 + getSkills(leader).leadership * 0.05);
+        const chance = Math.min(0.9, 0.5 + leader.charm * 0.005 + getSkills(leader).leadership * 0.0025);
         if (Math.random() >= chance) continue;
 
         await this.repo.updatePlace(city.id, { gold: city.gold - 200 });
@@ -2636,7 +2637,7 @@ export class SimulationService {
       const spySkill = getSkills(spy).espionage;
       const spyFaction = this.getFactionOf(spy.id);
       const baseRate = mission.missionType === "intel" ? 0.4 : 0.3;
-      let successRate = baseRate + spy.intelligence * 0.05 + spySkill * 0.08;
+      let successRate = baseRate + spy.intelligence * 0.005 + spySkill * 0.004;
       // Spymaster role: +20% success
       successRate += this.roleSpyBonus(spy);
       // Spy network tech: +20% success
@@ -2649,7 +2650,7 @@ export class SimulationService {
       // Caught chance: 50% base, -5% per intelligence, -8% per espionage skill
       const allCharsForDetection = await this.repo.getAllCharacters();
       const detection = this.computeSpyDetection(targetCity, allCharsForDetection);
-      let caughtRate = 0.5 - spy.intelligence * 0.05 - spySkill * 0.08 + detection * 0.005;
+      let caughtRate = 0.5 - spy.intelligence * 0.005 - spySkill * 0.004 + detection * 0.005;
       if (spy.role === "spymaster") caughtRate -= 0.1;
       caughtRate = Math.max(0.05, Math.min(0.9, caughtRate));
       const caught = !success && Math.random() < caughtRate;
@@ -2734,22 +2735,22 @@ export class SimulationService {
       const charsHere = characters.filter((c) => c.cityId === city.id);
       if (charsHere.length === 0) continue;
 
-      // Military academy: +1 military to characters here (cap 10)
+      // Military academy: +5 military to characters here (cap 100)
       if (city.specialty === "military_academy") {
-        const gain = city.improvement ? 2 : 1;
+        const gain = city.improvement ? 10 : 5;
         for (const ch of charsHere) {
-          if (ch.military < 10) {
-            await this.repo.createCharacter({ ...ch, military: Math.min(10, ch.military + gain) });
+          if (ch.military < 100) {
+            await this.repo.createCharacter({ ...ch, military: Math.min(100, ch.military + gain) });
           }
         }
       }
 
-      // Library: +1 intelligence to characters here (cap 10)
+      // Library: +5 intelligence to characters here (cap 100)
       if (city.specialty === "library") {
-        const gain = city.improvement ? 2 : 1;
+        const gain = city.improvement ? 10 : 5;
         for (const ch of charsHere) {
-          if (ch.intelligence < 10) {
-            await this.repo.createCharacter({ ...ch, intelligence: Math.min(10, ch.intelligence + gain) });
+          if (ch.intelligence < 100) {
+            await this.repo.createCharacter({ ...ch, intelligence: Math.min(100, ch.intelligence + gain) });
           }
         }
       }
@@ -2862,9 +2863,9 @@ export class SimulationService {
     const charsHere = characters.filter((c) => c.cityId === city.id);
     // Spymaster stationed: +25 detection
     if (charsHere.some((c) => c.role === "spymaster")) detection += 25;
-    // Best intelligence character: +3 per point
+    // Best intelligence character: +0.3 per point (0-100 scale)
     const bestInt = Math.max(0, ...charsHere.map((c) => c.intelligence));
-    detection += bestInt * 3;
+    detection += bestInt * 0.3;
     // Defense district: +10
     if (this.hasDistrict(city, "defense")) detection += 10;
     // Spy network tech: +10
@@ -2948,8 +2949,8 @@ export class SimulationService {
         const defenders = allChars.filter(
           (c) => c.cityId === city.id && c.id !== city.siegedBy && this.getFactionOf(c.id) !== city.siegedBy,
         );
-        const defenderPower = city.garrison + defenders.reduce((s, d) => s + d.military, 0) + Math.random() * 2;
-        const besiegerPower = besiegers.reduce((s, b) => s + b.military + getSkills(b).tactics, 0) + Math.random() * 2;
+        const defenderPower = city.garrison + defenders.reduce((s, d) => s + d.military / 10, 0) + Math.random() * 2;
+        const besiegerPower = besiegers.reduce((s, b) => s + b.military / 10 + getSkills(b).tactics / 20, 0) + Math.random() * 2;
         if (defenderPower > besiegerPower) {
           // Sally succeeds: siege broken, garrison loses 1
           await this.repo.updatePlace(city.id, {
@@ -3013,7 +3014,7 @@ export class SimulationService {
       // Commerce skill bonus: best commerce character in city adds +10% per level
       const charsHere = characters.filter((c) => c.cityId === city.id);
       const bestCommerce = Math.max(0, ...charsHere.map((c) => getSkills(c).commerce));
-      multiplier += bestCommerce * 0.1;
+      multiplier += bestCommerce * 0.005;
       // Governor role bonus: +20% income
       multiplier += this.roleGoldBonus(charsHere);
       // Commerce district bonus
@@ -3096,7 +3097,7 @@ export class SimulationService {
       if (city.path === "fortress") garrisonPower = Math.round(garrisonPower * 1.2);
       let defensePower = garrisonPower + tierBonus + seasonDefBonus + Math.random() * 2;
       for (const d of defenders) {
-        defensePower += d.military + d.intelligence * 0.5 + getSkills(d).tactics * 0.5 + Math.random() * 2;
+        defensePower += d.military / 10 + d.intelligence / 10 * 0.5 + getSkills(d).tactics / 20 * 0.5 + Math.random() * 2;
       }
 
       // Each attacking faction battles independently
@@ -3121,7 +3122,7 @@ export class SimulationService {
           this.pendingTactics.delete(id);
           const c = await this.repo.getCharacter(id);
           if (c) {
-            const base = c.military + c.intelligence * 0.5 + getSkills(c).tactics * 0.5 + Math.random() * 2;
+            const base = c.military / 10 + c.intelligence / 10 * 0.5 + getSkills(c).tactics / 20 * 0.5 + Math.random() * 2;
             attackPower += base * (1 + this.roleAttackBonus(c));
             attackChars.push(c);
           }
@@ -3135,7 +3136,7 @@ export class SimulationService {
         let worstExcess = 0;
         for (const c of attackChars) {
           const carried = troopsPerAttacker.get(c.id) ?? 0;
-          const softCap = Math.min(troopHardCap, troopSoftCapBase + getSkills(c).leadership);
+          const softCap = Math.min(troopHardCap, troopSoftCapBase + Math.floor(getSkills(c).leadership / 20));
           if (carried > softCap) {
             worstExcess = Math.max(worstExcess, carried - softCap);
           }
@@ -3187,10 +3188,10 @@ export class SimulationService {
           });
           // Set low loyalty for captured city
           this.setCapturedCityLoyalty(city.id);
-          // Growth: winner's military +1 (cap 10)
+          // Growth: winner's military +5 (cap 100)
           for (const ac of attackChars) {
-            if (ac.military < 10) {
-              await this.repo.createCharacter({ ...ac, military: ac.military + 1, skills: gainSkill(ac, "tactics") });
+            if (ac.military < 100) {
+              await this.repo.createCharacter({ ...ac, military: Math.min(100, ac.military + 5), skills: gainSkill(ac, "tactics") });
             }
           }
         } else {
@@ -3213,21 +3214,21 @@ export class SimulationService {
         const defMil = defenders.length > 0 ? Math.max(...defenders.map((c) => c.military)) : 0;
         rounds.push({
           phase: "先鋒衝鋒",
-          attackerDelta: Math.round(leadMil * 0.3 * 10) / 10,
-          defenderDelta: Math.round(defMil * 0.2 * 10) / 10,
+          attackerDelta: Math.round(leadMil / 10 * 0.3 * 10) / 10,
+          defenderDelta: Math.round(defMil / 10 * 0.2 * 10) / 10,
           note: leadAttacker ? `${leadAttacker.name} 率先衝鋒` : undefined,
         });
         rounds.push({
           phase: "戰術對決",
-          attackerDelta: Math.round(leadTac * 0.5 * 10) / 10,
+          attackerDelta: Math.round(leadTac / 20 * 0.5 * 10) / 10,
           defenderDelta: Math.round(garrisonPower * 0.3 * 10) / 10,
           note: leadTactic !== "balanced" ? `${leadTactic === "aggressive" ? "猛攻" : "堅守"}陣型` : undefined,
         });
         rounds.push({
           phase: "智謀交鋒",
-          attackerDelta: Math.round(leadInt * 0.2 * 10) / 10,
-          defenderDelta: Math.round((defenders[0]?.intelligence ?? 0) * 0.2 * 10) / 10,
-          note: leadInt >= 4 ? `${attackChars.find((c) => c.intelligence === leadInt)?.name ?? ""}妙計退敵` : undefined,
+          attackerDelta: Math.round(leadInt / 10 * 0.2 * 10) / 10,
+          defenderDelta: Math.round((defenders[0]?.intelligence ?? 0) / 10 * 0.2 * 10) / 10,
+          note: leadInt >= 40 ? `${attackChars.find((c) => c.intelligence === leadInt)?.name ?? ""}妙計退敵` : undefined,
         });
 
         results.push({
@@ -3434,7 +3435,7 @@ export class SimulationService {
         const intimacy = rel?.intimacy ?? 30;
 
         // Base recruitment chance: 15% + intimacy/300 + charm bonus
-        let chance = 0.15 + intimacy / 300 + attacker.charm * 0.03;
+        let chance = 0.15 + intimacy / 300 + attacker.charm * 0.003;
 
         // Trait modifiers
         if (captured.traits.includes("loyal")) chance -= 0.2;
@@ -3452,9 +3453,9 @@ export class SimulationService {
           if (newFaction) {
             newFaction.members.push(captured.id);
           }
-          // Growth: recruiter's charm +1 (cap 10)
-          if (attacker.charm < 7) {
-            await this.repo.createCharacter({ ...attacker, charm: attacker.charm + 1, skills: gainSkill(attacker, "leadership") });
+          // Growth: recruiter's charm +5 (cap 70)
+          if (attacker.charm < 70) {
+            await this.repo.createCharacter({ ...attacker, charm: Math.min(70, attacker.charm + 5), skills: gainSkill(attacker, "leadership") });
           }
         }
 
@@ -3809,15 +3810,15 @@ export class SimulationService {
   }
 
   // ── Hero Hall: all characters with achievements/prestige (living + dead) ──
-  async getHeroHall(): Promise<{ id: string; name: string; alive: boolean; factionId: string | null; prestige: number; achievements: string[]; legacy: boolean }[]> {
+  async getHeroHall(): Promise<{ id: string; name: string; avatarUrl?: string; alive: boolean; factionId: string | null; prestige: number; achievements: string[]; legacy: boolean }[]> {
     const characters = await this.repo.getAllCharacters();
-    const heroes: { id: string; name: string; alive: boolean; factionId: string | null; prestige: number; achievements: string[]; legacy: boolean }[] = [];
+    const heroes: { id: string; name: string; avatarUrl?: string; alive: boolean; factionId: string | null; prestige: number; achievements: string[]; legacy: boolean }[] = [];
     // Living characters with any prestige or achievements
     for (const c of characters) {
       const prestige = this.getPrestige(c.id);
       const achievements = this.getAchievements(c.id);
       if (prestige > 0 || achievements.length > 0) {
-        heroes.push({ id: c.id, name: c.name, alive: !this.deadCharacters.has(c.id), factionId: this.getFactionOf(c.id), prestige, achievements, legacy: false });
+        heroes.push({ id: c.id, name: c.name, avatarUrl: c.avatarUrl, alive: !this.deadCharacters.has(c.id), factionId: this.getFactionOf(c.id), prestige, achievements, legacy: false });
       }
     }
     // Dead characters that contributed to legacy
@@ -3844,7 +3845,7 @@ export class SimulationService {
       score += city.garrison * 5;
       // Defender military
       const defenders = characters.filter((c) => c.cityId === city.id);
-      score += defenders.reduce((s, c) => s + c.military + c.intelligence * 0.3, 0);
+      score += defenders.reduce((s, c) => s + c.military / 10 + c.intelligence / 10 * 0.3, 0);
       // Tier bonus
       score += city.tier === "major" ? 10 : 3;
       // Forge specialty
@@ -3911,10 +3912,10 @@ export class SimulationService {
     let totalDef = 0;
     for (let i = 0; i < 100; i++) {
       let atkPower = Math.random() * 2;
-      for (const c of attackChars) atkPower += c.military + c.intelligence * 0.5 + Math.random() * 2;
+      for (const c of attackChars) atkPower += c.military / 10 + c.intelligence / 10 * 0.5 + Math.random() * 2;
 
       let defPower = city.garrison + tierBonus + Math.random() * 2;
-      for (const d of defenders) defPower += d.military + d.intelligence * 0.5 + Math.random() * 2;
+      for (const d of defenders) defPower += d.military / 10 + d.intelligence / 10 * 0.5 + Math.random() * 2;
 
       if (atkPower > defPower) wins++;
       totalAtk += atkPower;
