@@ -241,7 +241,7 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
         cellFactions.push(liveCities[i].controllerId ?? null);
       }
 
-      // Second pass: draw territory polygons
+      // Second pass: draw territory fills (no border — EU4 style solid color blocks)
       for (let i = 0; i < liveCities.length; i++) {
         const clipped = clippedPolygons[i];
         if (!clipped) continue;
@@ -249,51 +249,61 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
         const controllerId = cellFactions[i];
         const territoryColor = controllerId
           ? FACTION_TERRITORY_COLORS[controllerId] ?? factionColors?.get(controllerId) ?? "transparent"
-          : theme.textMuted; // neutral territory gets subtle gray
+          : theme.textMuted;
 
         const isNeutral = !controllerId;
         if (!isNeutral && territoryColor === "transparent") continue;
 
-        const polygon = L.polygon(clipped as L.LatLngExpression[], {
-          color: isNeutral ? "transparent" : theme.bg1,
+        L.polygon(clipped as L.LatLngExpression[], {
+          color: "transparent",
           fillColor: territoryColor,
-          fillOpacity: isNeutral ? 0.15 : 0.65,
-          weight: isNeutral ? 0 : 2,
-          opacity: isNeutral ? 0 : 0.8,
-        });
-        polygon.addTo(layers);
+          fillOpacity: isNeutral ? 0.18 : 0.75,
+          weight: 0,
+        }).addTo(layers);
       }
 
-      // Third pass: draw faction border lines between different-faction territories
-      const drawnBorders = new Set<string>();
+      // Third pass: thin province borders within same faction
       for (let i = 0; i < liveCities.length; i++) {
-        for (const j of delaunay.neighbors(i)) {
-          const key = i < j ? `${i}-${j}` : `${j}-${i}`;
-          if (drawnBorders.has(key)) continue;
-          drawnBorders.add(key);
+        const clipped = clippedPolygons[i];
+        if (!clipped || !cellFactions[i]) continue;
 
-          if (cellFactions[i] === cellFactions[j]) continue;
+        L.polygon(clipped as L.LatLngExpression[], {
+          color: theme.bg1,
+          fillColor: "transparent",
+          fillOpacity: 0,
+          weight: 1,
+          opacity: 0.25,
+        }).addTo(layers);
+      }
 
-          const polyI = clippedPolygons[i];
-          const polyJ = clippedPolygons[j];
-          if (!polyI || !polyJ) continue;
+      // Fourth pass: thick faction borders via Delaunay half-edge → Voronoi circumcenters
+      const circumcenters = (voronoi as unknown as { circumcenters: Float64Array }).circumcenters;
+      const { halfedges, triangles } = delaunay;
 
-          // Find shared vertices between adjacent cells (in polyI order)
-          const sharedVertices: [number, number][] = [];
-          for (const vI of polyI) {
-            if (polyJ.some(vJ => Math.abs(vI[0] - vJ[0]) < 0.001 && Math.abs(vI[1] - vJ[1]) < 0.001)) {
-              sharedVertices.push(vI);
-            }
-          }
+      for (let e = 0; e < halfedges.length; e++) {
+        const opposite = halfedges[e];
+        if (opposite < e) continue; // skip duplicates & convex hull edges
 
-          if (sharedVertices.length >= 2) {
-            L.polyline(sharedVertices as L.LatLngExpression[], {
-              color: theme.bg1,
-              weight: 5,
-              opacity: 1,
-            }).addTo(layers);
-          }
-        }
+        // The two sites separated by this Voronoi edge
+        const siteA = triangles[e];
+        const nextE = e % 3 === 2 ? e - 2 : e + 1;
+        const siteB = triangles[nextE];
+
+        if (cellFactions[siteA] === cellFactions[siteB]) continue;
+
+        // Voronoi edge = circumcenter of triangle A → circumcenter of triangle B
+        const triA = Math.floor(e / 3);
+        const triB = Math.floor(opposite / 3);
+        const lat1 = circumcenters[triA * 2 + 1];
+        const lng1 = circumcenters[triA * 2];
+        const lat2 = circumcenters[triB * 2 + 1];
+        const lng2 = circumcenters[triB * 2];
+
+        L.polyline([[lat1, lng1], [lat2, lng2]] as L.LatLngExpression[], {
+          color: theme.textPrimary,
+          weight: 5,
+          opacity: 0.85,
+        }).addTo(layers);
       }
     }
 
