@@ -5,6 +5,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Delaunay } from "d3-delaunay";
 import { CHINA_OUTLINE } from "../data/china-outline";
+import { CITY_TO_REGION, STATE_REGIONS, REGION_BY_ID } from "../data/state-regions";
 import { theme, FACTION_TERRITORY_COLORS as THEME_TERRITORY_COLORS } from "../lib/theme";
 
 interface PlaceNode {
@@ -275,25 +276,72 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
         }).addTo(layers);
       }
 
-      // Fourth pass: thick nation borders via Delaunay half-edge → Voronoi circumcenters
+      // Shared: extract Delaunay circumcenters and half-edges for border passes
       const circumcenters = (voronoi as unknown as { circumcenters: Float64Array }).circumcenters;
       const { halfedges, triangles } = delaunay;
 
+      // Build city → region lookup for live cities
+      const cellRegions: (string | null)[] = liveCities.map((c) => CITY_TO_REGION[c.id] ?? null);
+
+      // 3.5 pass: state (zhou) border lines — dashed, between province and faction borders
       for (let e = 0; e < halfedges.length; e++) {
         const opposite = halfedges[e];
-        if (opposite < e) continue; // skip duplicates & convex hull edges
+        if (opposite < e) continue;
 
-        // The two sites separated by this Voronoi edge
         const siteA = triangles[e];
         const nextE = e % 3 === 2 ? e - 2 : e + 1;
         const siteB = triangles[nextE];
 
-        // Only draw border between two different factions (skip neutral boundaries)
+        const rA = cellRegions[siteA];
+        const rB = cellRegions[siteB];
+        if (!rA || !rB || rA === rB) continue;
+
+        const triA = Math.floor(e / 3);
+        const triB = Math.floor(opposite / 3);
+        const lat1 = circumcenters[triA * 2 + 1];
+        const lng1 = circumcenters[triA * 2];
+        const lat2 = circumcenters[triB * 2 + 1];
+        const lng2 = circumcenters[triB * 2];
+
+        L.polyline([[lat1, lng1], [lat2, lng2]] as L.LatLngExpression[], {
+          color: "#d4c4a0",
+          weight: 3,
+          opacity: 0.6,
+          dashArray: "8 4",
+        }).addTo(layers);
+      }
+
+      // 3.7 pass: state name labels (EU4-style large translucent text)
+      for (const region of STATE_REGIONS) {
+        // Only show label if at least one city in this region is alive on the map
+        const hasCity = region.cityIds.some((cid) => liveCities.some((c) => c.id === cid));
+        if (!hasCity) continue;
+
+        const labelMarker = L.marker([region.labelLat, region.labelLng], {
+          interactive: false,
+          icon: L.divIcon({
+            className: "state-region-label",
+            html: `<span style="font-size:16px;font-weight:700;color:${theme.textPrimary};opacity:0.35;letter-spacing:4px;white-space:nowrap;pointer-events:none;text-shadow:0 0 6px rgba(0,0,0,0.5)">${region.name}</span>`,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+          }),
+        });
+        labelMarker.addTo(layers);
+      }
+
+      // Fourth pass: thick nation borders via Delaunay half-edge → Voronoi circumcenters
+      for (let e = 0; e < halfedges.length; e++) {
+        const opposite = halfedges[e];
+        if (opposite < e) continue;
+
+        const siteA = triangles[e];
+        const nextE = e % 3 === 2 ? e - 2 : e + 1;
+        const siteB = triangles[nextE];
+
         const fA = cellFactions[siteA];
         const fB = cellFactions[siteB];
         if (fA === fB || !fA || !fB) continue;
 
-        // Voronoi edge = circumcenter of triangle A → circumcenter of triangle B
         const triA = Math.floor(e / 3);
         const triB = Math.floor(opposite / 3);
         const lat1 = circumcenters[triA * 2 + 1];
@@ -414,8 +462,11 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
       const siegeInfo = city.siegedBy ? `<br/><span style="color:${theme.danger}">⚔ 被圍城中</span>` : "";
       const supplyInfo = supplyStatus && city.controllerId && supplyStatus[city.id] === false ? `<br/><span style="color:${theme.warning}">⚠ 補給中斷</span>` : "";
       const droughtInfo = droughtCities?.includes(city.id) ? `<br/><span style="color:#8b6b3a">☀ 旱災</span>` : "";
+      const regionId = CITY_TO_REGION[city.id];
+      const regionInfo = regionId ? REGION_BY_ID[regionId] : null;
+      const regionLine = regionInfo ? `<br/><span style="color:${theme.textSecondary};font-size:11px">${regionInfo.name}</span>` : "";
       const tooltipContent = `<div style="font-size:13px">
-        <strong><span style="color:${theme.accent}">#${city.provinceId}</span> ${city.name}</strong><br/>
+        <strong><span style="color:${theme.accent}">#${city.provinceId}</span> ${city.name}</strong>${regionLine}<br/>
         <span style="color:${color}">${statusLabel(city.status)}</span>${siegeInfo}${supplyInfo}${droughtInfo}
         ${charNames ? `<br/><span style="color:#fbbf24">${charNames}</span>` : ""}
       </div>`;

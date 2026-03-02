@@ -6,6 +6,7 @@ import { trpc } from "../lib/trpc";
 import { theme } from "../lib/theme";
 import { Timeline, type TimelineMarker } from "./Timeline";
 import { CharacterDetail } from "./CharacterDetail";
+import { CITY_TO_REGION, REGION_BY_ID } from "../data/state-regions";
 
 const StrategicMap = dynamic(
   () => import("./StrategicMap").then((m) => ({ default: m.StrategicMap })),
@@ -516,6 +517,16 @@ export function MapPage({
                 <span style={styles.infoLabel}>等級</span>
                 <span>{selectedCity.tier === "major" ? "主城" : "支城"}</span>
               </div>
+              {(() => {
+                const regionId = CITY_TO_REGION[selectedCity.id];
+                const region = regionId ? REGION_BY_ID[regionId] : null;
+                return region ? (
+                  <div style={styles.infoRow}>
+                    <span style={styles.infoLabel}>州</span>
+                    <span>{region.name}</span>
+                  </div>
+                ) : null;
+              })()}
               <div style={styles.infoRow}>
                 <span style={styles.infoLabel}>控制者</span>
                 <span>{controllerName(selectedCity.controllerId)}</span>
