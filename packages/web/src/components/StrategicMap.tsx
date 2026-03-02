@@ -255,11 +255,11 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
         if (!isNeutral && territoryColor === "transparent") continue;
 
         const polygon = L.polygon(clipped as L.LatLngExpression[], {
-          color: territoryColor,
+          color: isNeutral ? "transparent" : theme.bg1,
           fillColor: territoryColor,
-          fillOpacity: isNeutral ? 0.12 : 0.35,
+          fillOpacity: isNeutral ? 0.15 : 0.65,
           weight: isNeutral ? 0 : 2,
-          opacity: isNeutral ? 0 : 0.6,
+          opacity: isNeutral ? 0 : 0.8,
         });
         polygon.addTo(layers);
       }
@@ -288,10 +288,9 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
 
           if (sharedVertices.length >= 2) {
             L.polyline(sharedVertices as L.LatLngExpression[], {
-              color: theme.textMuted,
-              weight: 3,
-              opacity: 0.7,
-              dashArray: "6 4",
+              color: theme.bg1,
+              weight: 5,
+              opacity: 1,
             }).addTo(layers);
           }
         }
