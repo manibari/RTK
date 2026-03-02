@@ -9,6 +9,7 @@ import { theme, FACTION_TERRITORY_COLORS as THEME_TERRITORY_COLORS } from "../li
 
 interface PlaceNode {
   id: string;
+  provinceId: number;
   name: string;
   description?: string;
   lat: number;
@@ -241,42 +242,40 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
         cellFactions.push(liveCities[i].controllerId ?? null);
       }
 
-      // Second pass: draw territory fills (no border — EU4 style solid color blocks)
+      // Second pass: draw territory fills — only for faction-controlled cities
       for (let i = 0; i < liveCities.length; i++) {
         const clipped = clippedPolygons[i];
         if (!clipped) continue;
 
         const controllerId = cellFactions[i];
-        const territoryColor = controllerId
-          ? FACTION_TERRITORY_COLORS[controllerId] ?? factionColors?.get(controllerId) ?? "transparent"
-          : theme.textMuted;
+        if (!controllerId) continue; // uncontrolled cities stay blank
 
-        const isNeutral = !controllerId;
-        if (!isNeutral && territoryColor === "transparent") continue;
+        const territoryColor = FACTION_TERRITORY_COLORS[controllerId] ?? factionColors?.get(controllerId);
+        if (!territoryColor) continue;
 
         L.polygon(clipped as L.LatLngExpression[], {
           color: "transparent",
           fillColor: territoryColor,
-          fillOpacity: isNeutral ? 0.18 : 0.75,
+          fillOpacity: 0.75,
           weight: 0,
         }).addTo(layers);
       }
 
-      // Third pass: thin province borders within same faction
+      // Third pass: draw ALL province borders (every cell, controlled or not)
       for (let i = 0; i < liveCities.length; i++) {
         const clipped = clippedPolygons[i];
-        if (!clipped || !cellFactions[i]) continue;
+        if (!clipped) continue;
 
         L.polygon(clipped as L.LatLngExpression[], {
-          color: theme.bg1,
+          color: theme.textSecondary,
           fillColor: "transparent",
           fillOpacity: 0,
-          weight: 1,
-          opacity: 0.25,
+          weight: 2,
+          opacity: 0.7,
         }).addTo(layers);
       }
 
-      // Fourth pass: thick faction borders via Delaunay half-edge → Voronoi circumcenters
+      // Fourth pass: thick nation borders via Delaunay half-edge → Voronoi circumcenters
       const circumcenters = (voronoi as unknown as { circumcenters: Float64Array }).circumcenters;
       const { halfedges, triangles } = delaunay;
 
@@ -289,7 +288,10 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
         const nextE = e % 3 === 2 ? e - 2 : e + 1;
         const siteB = triangles[nextE];
 
-        if (cellFactions[siteA] === cellFactions[siteB]) continue;
+        // Only draw border between two different factions (skip neutral boundaries)
+        const fA = cellFactions[siteA];
+        const fB = cellFactions[siteB];
+        if (fA === fB || !fA || !fB) continue;
 
         // Voronoi edge = circumcenter of triangle A → circumcenter of triangle B
         const triA = Math.floor(e / 3);
@@ -301,8 +303,8 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
 
         L.polyline([[lat1, lng1], [lat2, lng2]] as L.LatLngExpression[], {
           color: theme.textPrimary,
-          weight: 5,
-          opacity: 0.85,
+          weight: 4,
+          opacity: 0.9,
         }).addTo(layers);
       }
     }
@@ -413,7 +415,7 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
       const supplyInfo = supplyStatus && city.controllerId && supplyStatus[city.id] === false ? `<br/><span style="color:${theme.warning}">⚠ 補給中斷</span>` : "";
       const droughtInfo = droughtCities?.includes(city.id) ? `<br/><span style="color:#8b6b3a">☀ 旱災</span>` : "";
       const tooltipContent = `<div style="font-size:13px">
-        <strong>${city.name}</strong><br/>
+        <strong><span style="color:${theme.accent}">#${city.provinceId}</span> ${city.name}</strong><br/>
         <span style="color:${color}">${statusLabel(city.status)}</span>${siegeInfo}${supplyInfo}${droughtInfo}
         ${charNames ? `<br/><span style="color:#fbbf24">${charNames}</span>` : ""}
       </div>`;
@@ -473,11 +475,11 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
         droughtRing.addTo(layers);
       }
 
-      // City name label
+      // City name label with province number
       const label = L.marker([city.lat, city.lng], {
         icon: L.divIcon({
           className: "city-label",
-          html: `<span style="color:${color};font-size:${city.tier === "major" ? 12 : 10}px;font-weight:${city.tier === "major" ? 700 : 400};text-shadow:0 0 4px #000,0 0 4px #000">${city.name}</span>`,
+          html: `<span style="color:${color};font-size:${city.tier === "major" ? 12 : 10}px;font-weight:${city.tier === "major" ? 700 : 400};text-shadow:0 0 4px #000,0 0 4px #000"><span style="color:${theme.accent};font-size:${city.tier === "major" ? 10 : 8}px">${city.provinceId}.</span>${city.name}</span>`,
           iconSize: [0, 0],
           iconAnchor: [0, -(radius + 6)],
         }),

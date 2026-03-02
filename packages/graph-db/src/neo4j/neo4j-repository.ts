@@ -162,7 +162,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const record = result.records[0];
       if (!record) return null;
       const props = record.get("p").properties;
-      return { id: props.id, name: props.name, lat: props.lat, lng: props.lng,
+      return { id: props.id, provinceId: props.provinceId ?? 0, name: props.name, lat: props.lat, lng: props.lng,
         status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined,
         gold: props.gold ?? 0, garrison: props.garrison ?? 0, development: props.development ?? 0,
         siegedBy: props.siegedBy ?? undefined, siegeTick: props.siegeTick ?? undefined,
@@ -178,7 +178,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const result = await session.run(`MATCH (p:Place) RETURN p`);
       return result.records.map((r) => {
         const props = r.get("p").properties;
-        return { id: props.id, name: props.name, lat: props.lat, lng: props.lng,
+        return { id: props.id, provinceId: props.provinceId ?? 0, name: props.name, lat: props.lat, lng: props.lng,
           status: props.status, tier: props.tier, controllerId: props.controllerId ?? undefined,
           gold: props.gold ?? 0, garrison: props.garrison ?? 0, development: props.development ?? 0,
           siegedBy: props.siegedBy ?? undefined, siegeTick: props.siegeTick ?? undefined,

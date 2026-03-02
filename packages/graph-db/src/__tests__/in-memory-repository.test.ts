@@ -79,7 +79,7 @@ describe("InMemoryGraphRepository", () => {
   describe("places", () => {
     it("creates and retrieves a place", async () => {
       const place: PlaceNode = {
-        id: "city1", name: "City", lat: 25, lng: 121,
+        id: "city1", provinceId: 1, name: "City", lat: 25, lng: 121,
         status: "allied", tier: "major", controllerId: "a", gold: 0, garrison: 2, development: 0,
       };
       await repo.createPlace(place);
@@ -88,14 +88,14 @@ describe("InMemoryGraphRepository", () => {
     });
 
     it("lists all places", async () => {
-      await repo.createPlace({ id: "c1", name: "C1", lat: 25, lng: 121, status: "allied", tier: "major", gold: 0, garrison: 2, development: 0 });
-      await repo.createPlace({ id: "c2", name: "C2", lat: 24, lng: 120, status: "hostile", tier: "minor", gold: 0, garrison: 1, development: 0 });
+      await repo.createPlace({ id: "c1", provinceId: 1, name: "C1", lat: 25, lng: 121, status: "allied", tier: "major", gold: 0, garrison: 2, development: 0 });
+      await repo.createPlace({ id: "c2", provinceId: 2, name: "C2", lat: 24, lng: 120, status: "hostile", tier: "minor", gold: 0, garrison: 1, development: 0 });
       const all = await repo.getAllPlaces();
       expect(all).toHaveLength(2);
     });
 
     it("updates a place", async () => {
-      await repo.createPlace({ id: "c1", name: "C1", lat: 25, lng: 121, status: "neutral", tier: "major", gold: 0, garrison: 0, development: 0 });
+      await repo.createPlace({ id: "c1", provinceId: 1, name: "C1", lat: 25, lng: 121, status: "neutral", tier: "major", gold: 0, garrison: 0, development: 0 });
       await repo.updatePlace("c1", { status: "hostile", controllerId: "enemy" });
       const updated = await repo.getPlace("c1");
       expect(updated!.status).toBe("hostile");
@@ -120,7 +120,7 @@ describe("InMemoryGraphRepository", () => {
 
   describe("map data", () => {
     it("returns combined map data", async () => {
-      await repo.createPlace({ id: "c1", name: "C1", lat: 25, lng: 121, status: "allied", tier: "major", gold: 0, garrison: 0, development: 0 });
+      await repo.createPlace({ id: "c1", provinceId: 1, name: "C1", lat: 25, lng: 121, status: "allied", tier: "major", gold: 0, garrison: 0, development: 0 });
       await repo.createCharacter({ id: "a", name: "A", traits: [], cityId: "c1", military: 0, intelligence: 0, charm: 0 });
       await repo.addMovement({
         characterId: "a", originCityId: "c1", destinationCityId: "c2",

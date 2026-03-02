@@ -60,6 +60,7 @@ export type CityPath = "fortress" | "trade_hub" | "cultural" | "breadbasket";
 
 export interface PlaceNode {
   id: string;
+  provinceId: number; // EU4-style numeric province ID (1-based)
   name: string;
   description?: string;
   lat: number;

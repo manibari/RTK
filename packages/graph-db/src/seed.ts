@@ -67,60 +67,60 @@ const characters: CharacterNode[] = [
 ];
 
 const cities: PlaceNode[] = [
-  // === Major cities (faction capitals) ===
-  { id: "chengdu", name: "成都", description: "天府之國，蜀地核心", lat: 30.57, lng: 104.07, status: "allied", tier: "major", controllerId: "liu_bei", gold: 200, garrison: 5, development: 0, specialty: "military_academy", food: 120 },
-  { id: "luoyang", name: "洛陽", description: "千年帝都，中原之心", lat: 34.62, lng: 112.45, status: "hostile", tier: "major", controllerId: "cao_cao", gold: 300, garrison: 6, development: 0, specialty: "forge", food: 100 },
-  { id: "jianye", name: "南京", description: "六朝古都，江南門戶", lat: 32.06, lng: 118.80, status: "neutral", tier: "major", controllerId: "sun_quan", gold: 250, garrison: 4, development: 0, specialty: "harbor", food: 110 },
-  { id: "xiapi", name: "徐州", description: "兵家必爭，五省通衢", lat: 34.32, lng: 117.95, status: "hostile", tier: "major", controllerId: "lu_bu", gold: 150, garrison: 3, development: 0, specialty: "market", food: 80 },
-  { id: "changan", name: "西安", description: "十三朝古都", lat: 34.26, lng: 108.94, status: "hostile", tier: "major", controllerId: "cao_cao", gold: 250, garrison: 5, development: 0, specialty: "market", food: 100 },
-  { id: "xiangyang", name: "襄陽", description: "荊楚屏障，南北要衝", lat: 32.01, lng: 112.14, status: "neutral", tier: "major", controllerId: "liu_biao", gold: 100, garrison: 3, development: 0, specialty: "library", food: 90 },
+  // === Major cities (faction capitals) — provinceId 1-6 ===
+  { id: "chengdu", provinceId: 1, name: "成都", description: "天府之國，蜀地核心", lat: 30.57, lng: 104.07, status: "allied", tier: "major", controllerId: "liu_bei", gold: 200, garrison: 5, development: 0, specialty: "military_academy", food: 120 },
+  { id: "luoyang", provinceId: 2, name: "洛陽", description: "千年帝都，中原之心", lat: 34.62, lng: 112.45, status: "hostile", tier: "major", controllerId: "cao_cao", gold: 300, garrison: 6, development: 0, specialty: "forge", food: 100 },
+  { id: "jianye", provinceId: 3, name: "南京", description: "六朝古都，江南門戶", lat: 32.06, lng: 118.80, status: "neutral", tier: "major", controllerId: "sun_quan", gold: 250, garrison: 4, development: 0, specialty: "harbor", food: 110 },
+  { id: "xiapi", provinceId: 4, name: "徐州", description: "兵家必爭，五省通衢", lat: 34.32, lng: 117.95, status: "hostile", tier: "major", controllerId: "lu_bu", gold: 150, garrison: 3, development: 0, specialty: "market", food: 80 },
+  { id: "changan", provinceId: 5, name: "西安", description: "十三朝古都", lat: 34.26, lng: 108.94, status: "hostile", tier: "major", controllerId: "cao_cao", gold: 250, garrison: 5, development: 0, specialty: "market", food: 100 },
+  { id: "xiangyang", provinceId: 6, name: "襄陽", description: "荊楚屏障，南北要衝", lat: 32.01, lng: 112.14, status: "neutral", tier: "major", controllerId: "liu_biao", gold: 100, garrison: 3, development: 0, specialty: "library", food: 90 },
 
-  // === Minor cities ===
+  // === Minor cities — provinceId 7-44 ===
   // Shu-controlled
-  { id: "hanzhong", name: "漢中", description: "蜀道咽喉，北伐前線", lat: 33.07, lng: 107.03, status: "allied", tier: "minor", controllerId: "liu_bei", gold: 80, garrison: 3, development: 0, specialty: "granary", food: 80 },
-  { id: "xinye", name: "新野", description: "三顧茅廬之地", lat: 32.52, lng: 112.36, status: "allied", tier: "minor", controllerId: "liu_bei", gold: 50, garrison: 2, development: 0, specialty: "library", food: 50 },
-  { id: "jiameng", name: "廣元", description: "蜀北門戶，劍門天險", lat: 32.43, lng: 105.82, status: "allied", tier: "minor", controllerId: "liu_bei", gold: 60, garrison: 2, development: 0, specialty: "granary", food: 70 },
-  { id: "jiangzhou", name: "重慶", description: "巴蜀要地，長江上游", lat: 29.56, lng: 106.55, status: "allied", tier: "minor", controllerId: "liu_bei", gold: 80, garrison: 2, development: 0, specialty: "granary", food: 70 },
+  { id: "hanzhong", provinceId: 7, name: "漢中", description: "蜀道咽喉，北伐前線", lat: 33.07, lng: 107.03, status: "allied", tier: "minor", controllerId: "liu_bei", gold: 80, garrison: 3, development: 0, specialty: "granary", food: 80 },
+  { id: "xinye", provinceId: 8, name: "新野", description: "三顧茅廬之地", lat: 32.52, lng: 112.36, status: "allied", tier: "minor", controllerId: "liu_bei", gold: 50, garrison: 2, development: 0, specialty: "library", food: 50 },
+  { id: "jiameng", provinceId: 9, name: "廣元", description: "蜀北門戶，劍門天險", lat: 32.43, lng: 105.82, status: "allied", tier: "minor", controllerId: "liu_bei", gold: 60, garrison: 2, development: 0, specialty: "granary", food: 70 },
+  { id: "jiangzhou", provinceId: 10, name: "重慶", description: "巴蜀要地，長江上游", lat: 29.56, lng: 106.55, status: "allied", tier: "minor", controllerId: "liu_bei", gold: 80, garrison: 2, development: 0, specialty: "granary", food: 70 },
 
   // Wei-controlled
-  { id: "xuchang", name: "許昌", description: "魏都舊址，中原重鎮", lat: 34.02, lng: 113.85, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 100, garrison: 3, development: 0, specialty: "forge", food: 60 },
-  { id: "ye", name: "邯鄲", description: "河北重鎮，袁紹根基", lat: 36.33, lng: 114.48, status: "hostile", tier: "minor", controllerId: "yuan_shao", gold: 80, garrison: 3, development: 0, specialty: "military_academy", food: 60 },
-  { id: "hefei", name: "合肥", description: "淮南要塞，吳魏必爭", lat: 31.82, lng: 117.23, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 60, garrison: 4, development: 0, specialty: "military_academy", food: 50 },
-  { id: "puyang", name: "濮陽", description: "中原糧倉，黃河要地", lat: 35.76, lng: 115.03, status: "hostile", tier: "minor", controllerId: "yuan_shao", gold: 70, garrison: 2, development: 0, specialty: "granary", food: 80 },
-  { id: "chenliu", name: "開封", description: "中原腹地，七朝古都", lat: 34.80, lng: 114.31, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 100, garrison: 2, development: 0, specialty: "market", food: 60 },
+  { id: "xuchang", provinceId: 11, name: "許昌", description: "魏都舊址，中原重鎮", lat: 34.02, lng: 113.85, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 100, garrison: 3, development: 0, specialty: "forge", food: 60 },
+  { id: "ye", provinceId: 12, name: "邯鄲", description: "河北重鎮，袁紹根基", lat: 36.33, lng: 114.48, status: "hostile", tier: "minor", controllerId: "yuan_shao", gold: 80, garrison: 3, development: 0, specialty: "military_academy", food: 60 },
+  { id: "hefei", provinceId: 13, name: "合肥", description: "淮南要塞，吳魏必爭", lat: 31.82, lng: 117.23, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 60, garrison: 4, development: 0, specialty: "military_academy", food: 50 },
+  { id: "puyang", provinceId: 14, name: "濮陽", description: "中原糧倉，黃河要地", lat: 35.76, lng: 115.03, status: "hostile", tier: "minor", controllerId: "yuan_shao", gold: 70, garrison: 2, development: 0, specialty: "granary", food: 80 },
+  { id: "chenliu", provinceId: 15, name: "開封", description: "中原腹地，七朝古都", lat: 34.80, lng: 114.31, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 100, garrison: 2, development: 0, specialty: "market", food: 60 },
 
   // Wu-controlled
-  { id: "jiangxia", name: "武漢", description: "九省通衢，長江樞紐", lat: 30.55, lng: 114.34, status: "neutral", tier: "minor", controllerId: "sun_quan", gold: 80, garrison: 2, development: 0, specialty: "harbor", food: 60 },
-  { id: "kuaiji", name: "紹興", description: "越地名城，東南水鄉", lat: 30.00, lng: 120.58, status: "neutral", tier: "minor", controllerId: "sun_quan", gold: 60, garrison: 2, development: 0, specialty: "harbor", food: 50 },
+  { id: "jiangxia", provinceId: 16, name: "武漢", description: "九省通衢，長江樞紐", lat: 30.55, lng: 114.34, status: "neutral", tier: "minor", controllerId: "sun_quan", gold: 80, garrison: 2, development: 0, specialty: "harbor", food: 60 },
+  { id: "kuaiji", provinceId: 17, name: "紹興", description: "越地名城，東南水鄉", lat: 30.00, lng: 120.58, status: "neutral", tier: "minor", controllerId: "sun_quan", gold: 60, garrison: 2, development: 0, specialty: "harbor", food: 50 },
 
   // Neutral / contested
-  { id: "changsha", name: "長沙", description: "湘楚要地，魚米之鄉", lat: 28.23, lng: 112.94, status: "neutral", tier: "minor", controllerId: "liu_biao", gold: 40, garrison: 2, development: 0, specialty: "market", food: 60 },
-  { id: "jingzhou", name: "荊州", description: "荊楚重鎮，兵家必爭", lat: 30.35, lng: 112.19, status: "neutral", tier: "minor", controllerId: "liu_biao", gold: 30, garrison: 2, development: 0, specialty: "granary", food: 60 },
-  { id: "tianshui", name: "天水", description: "隴右要地，伏羲故里", lat: 34.58, lng: 105.72, status: "neutral", tier: "minor", controllerId: "ma_chao", gold: 20, garrison: 2, development: 0, specialty: "forge", food: 50 },
-  { id: "nanman", name: "昆明", description: "西南邊陲，南中蠻地", lat: 25.04, lng: 102.71, status: "dead", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 40 },
-  { id: "beihai", name: "濰坊", description: "齊魯之地，東海通道", lat: 36.70, lng: 118.97, status: "neutral", tier: "minor", controllerId: "gongsun_zan", gold: 30, garrison: 2, development: 0, specialty: "harbor", food: 50 },
-  { id: "wan", name: "南陽", description: "南陽盆地，兵家重鎮", lat: 32.99, lng: 112.53, status: "neutral", tier: "minor", gold: 40, garrison: 0, development: 0, specialty: "forge", food: 55 },
-  { id: "nanhai", name: "廣州", description: "嶺南重鎮，海上絲路", lat: 23.13, lng: 113.26, status: "neutral", tier: "minor", gold: 50, garrison: 0, development: 0, specialty: "market", food: 45 },
-  { id: "pingyuan", name: "德州", description: "華北平原，黃河之畔", lat: 37.43, lng: 116.36, status: "neutral", tier: "minor", controllerId: "yuan_shao", gold: 20, garrison: 2, development: 0, specialty: "granary", food: 55 },
-  { id: "wuling", name: "常德", description: "洞庭西岸，武陵故地", lat: 29.03, lng: 111.69, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "library", food: 50 },
-  { id: "lingling", name: "永州", description: "瀟湘之源，零陵故地", lat: 26.42, lng: 111.61, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 50 },
-  { id: "lujiang", name: "廬江", description: "皖南水鄉，廬江舊郡", lat: 31.26, lng: 117.29, status: "neutral", tier: "minor", gold: 20, garrison: 0, development: 0, specialty: "library", food: 50 },
-  { id: "shangyong", name: "十堰", description: "上庸故地，秦楚咽喉", lat: 32.63, lng: 110.80, status: "neutral", tier: "minor", gold: 15, garrison: 0, development: 0, specialty: "forge", food: 45 },
-  { id: "nanchang", name: "南昌", description: "豫章故郡，贛江要衝", lat: 28.68, lng: 115.86, status: "neutral", tier: "minor", gold: 30, garrison: 0, development: 0, specialty: "granary", food: 55 },
-  { id: "wuwei", name: "武威", description: "河西走廊，絲路咽喉", lat: 37.93, lng: 102.64, status: "neutral", tier: "minor", controllerId: "ma_chao", gold: 20, garrison: 2, development: 0, specialty: "forge", food: 40 },
-  { id: "ji", name: "北京", description: "幽燕重鎮，北方門戶", lat: 39.90, lng: 116.40, status: "neutral", tier: "minor", controllerId: "gongsun_zan", gold: 40, garrison: 2, development: 0, specialty: "military_academy", food: 50 },
-  { id: "jinyang", name: "太原", description: "晉陽故城，表裡山河", lat: 37.87, lng: 112.55, status: "neutral", tier: "minor", gold: 30, garrison: 0, development: 0, specialty: "forge", food: 50 },
-  { id: "liaodong", name: "遼陽", description: "遼東郡治，東北要塞", lat: 41.27, lng: 123.17, status: "neutral", tier: "minor", controllerId: "gongsun_zan", gold: 10, garrison: 2, development: 0, specialty: "military_academy", food: 40 },
+  { id: "changsha", provinceId: 18, name: "長沙", description: "湘楚要地，魚米之鄉", lat: 28.23, lng: 112.94, status: "neutral", tier: "minor", controllerId: "liu_biao", gold: 40, garrison: 2, development: 0, specialty: "market", food: 60 },
+  { id: "jingzhou", provinceId: 19, name: "荊州", description: "荊楚重鎮，兵家必爭", lat: 30.35, lng: 112.19, status: "neutral", tier: "minor", controllerId: "liu_biao", gold: 30, garrison: 2, development: 0, specialty: "granary", food: 60 },
+  { id: "tianshui", provinceId: 20, name: "天水", description: "隴右要地，伏羲故里", lat: 34.58, lng: 105.72, status: "neutral", tier: "minor", controllerId: "ma_chao", gold: 20, garrison: 2, development: 0, specialty: "forge", food: 50 },
+  { id: "nanman", provinceId: 21, name: "昆明", description: "西南邊陲，南中蠻地", lat: 25.04, lng: 102.71, status: "dead", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 40 },
+  { id: "beihai", provinceId: 22, name: "濰坊", description: "齊魯之地，東海通道", lat: 36.70, lng: 118.97, status: "neutral", tier: "minor", controllerId: "gongsun_zan", gold: 30, garrison: 2, development: 0, specialty: "harbor", food: 50 },
+  { id: "wan", provinceId: 23, name: "南陽", description: "南陽盆地，兵家重鎮", lat: 32.99, lng: 112.53, status: "neutral", tier: "minor", gold: 40, garrison: 0, development: 0, specialty: "forge", food: 55 },
+  { id: "nanhai", provinceId: 24, name: "廣州", description: "嶺南重鎮，海上絲路", lat: 23.13, lng: 113.26, status: "neutral", tier: "minor", gold: 50, garrison: 0, development: 0, specialty: "market", food: 45 },
+  { id: "pingyuan", provinceId: 25, name: "德州", description: "華北平原，黃河之畔", lat: 37.43, lng: 116.36, status: "neutral", tier: "minor", controllerId: "yuan_shao", gold: 20, garrison: 2, development: 0, specialty: "granary", food: 55 },
+  { id: "wuling", provinceId: 26, name: "常德", description: "洞庭西岸，武陵故地", lat: 29.03, lng: 111.69, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "library", food: 50 },
+  { id: "lingling", provinceId: 27, name: "永州", description: "瀟湘之源，零陵故地", lat: 26.42, lng: 111.61, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 50 },
+  { id: "lujiang", provinceId: 28, name: "廬江", description: "皖南水鄉，廬江舊郡", lat: 31.26, lng: 117.29, status: "neutral", tier: "minor", gold: 20, garrison: 0, development: 0, specialty: "library", food: 50 },
+  { id: "shangyong", provinceId: 29, name: "十堰", description: "上庸故地，秦楚咽喉", lat: 32.63, lng: 110.80, status: "neutral", tier: "minor", gold: 15, garrison: 0, development: 0, specialty: "forge", food: 45 },
+  { id: "nanchang", provinceId: 30, name: "南昌", description: "豫章故郡，贛江要衝", lat: 28.68, lng: 115.86, status: "neutral", tier: "minor", gold: 30, garrison: 0, development: 0, specialty: "granary", food: 55 },
+  { id: "wuwei", provinceId: 31, name: "武威", description: "河西走廊，絲路咽喉", lat: 37.93, lng: 102.64, status: "neutral", tier: "minor", controllerId: "ma_chao", gold: 20, garrison: 2, development: 0, specialty: "forge", food: 40 },
+  { id: "ji", provinceId: 32, name: "北京", description: "幽燕重鎮，北方門戶", lat: 39.90, lng: 116.40, status: "neutral", tier: "minor", controllerId: "gongsun_zan", gold: 40, garrison: 2, development: 0, specialty: "military_academy", food: 50 },
+  { id: "jinyang", provinceId: 33, name: "太原", description: "晉陽故城，表裡山河", lat: 37.87, lng: 112.55, status: "neutral", tier: "minor", gold: 30, garrison: 0, development: 0, specialty: "forge", food: 50 },
+  { id: "liaodong", provinceId: 34, name: "遼陽", description: "遼東郡治，東北要塞", lat: 41.27, lng: 123.17, status: "neutral", tier: "minor", controllerId: "gongsun_zan", gold: 10, garrison: 2, development: 0, specialty: "military_academy", food: 40 },
 
-  // === New cities (EU4 area coverage) ===
-  { id: "suzhou", name: "蘇州", description: "江南水鄉，魚米富庶", lat: 31.30, lng: 120.62, status: "neutral", tier: "minor", controllerId: "sun_quan", gold: 80, garrison: 0, development: 0, specialty: "market", food: 50 },
-  { id: "hangzhou", name: "杭州", description: "錢塘繁華，東南形勝", lat: 30.27, lng: 120.15, status: "neutral", tier: "minor", gold: 40, garrison: 0, development: 0, specialty: "market", food: 55 },
-  { id: "fuzhou", name: "福州", description: "閩都要地，海上門戶", lat: 26.07, lng: 119.30, status: "neutral", tier: "minor", gold: 30, garrison: 0, development: 0, specialty: "harbor", food: 45 },
-  { id: "jinan", name: "濟南", description: "齊魯首府，泉城名都", lat: 36.65, lng: 116.99, status: "neutral", tier: "minor", controllerId: "yuan_shao", gold: 35, garrison: 2, development: 0, specialty: "library", food: 55 },
-  { id: "nanning", name: "南寧", description: "嶺南西部，百越之地", lat: 22.82, lng: 108.37, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 45 },
-  { id: "guiyang_city", name: "貴陽", description: "黔中腹地，夜郎故地", lat: 26.65, lng: 106.63, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "forge", food: 40 },
-  { id: "zunyi", name: "遵義", description: "黔北門戶，蜀黔要道", lat: 27.73, lng: 106.93, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 45 },
-  { id: "yangzhou", name: "揚州", description: "淮左名都，運河樞紐", lat: 32.39, lng: 119.42, status: "neutral", tier: "minor", gold: 50, garrison: 0, development: 0, specialty: "market", food: 55 },
+  // === New cities (EU4 area coverage) — provinceId 35-42 ===
+  { id: "suzhou", provinceId: 35, name: "蘇州", description: "江南水鄉，魚米富庶", lat: 31.30, lng: 120.62, status: "neutral", tier: "minor", controllerId: "sun_quan", gold: 80, garrison: 0, development: 0, specialty: "market", food: 50 },
+  { id: "hangzhou", provinceId: 36, name: "杭州", description: "錢塘繁華，東南形勝", lat: 30.27, lng: 120.15, status: "neutral", tier: "minor", gold: 40, garrison: 0, development: 0, specialty: "market", food: 55 },
+  { id: "fuzhou", provinceId: 37, name: "福州", description: "閩都要地，海上門戶", lat: 26.07, lng: 119.30, status: "neutral", tier: "minor", gold: 30, garrison: 0, development: 0, specialty: "harbor", food: 45 },
+  { id: "jinan", provinceId: 38, name: "濟南", description: "齊魯首府，泉城名都", lat: 36.65, lng: 116.99, status: "neutral", tier: "minor", controllerId: "yuan_shao", gold: 35, garrison: 2, development: 0, specialty: "library", food: 55 },
+  { id: "nanning", provinceId: 39, name: "南寧", description: "嶺南西部，百越之地", lat: 22.82, lng: 108.37, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 45 },
+  { id: "guiyang_city", provinceId: 40, name: "貴陽", description: "黔中腹地，夜郎故地", lat: 26.65, lng: 106.63, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "forge", food: 40 },
+  { id: "zunyi", provinceId: 41, name: "遵義", description: "黔北門戶，蜀黔要道", lat: 27.73, lng: 106.93, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 45 },
+  { id: "yangzhou", provinceId: 42, name: "揚州", description: "淮左名都，運河樞紐", lat: 32.39, lng: 119.42, status: "neutral", tier: "minor", gold: 50, garrison: 0, development: 0, specialty: "market", food: 55 },
 ];
 
 const relationships: RelationshipEdge[] = [

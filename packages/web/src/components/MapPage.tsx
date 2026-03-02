@@ -25,6 +25,7 @@ interface UnitComposition {
 
 interface PlaceNode {
   id: string;
+  provinceId: number;
   name: string;
   description?: string;
   lat: number;

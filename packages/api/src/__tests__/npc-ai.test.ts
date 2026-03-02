@@ -12,6 +12,7 @@ import { buildAdjacencyMap } from "../roads.js";
 function makeCity(overrides: Partial<PlaceNode> & { id: string }): PlaceNode {
   return {
     name: overrides.id,
+    provinceId: 0,
     description: "",
     lat: 0,
     lng: 0,

@@ -1,5 +1,6 @@
 import { Engine } from "@rtk/simulation";
 import type { IGraphRepository, RelationshipEdge, CharacterGraph, CharacterNode, PlaceNode, SpyMission, SpyMissionType, CharacterSkills, CharacterRole, DistrictType, District, UnitType, UnitComposition, CityPath } from "@rtk/graph-db";
+import { seedCities } from "@rtk/graph-db";
 import type { IEventStore, StoredEvent } from "./event-store/types.js";
 import { NarrativeService } from "./narrative/narrative-service.js";
 import { evaluateNPCDecisions, evaluateNPCSpyDecisions } from "./ai/npc-ai.js";
@@ -4193,8 +4194,12 @@ export class SimulationService {
       await this.repo.createCharacter(c);
     }
 
-    // Restore places
+    // Restore places (backward-compatible: default provinceId from seed data)
     for (const p of data.places) {
+      if (p.provinceId == null) {
+        const seedCity = seedCities.find((c: PlaceNode) => c.id === p.id);
+        p.provinceId = seedCity?.provinceId ?? 0;
+      }
       await this.repo.createPlace(p);
     }
 

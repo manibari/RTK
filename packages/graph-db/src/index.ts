@@ -24,4 +24,4 @@ export type {
 export { Neo4jGraphRepository } from "./neo4j/neo4j-repository.js";
 export type { Neo4jConfig } from "./neo4j/connection.js";
 export { InMemoryGraphRepository } from "./memory/in-memory-repository.js";
-export { seedData } from "./seed.js";
+export { seedData, cities as seedCities } from "./seed.js";
