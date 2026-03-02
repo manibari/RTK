@@ -26,8 +26,25 @@ async function main() {
     createContext: (): Context => ({ repo, simulation }),
   });
 
-  server.listen(PORT);
-  console.log(`API server listening on http://localhost:${PORT}`);
+  // Retry listen with back-off to handle tsx watch rapid restarts
+  const listen = (retries = 5, delay = 500): void => {
+    const httpServer = server.listen(PORT);
+    httpServer.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE" && retries > 0) {
+        console.log(`Port ${PORT} busy, retrying in ${delay}ms... (${retries} left)`);
+        setTimeout(() => listen(retries - 1, delay * 2), delay);
+      } else {
+        throw err;
+      }
+    });
+    httpServer.on("listening", () => {
+      console.log(`API server listening on http://localhost:${PORT}`);
+      const shutdown = () => { httpServer.close(); };
+      process.on("SIGTERM", shutdown);
+      process.on("SIGINT", shutdown);
+    });
+  };
+  listen();
 }
 
 main().catch(console.error);
