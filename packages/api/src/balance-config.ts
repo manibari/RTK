@@ -83,6 +83,18 @@ export interface BalanceConfig {
     majorCityGarrisonCap: number; // natural recovery cap for major cities
     minorCityGarrisonCap: number; // natural recovery cap for minor cities
   };
+
+  diplomacy: {
+    threatPerConquest: number;            // AE gained per city conquest
+    threatPerConquestMajor: number;       // AE gained per major city conquest
+    threatDecayPerTick: number;           // natural threat decay per tick
+    threatWarThreshold: number;           // threshold for AI hostility
+    truceDurationTicks: number;           // auto-truce length after battle
+    truceBrokenThreatPenalty: number;     // threat penalty for breaking truce
+    powerRatioMinToAttack: number;        // AI won't attack unless power ratio >= this
+    warExhaustionPerBattle: number;       // exhaustion gained per battle
+    warExhaustionDefendThreshold: number; // AI goes defensive above this
+  };
 }
 
 export const BALANCE_EASY: BalanceConfig = {
@@ -165,6 +177,18 @@ export const BALANCE_EASY: BalanceConfig = {
     recoveryInterval: 2,
     majorCityGarrisonCap: 10,
     minorCityGarrisonCap: 7,
+  },
+
+  diplomacy: {
+    threatPerConquest: 15,
+    threatPerConquestMajor: 30,
+    threatDecayPerTick: 0.5,
+    threatWarThreshold: 40,
+    truceDurationTicks: 10,
+    truceBrokenThreatPenalty: 30,
+    powerRatioMinToAttack: 1.2,
+    warExhaustionPerBattle: 3,
+    warExhaustionDefendThreshold: 70,
   },
 };
 
@@ -249,6 +273,18 @@ export const BALANCE_NORMAL: BalanceConfig = {
     majorCityGarrisonCap: 8,
     minorCityGarrisonCap: 5,
   },
+
+  diplomacy: {
+    threatPerConquest: 15,
+    threatPerConquestMajor: 30,
+    threatDecayPerTick: 0.5,
+    threatWarThreshold: 40,
+    truceDurationTicks: 8,
+    truceBrokenThreatPenalty: 30,
+    powerRatioMinToAttack: 1.2,
+    warExhaustionPerBattle: 3,
+    warExhaustionDefendThreshold: 70,
+  },
 };
 
 export const BALANCE_HARD: BalanceConfig = {
@@ -331,6 +367,18 @@ export const BALANCE_HARD: BalanceConfig = {
     recoveryInterval: 4,
     majorCityGarrisonCap: 6,
     minorCityGarrisonCap: 4,
+  },
+
+  diplomacy: {
+    threatPerConquest: 10,
+    threatPerConquestMajor: 20,
+    threatDecayPerTick: 0.8,
+    threatWarThreshold: 50,
+    truceDurationTicks: 5,
+    truceBrokenThreatPenalty: 20,
+    powerRatioMinToAttack: 1.0,
+    warExhaustionPerBattle: 2,
+    warExhaustionDefendThreshold: 80,
   },
 };
 

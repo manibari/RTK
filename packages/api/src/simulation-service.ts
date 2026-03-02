@@ -296,7 +296,7 @@ export interface FactionTechState {
 }
 
 // Neutral characters — IDs not in any faction
-const NEUTRAL_IDS = ["xu_shu", "pang_tong", "huang_zhong", "ma_chao", "sima_yi", "yan_liang", "wen_chou", "zhang_jiao", "hua_tuo", "yuan_shao", "lu_xun", "cao_ren", "zhang_he", "xu_chu", "sun_ce", "gongsun_zan", "liu_biao", "meng_huo", "zhu_rong", "tao_qian", "lu_zhi", "cheng_yu"];
+const NEUTRAL_IDS = ["pang_tong", "zhang_jiao", "hua_tuo", "lu_xun", "cao_ren", "xu_chu", "sun_ce", "meng_huo", "zhu_rong", "cheng_yu"];
 
 // Role bonuses
 const ROLE_LABELS: Record<CharacterRole, string> = {
@@ -387,6 +387,10 @@ function createDefaultFactions(): { id: string; leaderId: string; members: strin
     { id: "wei", leaderId: "cao_cao", members: ["cao_cao", "xu_huang", "xiahou_dun", "xiahou_yuan", "dian_wei", "xun_yu", "guo_jia", "zhang_liao"], color: "#ef4444" },
     { id: "wu", leaderId: "sun_quan", members: ["sun_quan", "zhou_yu", "gan_ning", "lu_su", "huang_gai", "taishi_ci", "lv_meng"], color: "#22c55e" },
     { id: "lu_bu", leaderId: "lu_bu", members: ["lu_bu", "diao_chan"], color: "#a855f7" },
+    { id: "yuan_shao", leaderId: "yuan_shao", members: ["yuan_shao", "yan_liang", "wen_chou", "sima_yi", "zhang_he"], color: "#d4a017" },
+    { id: "liu_biao", leaderId: "liu_biao", members: ["liu_biao", "huang_zhong", "xu_shu"], color: "#0d9488" },
+    { id: "gongsun_zan", leaderId: "gongsun_zan", members: ["gongsun_zan", "lu_zhi", "tao_qian"], color: "#94a3b8" },
+    { id: "ma_chao", leaderId: "ma_chao", members: ["ma_chao"], color: "#ea580c" },
   ];
 }
 
@@ -497,6 +501,8 @@ export class SimulationService {
   private mentorPairs: MentorPair[] = [];
   private warExhaustion = new Map<string, number>(); // factionId -> 0-100
   private droughtCities = new Map<string, number>(); // cityId -> drought expires at tick
+  private threatMatrix: Record<string, Record<string, number>> = {}; // threatMatrix[observer][target] = threat 0-100
+  private truces = new Map<string, number>(); // "factionA:factionB" sorted -> expiry tick
   private heirCounter = 0;
   private factionTrust = new Map<string, number>(); // "fA:fB" sorted key -> trust 0-100
   private diplomaticVictoryTicks = 0; // consecutive ticks with all surviving factions allied
@@ -508,6 +514,7 @@ export class SimulationService {
   private treaties: Treaty[] = [];
   private treatyCounter = 0;
   private designatedHeir: string | null = null; // characterId of designated heir for player faction
+  private undoSnapshot: string | null = null; // JSON snapshot before last advanceDay
   private config: BalanceConfig;
   private difficulty: Difficulty;
 
@@ -577,6 +584,8 @@ export class SimulationService {
     this.treaties = [];
     this.treatyCounter = 0;
     this.designatedHeir = null;
+    this.threatMatrix = {};
+    this.truces = new Map();
     FACTIONS = createDefaultFactions();
 
     // Re-initialize
@@ -902,9 +911,11 @@ export class SimulationService {
   }
 
   // ── Supply line system ──
-  // Cities are "supplied" if connected to faction capital via trade routes or same city
+  // Cities are "supplied" if connected to faction capital through adjacent faction-controlled cities
   async computeSupplyStatus(): Promise<Record<string, boolean>> {
     const cities = await this.repo.getAllPlaces();
+    const roads = await this.repo.getAllRoads();
+    const adjacency = buildAdjacencyMap(roads);
     const result: Record<string, boolean> = {};
 
     for (const f of FACTIONS) {
@@ -923,20 +934,18 @@ export class SimulationService {
         continue;
       }
 
-      // BFS from capital through trade routes within faction
+      // BFS from capital through adjacent faction-controlled cities
       const supplied = new Set<string>([capitalCityId]);
       const queue = [capitalCityId];
       while (queue.length > 0) {
         const current = queue.shift()!;
-        for (const route of this.tradeRoutes) {
-          if (route.factionId !== f.id) continue;
-          let neighbor: string | null = null;
-          if (route.cityA === current && factionCityIds.has(route.cityB)) neighbor = route.cityB;
-          if (route.cityB === current && factionCityIds.has(route.cityA)) neighbor = route.cityA;
-          if (neighbor && !supplied.has(neighbor)) {
-            supplied.add(neighbor);
-            queue.push(neighbor);
-          }
+        const roadsList = adjacency.get(current) ?? [];
+        for (const road of roadsList) {
+          const neighborId = road.fromCityId === current ? road.toCityId : road.fromCityId;
+          if (supplied.has(neighborId)) continue;
+          if (!factionCityIds.has(neighborId)) continue;
+          supplied.add(neighborId);
+          queue.push(neighborId);
         }
       }
 
@@ -954,10 +963,13 @@ export class SimulationService {
 
     for (const city of cities) {
       if (supplyStatus[city.id] === false && city.controllerId) {
-        // Unsupplied: garrison decays every 3 ticks
-        if (this.currentTick % 3 === 0 && city.garrison > 0) {
-          await this.repo.createPlace({ ...city, garrison: Math.max(0, city.garrison - 1) });
+        // Unsupplied: garrison decays every 2 ticks (was 3)
+        if (this.currentTick % 2 === 0 && city.garrison > 0) {
+          await this.repo.updatePlace(city.id, { garrison: Math.max(0, city.garrison - 1) });
         }
+        // Unsupplied: loyalty decay -3/tick
+        const loyalty = this.cityLoyalty.get(city.id) ?? 50;
+        this.cityLoyalty.set(city.id, Math.max(0, loyalty - 3));
       }
     }
   }
@@ -1125,6 +1137,8 @@ export class SimulationService {
     lu_su: "魯", huang_gai: "黃", taishi_ci: "太史", lv_meng: "呂",
     sima_yi: "司馬", yan_liang: "顏", wen_chou: "文",
     zhang_jiao: "張", hua_tuo: "華", yuan_shao: "袁",
+    liu_biao: "劉", gongsun_zan: "公孫", zhang_he: "張",
+    lu_zhi: "盧", tao_qian: "陶",
   };
 
   private readonly HEIR_GIVEN_NAMES = ["禪", "封", "統", "延", "霸", "恪", "瑁", "安", "平", "興", "昭", "琮", "瓚", "虎", "彪", "雄"];
@@ -1254,6 +1268,78 @@ export class SimulationService {
       }
     }
     return events;
+  }
+
+  // ── Threat / Aggressive Expansion ──
+  getThreatMatrix(): Record<string, Record<string, number>> {
+    return JSON.parse(JSON.stringify(this.threatMatrix));
+  }
+
+  private getThreat(observer: string, target: string): number {
+    return this.threatMatrix[observer]?.[target] ?? 0;
+  }
+
+  private addThreat(observer: string, target: string, amount: number): void {
+    if (!this.threatMatrix[observer]) this.threatMatrix[observer] = {};
+    const cur = this.threatMatrix[observer][target] ?? 0;
+    this.threatMatrix[observer][target] = Math.max(0, Math.min(100, cur + amount));
+  }
+
+  private applyThreatFromConquest(conquerorFaction: string, capturedCity: { tier: string }): void {
+    const cfg = this.config.diplomacy;
+    const amount = capturedCity.tier === "major" ? cfg.threatPerConquestMajor : cfg.threatPerConquest;
+    for (const f of FACTIONS) {
+      if (f.id === conquerorFaction) continue;
+      this.addThreat(f.id, conquerorFaction, amount);
+    }
+  }
+
+  private decayThreat(): void {
+    const decay = this.config.diplomacy.threatDecayPerTick;
+    for (const observer of Object.keys(this.threatMatrix)) {
+      for (const target of Object.keys(this.threatMatrix[observer])) {
+        this.threatMatrix[observer][target] = Math.max(0, this.threatMatrix[observer][target] - decay);
+      }
+    }
+  }
+
+  // ── Truces ──
+  getTruces(): { factionA: string; factionB: string; expiryTick: number }[] {
+    const result: { factionA: string; factionB: string; expiryTick: number }[] = [];
+    for (const [key, expiry] of this.truces) {
+      if (expiry > this.currentTick) {
+        const [fA, fB] = key.split(":");
+        result.push({ factionA: fA, factionB: fB, expiryTick: expiry });
+      }
+    }
+    return result;
+  }
+
+  private hasTruce(factionA: string, factionB: string): boolean {
+    const key = [factionA, factionB].sort().join(":");
+    const expiry = this.truces.get(key);
+    return expiry != null && expiry > this.currentTick;
+  }
+
+  private setTruce(factionA: string, factionB: string): void {
+    const key = [factionA, factionB].sort().join(":");
+    this.truces.set(key, this.currentTick + this.config.diplomacy.truceDurationTicks);
+  }
+
+  private applyTrucesFromBattles(battleResults: BattleResult[]): void {
+    for (const b of battleResults) {
+      const attackerFaction = this.getFactionOf(b.attackerId);
+      const defenderFaction = b.defenderId ? this.getFactionOf(b.defenderId) : null;
+      if (attackerFaction && defenderFaction && attackerFaction !== defenderFaction) {
+        this.setTruce(attackerFaction, defenderFaction);
+      }
+    }
+  }
+
+  private cleanExpiredTruces(): void {
+    for (const [key, expiry] of this.truces) {
+      if (expiry <= this.currentTick) this.truces.delete(key);
+    }
   }
 
   private async processDemands(): Promise<DiplomacyEvent[]> {
@@ -1575,6 +1661,9 @@ export class SimulationService {
       };
     }
 
+    // Take undo snapshot before mutating state
+    this.undoSnapshot = await this.buildUndoSnapshot();
+
     const simEvents = this.engine.advanceDay();
 
     const storedEvents: Omit<StoredEvent, "id">[] = simEvents.map((e) => ({
@@ -1703,6 +1792,11 @@ export class SimulationService {
     this.applyWarExhaustion(battleResults);
     const ceasefireEvents = this.evaluateCeasefires();
     diplomacyEvents.push(...ceasefireEvents);
+
+    // Threat / AE decay and truces from battles
+    this.decayThreat();
+    this.applyTrucesFromBattles(battleResults);
+    this.cleanExpiredTruces();
 
     // Update prestige from this turn's events
     this.updatePrestigeFromBattles(battleResults);
@@ -1869,7 +1963,15 @@ export class SimulationService {
     const adjacency = buildAdjacencyMap(roads);
 
     const rels = this.engine.getRelationships() as import("@rtk/graph-db").RelationshipEdge[];
-    const decisions = evaluateNPCDecisions(FACTIONS, characters, cities, "shu", this.alliances, rels, adjacency, cityMap, this.config.npcAI.npcExpansionAggression);
+    const decisions = evaluateNPCDecisions(FACTIONS, characters, cities, "shu", this.alliances, rels, adjacency, cityMap, this.config.npcAI.npcExpansionAggression, {
+      threatMatrix: this.threatMatrix,
+      truces: this.truces,
+      currentTick: this.currentTick,
+      warExhaustion: this.warExhaustion,
+      powerRatioMinToAttack: this.config.diplomacy.powerRatioMinToAttack,
+      threatWarThreshold: this.config.diplomacy.threatWarThreshold,
+      warExhaustionDefendThreshold: this.config.diplomacy.warExhaustionDefendThreshold,
+    });
 
     for (const decision of decisions) {
       if (decision.action === "stay" || !decision.targetCityId) continue;
@@ -3005,8 +3107,8 @@ export class SimulationService {
       if (city.siegedBy) continue;
       const baseIncome = city.tier === "major" ? this.config.economy.majorCityBaseIncome : this.config.economy.minorCityBaseIncome;
       let multiplier = 1 + city.development * this.config.economy.developmentMultiplierPerLevel;
-      // Unsupplied cities: -30% gold production
-      if (supplyStatus[city.id] === false) multiplier *= 0.7;
+      // Unsupplied cities: -50% gold production
+      if (supplyStatus[city.id] === false) multiplier *= 0.5;
       // Market specialty: +50% income (doubled with improvement)
       if (city.specialty === "market") {
         multiplier += city.improvement ? 1.0 : 0.5;
@@ -3188,6 +3290,8 @@ export class SimulationService {
           });
           // Set low loyalty for captured city
           this.setCapturedCityLoyalty(city.id);
+          // Threat: all non-belligerents gain threat toward conqueror
+          this.applyThreatFromConquest(attackFaction, city);
           // Growth: winner's military +5 (cap 100)
           for (const ac of attackChars) {
             if (ac.military < 100) {
@@ -4064,6 +4168,8 @@ export class SimulationService {
       designatedHeir: this.designatedHeir,
       troopTransfers: [...this.troopTransfers],
       troopTransferCounter: this.troopTransferCounter,
+      threatMatrix: JSON.parse(JSON.stringify(this.threatMatrix)),
+      truces: [...this.truces.entries()],
       savedAt: new Date().toISOString(),
     };
 
@@ -4153,6 +4259,8 @@ export class SimulationService {
     this.designatedHeir = data.designatedHeir ?? null;
     this.troopTransfers = data.troopTransfers ?? [];
     this.troopTransferCounter = data.troopTransferCounter ?? 0;
+    this.threatMatrix = data.threatMatrix ?? {};
+    this.truces = new Map(data.truces ?? []);
 
     // Restore difficulty (v1 saves default to "normal")
     this.difficulty = data.difficulty ?? "normal";
@@ -4181,6 +4289,135 @@ export class SimulationService {
       }
     }
     return results;
+  }
+
+  // ── Undo system ──
+
+  private async buildUndoSnapshot(): Promise<string> {
+    const characters = await this.repo.getAllCharacters();
+    const places = await this.repo.getAllPlaces();
+    const relationships = this.engine.getRelationships() as RelationshipEdge[];
+    const allEvents = this.eventStore.getAll();
+    const movements = await this.repo.getActiveMovements(this.currentTick);
+    const data: SaveData = {
+      version: 2,
+      tick: this.currentTick,
+      difficulty: this.difficulty,
+      gameState: { ...this.gameState },
+      factions: FACTIONS.map((f) => ({ ...f, members: [...f.members] })),
+      alliances: [...this.alliances],
+      characters,
+      places,
+      relationships,
+      movements,
+      events: allEvents.map(({ id: _id, ...rest }) => rest),
+      dailySummaries: [...this.dailySummaries.entries()],
+      factionHistory: [...this.factionHistory.entries()].map(([k, v]) => [k, [...v]]),
+      initialRelationships: this.initialRelationships.map((r) => ({ ...r })),
+      factionTech: [...this.factionTech.entries()].map(([k, v]) => [k, { ...v, completed: [...v.completed] }]),
+      tradeRoutes: [...this.tradeRoutes],
+      deadCharacters: [...this.deadCharacters],
+      factionMorale: [...this.factionMorale.entries()],
+      characterPrestige: [...this.characterPrestige.entries()],
+      characterBattleCount: [...this.characterBattleCount.entries()],
+      characterConquerCount: [...this.characterConquerCount.entries()],
+      characterSpyCount: [...this.characterSpyCount.entries()],
+      characterDiploCount: [...this.characterDiploCount.entries()],
+      characterAchievements: [...this.characterAchievements.entries()],
+      legacyBonuses: [...this.legacyBonuses.entries()],
+      characterFavorability: [...this.characterFavorability.entries()],
+      mentorPairs: [...this.mentorPairs],
+      warExhaustion: [...this.warExhaustion.entries()],
+      droughtCities: [...this.droughtCities.entries()],
+      factionTrust: [...this.factionTrust.entries()],
+      heirCounter: this.heirCounter,
+      diplomaticVictoryTicks: this.diplomaticVictoryTicks,
+      economicVictoryTicks: this.economicVictoryTicks,
+      cityLoyalty: [...this.cityLoyalty.entries()],
+      factionTraditions: [...this.factionTraditions.entries()],
+      factionBattleCount: [...this.factionBattleCount.entries()],
+      factionSpySuccessCount: [...this.factionSpySuccessCount.entries()],
+      treaties: [...this.treaties],
+      treatyCounter: this.treatyCounter,
+      designatedHeir: this.designatedHeir,
+      troopTransfers: [...this.troopTransfers],
+      troopTransferCounter: this.troopTransferCounter,
+      threatMatrix: JSON.parse(JSON.stringify(this.threatMatrix)),
+      truces: [...this.truces.entries()],
+      savedAt: new Date().toISOString(),
+    };
+    return JSON.stringify(data);
+  }
+
+  async undoLastAdvance(): Promise<{ success: boolean; tick: number }> {
+    if (!this.undoSnapshot) return { success: false, tick: this.currentTick };
+
+    const data: SaveData = JSON.parse(this.undoSnapshot);
+
+    // Clear current state
+    this.eventStore.clear();
+    await this.repo.disconnect();
+    await this.repo.connect();
+
+    for (const c of data.characters) await this.repo.createCharacter(c);
+    for (const p of data.places) await this.repo.createPlace(p);
+    for (const m of data.movements) await this.repo.addMovement({ ...m, troopsCarried: m.troopsCarried ?? 0 });
+    if (data.events.length > 0) this.eventStore.append(data.events);
+
+    this.engine = new Engine();
+    this.engine.loadCharacters(data.characters);
+    for (const r of data.relationships) this.engine.loadRelationships([r]);
+    this.engine.world.setTick(data.tick);
+    for (const r of data.relationships) await this.repo.setRelationship(r);
+
+    FACTIONS = data.factions.map((f) => ({ ...f, members: [...f.members] }));
+    this.alliances = new Set(data.alliances);
+    this.gameState = { ...data.gameState };
+    this.dailySummaries = new Map(data.dailySummaries);
+    this.factionHistory = new Map(data.factionHistory.map(([k, v]) => [k, [...v]]));
+    this.initialRelationships = data.initialRelationships.map((r) => ({ ...r }));
+    this.commandQueue = [];
+    this.commandedThisTick.clear();
+    this.factionTech = new Map((data.factionTech ?? []).map(([k, v]) => [k, { ...v, completed: [...v.completed] }]));
+    this.tradeRoutes = data.tradeRoutes ?? [];
+    this.deadCharacters = new Set(data.deadCharacters ?? []);
+    this.pendingTactics.clear();
+    this.factionMorale = new Map(data.factionMorale ?? []);
+    this.characterPrestige = new Map(data.characterPrestige ?? []);
+    this.characterBattleCount = new Map(data.characterBattleCount ?? []);
+    this.characterConquerCount = new Map(data.characterConquerCount ?? []);
+    this.characterSpyCount = new Map(data.characterSpyCount ?? []);
+    this.characterDiploCount = new Map(data.characterDiploCount ?? []);
+    this.characterAchievements = new Map(data.characterAchievements ?? []);
+    this.legacyBonuses = new Map(data.legacyBonuses ?? []);
+    this.characterFavorability = new Map(data.characterFavorability ?? []);
+    this.mentorPairs = data.mentorPairs ?? [];
+    this.warExhaustion = new Map(data.warExhaustion ?? []);
+    this.droughtCities = new Map(data.droughtCities ?? []);
+    this.factionTrust = new Map(data.factionTrust ?? []);
+    this.heirCounter = data.heirCounter ?? 0;
+    this.diplomaticVictoryTicks = data.diplomaticVictoryTicks ?? 0;
+    this.economicVictoryTicks = data.economicVictoryTicks ?? 0;
+    this.cityLoyalty = new Map(data.cityLoyalty ?? []);
+    this.factionTraditions = new Map(data.factionTraditions ?? []);
+    this.factionBattleCount = new Map(data.factionBattleCount ?? []);
+    this.factionSpySuccessCount = new Map(data.factionSpySuccessCount ?? []);
+    this.treaties = data.treaties ?? [];
+    this.treatyCounter = data.treatyCounter ?? 0;
+    this.designatedHeir = data.designatedHeir ?? null;
+    this.troopTransfers = data.troopTransfers ?? [];
+    this.troopTransferCounter = data.troopTransferCounter ?? 0;
+    this.threatMatrix = data.threatMatrix ?? {};
+    this.truces = new Map(data.truces ?? []);
+    this.difficulty = data.difficulty ?? "normal";
+    this.config = getBalanceConfig(this.difficulty);
+
+    const characters = await this.repo.getAllCharacters();
+    const characterMap = new Map(characters.map((c) => [c.id, c]));
+    this.narrative = new NarrativeService(characterMap);
+
+    this.undoSnapshot = null;
+    return { success: true, tick: data.tick };
   }
 
   private async processEliminatedFactions(): Promise<void> {
@@ -4357,6 +4594,8 @@ interface SaveData {
   troopTransfers?: TroopTransfer[];
   troopTransferCounter?: number;
   difficulty?: Difficulty;
+  threatMatrix?: Record<string, Record<string, number>>;
+  truces?: [string, number][];
   savedAt: string;
 }
 

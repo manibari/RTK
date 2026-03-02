@@ -11,6 +11,10 @@ import { HeroHall } from "./HeroHall";
 import { CharacterPage } from "./CharacterPage";
 import { ToastStack, createToastId, type ToastMessage } from "./ToastStack";
 import { VictoryScreen } from "./VictoryScreen";
+import { ShortcutsHelp } from "./ShortcutsHelp";
+import { Tutorial } from "./Tutorial";
+import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { useSound } from "../hooks/useSound";
 import type { TimelineMarker } from "./Timeline";
 
 type ViewTab = "graph" | "map" | "log" | "stats" | "heroes" | "character";
@@ -104,6 +108,7 @@ export function AppShell() {
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSimRef = useRef(false);
   const advancingRef = useRef(false);
+  const { play: playSound } = useSound();
 
   // Fetch initial state
   useEffect(() => {
@@ -169,6 +174,7 @@ export function AppShell() {
     advancingRef.current = true;
     try {
       const result = await trpc.simulation.advanceDay.mutate();
+      playSound("advance");
       setCurrentTick(result.tick);
       setViewTick(result.tick);
       setGameStatus(result.gameStatus as GameStatus);
@@ -182,6 +188,7 @@ export function AppShell() {
 
       // Accumulate log entries
       if (result.battleResults?.length > 0) {
+        playSound("battle");
         setAllBattles((prev) => [...prev, ...result.battleResults]);
         for (const b of result.battleResults) {
           const powerStr = b.attackPower != null ? ` [${b.attackPower} vs ${b.defensePower}]` : "";
@@ -268,7 +275,7 @@ export function AppShell() {
       setAdvancing(false);
       advancingRef.current = false;
     }
-  }, [gameStatus, addToast]);
+  }, [gameStatus, addToast, playSound]);
 
   // Auto-simulate loop
   useEffect(() => {
@@ -327,6 +334,28 @@ export function AppShell() {
     addToast("遊戲已重置", theme.success);
   }, [addToast]);
 
+  const handleUndo = useCallback(async () => {
+    try {
+      const result = await trpc.simulation.undoAdvance.mutate();
+      if (result.success) {
+        setCurrentTick(result.tick);
+        setViewTick(result.tick);
+        addToast(`已撤銷，回到 Day ${result.tick}`, theme.info);
+      } else {
+        addToast("無法撤銷（無快照）", theme.textMuted);
+      }
+    } catch {
+      addToast("撤銷失敗", theme.danger);
+    }
+  }, [addToast]);
+
+  const { showHelp, setShowHelp } = useKeyboardShortcuts({
+    onAdvanceDay: handleAdvanceDay,
+    onSetTab: (tab) => setActiveTab(tab),
+    onToggleAutoSim: toggleAutoSim,
+    onUndo: handleUndo,
+  });
+
   const handleSave = useCallback(async (slot: number) => {
     try {
       const result = await trpc.simulation.saveGame.mutate({ slot });
@@ -379,12 +408,14 @@ export function AppShell() {
             {SEASON_INFO[season].label}
           </span>
           <button
+            data-tutorial="tab-graph"
             style={activeTab === "graph" ? styles.tabActive : styles.tab}
             onClick={() => setActiveTab("graph")}
           >
             關係圖
           </button>
           <button
+            data-tutorial="tab-map"
             style={activeTab === "map" ? styles.tabActive : styles.tab}
             onClick={() => setActiveTab("map")}
           >
@@ -440,6 +471,15 @@ export function AppShell() {
             </>
           )}
           <button
+            data-tutorial="undo-btn"
+            style={styles.undoBtn}
+            onClick={handleUndo}
+            title="撤銷上一步 (Ctrl+Z)"
+          >
+            ↩
+          </button>
+          <button
+            data-tutorial="auto-sim"
             style={{
               ...styles.autoSimBtn,
               backgroundColor: autoSim ? theme.danger : theme.success,
@@ -558,6 +598,10 @@ export function AppShell() {
           </div>
         </div>
       )}
+
+      {showHelp && <ShortcutsHelp onClose={() => setShowHelp(false)} />}
+
+      <Tutorial />
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
@@ -692,6 +736,16 @@ const styles: Record<string, React.CSSProperties> = {
     color: theme.textPrimary,
     cursor: "default",
     whiteSpace: "nowrap" as const,
+  },
+  undoBtn: {
+    padding: "4px 10px",
+    borderRadius: 6,
+    border: `1px solid ${theme.bg3}`,
+    backgroundColor: theme.bg2,
+    color: theme.textSecondary,
+    fontSize: 15,
+    fontWeight: 700,
+    cursor: "pointer",
   },
   autoSimBtn: {
     padding: "6px 14px",

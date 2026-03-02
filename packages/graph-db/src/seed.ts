@@ -47,23 +47,23 @@ const characters: CharacterNode[] = [
   { id: "sima_yi", name: "司馬懿", biography: "鷹視狼顧，忍辱負重數十年，終為司馬家奪取天下埋下伏筆。", avatarUrl: "/avatars/sima_yi.svg", traits: ["cunning", "cautious", "ambitious"], cityId: "ye", military: 20, intelligence: 98, charm: 50, skills: { leadership: 25, tactics: 0, commerce: 0, espionage: 70 }, bornTick: -352 },
   { id: "yan_liang", name: "顏良", biography: "河北名將，袁紹麾下首席猛將，白馬之戰被關羽一刀斬落。", avatarUrl: "/avatars/yan_liang.svg", traits: ["brave", "proud", "loyal"], cityId: "jinan", military: 90, intelligence: 10, charm: 20, skills: { leadership: 0, tactics: 45, commerce: 0, espionage: 0 }, bornTick: -480 },
   { id: "wen_chou", name: "文醜", biography: "河北四庭柱之一，與顏良齊名，延津之戰敗亡。", avatarUrl: "/avatars/wen_chou.svg", traits: ["brave", "impulsive", "proud"], cityId: "jinan", military: 88, intelligence: 8, charm: 10, skills: { leadership: 0, tactics: 25, commerce: 0, espionage: 0 }, bornTick: -480 },
-  { id: "zhang_jiao", name: "張角", biography: "太平道教主，黃巾起義領袖，蒼天已死黃天當立，揭開三國序幕。", avatarUrl: "/avatars/zhang_jiao.svg", traits: ["charismatic", "cunning", "ambitious"], cityId: "pingyuan", military: 20, intelligence: 75, charm: 90, skills: { leadership: 50, tactics: 0, commerce: 0, espionage: 30 }, bornTick: -576 },
+  { id: "zhang_jiao", name: "張角", biography: "太平道教主，黃巾起義領袖，蒼天已死黃天當立，揭開三國序幕。", avatarUrl: "/avatars/zhang_jiao.svg", traits: ["charismatic", "cunning", "ambitious"], cityId: "jinyang", military: 20, intelligence: 75, charm: 90, skills: { leadership: 50, tactics: 0, commerce: 0, espionage: 30 }, bornTick: -576 },
   { id: "hua_tuo", name: "華佗", biography: "神醫華佗，發明麻沸散，欲為曹操開顱治病，被疑而殺。", avatarUrl: "/avatars/hua_tuo.svg", traits: ["wise", "humble", "cautious"], cityId: "lujiang", military: 5, intelligence: 92, charm: 70, skills: { leadership: 0, tactics: 0, commerce: 45, espionage: 0 }, bornTick: -576 },
   { id: "yuan_shao", name: "袁紹", biography: "四世三公，北方霸主，官渡之戰敗於曹操，從此一蹶不振。", avatarUrl: "/avatars/yuan_shao.svg", traits: ["ambitious", "proud", "diplomatic"], cityId: "ye", military: 25, intelligence: 55, charm: 72, skills: { leadership: 50, tactics: 0, commerce: 25, espionage: 0 }, bornTick: -544 },
 
   // ── Additional neutral characters ──
   { id: "lu_xun", name: "陸遜", biography: "東吳後期大都督，夷陵之戰火燒連營七百里，大破劉備。", avatarUrl: "/avatars/lu_xun.svg", traits: ["strategic", "cautious", "wise"], cityId: "hangzhou", military: 55, intelligence: 92, charm: 50, skills: { leadership: 45, tactics: 55, commerce: 0, espionage: 0 }, bornTick: -320 },
   { id: "cao_ren", name: "曹仁", biography: "曹操族弟，善守城池，樊城之戰力拒關羽，魏之屏障。", avatarUrl: "/avatars/cao_ren.svg", traits: ["brave", "loyal", "cautious"], cityId: "wan", military: 85, intelligence: 45, charm: 25, skills: { leadership: 45, tactics: 50, commerce: 0, espionage: 0 }, bornTick: -480 },
-  { id: "zhang_he", name: "張郃", biography: "五子良將之一，善巧變，以精於山地戰聞名。", avatarUrl: "/avatars/zhang_he.svg", traits: ["strategic", "brave", "cautious"], cityId: "jinyang", military: 85, intelligence: 50, charm: 25, skills: { leadership: 25, tactics: 55, commerce: 0, espionage: 0 }, bornTick: -448 },
-  { id: "xu_chu", name: "許褚", biography: "虎侯，曹操貼身護衛，裸衣鬥馬超，力大無窮。", avatarUrl: "/avatars/xu_chu.svg", traits: ["brave", "loyal", "impulsive"], cityId: "pingyuan", military: 96, intelligence: 5, charm: 5, skills: { leadership: 0, tactics: 25, commerce: 0, espionage: 0 }, bornTick: -480 },
+  { id: "zhang_he", name: "張郃", biography: "五子良將之一，善巧變，以精於山地戰聞名。", avatarUrl: "/avatars/zhang_he.svg", traits: ["strategic", "brave", "cautious"], cityId: "ye", military: 85, intelligence: 50, charm: 25, skills: { leadership: 25, tactics: 55, commerce: 0, espionage: 0 }, bornTick: -448 },
+  { id: "xu_chu", name: "許褚", biography: "虎侯，曹操貼身護衛，裸衣鬥馬超，力大無窮。", avatarUrl: "/avatars/xu_chu.svg", traits: ["brave", "loyal", "impulsive"], cityId: "luoyang", military: 96, intelligence: 5, charm: 5, skills: { leadership: 0, tactics: 25, commerce: 0, espionage: 0 }, bornTick: -480 },
   { id: "sun_ce", name: "孫策", biography: "小霸王，以傳國玉璽借兵，橫掃江東六郡，英年早逝。", avatarUrl: "/avatars/sun_ce.svg", traits: ["brave", "ambitious", "charismatic"], cityId: "nanchang", military: 88, intelligence: 50, charm: 78, skills: { leadership: 50, tactics: 30, commerce: 0, espionage: 0 }, bornTick: -384 },
   { id: "gongsun_zan", name: "公孫瓚", biography: "白馬將軍，雄踞幽州，白馬義從威震塞外。", avatarUrl: "/avatars/gongsun_zan.svg", traits: ["brave", "ambitious", "proud"], cityId: "ji", military: 82, intelligence: 20, charm: 45, skills: { leadership: 45, tactics: 25, commerce: 0, espionage: 0 }, bornTick: -544 },
-  { id: "liu_biao", name: "劉表", biography: "荊州牧，單騎入荊州平定亂局，守成有餘進取不足。", avatarUrl: "/avatars/liu_biao.svg", traits: ["cautious", "diplomatic", "wise"], cityId: "jingzhou", military: 10, intelligence: 72, charm: 75, skills: { leadership: 25, tactics: 0, commerce: 50, espionage: 0 }, bornTick: -576 },
+  { id: "liu_biao", name: "劉表", biography: "荊州牧，單騎入荊州平定亂局，守成有餘進取不足。", avatarUrl: "/avatars/liu_biao.svg", traits: ["cautious", "diplomatic", "wise"], cityId: "xiangyang", military: 10, intelligence: 72, charm: 75, skills: { leadership: 25, tactics: 0, commerce: 50, espionage: 0 }, bornTick: -576 },
   { id: "meng_huo", name: "孟獲", biography: "南蠻王，七擒七縱終心悅誠服，歸順蜀漢。", avatarUrl: "/avatars/meng_huo.svg", traits: ["brave", "proud", "impulsive"], cityId: "guiyang_city", military: 82, intelligence: 8, charm: 45, skills: { leadership: 0, tactics: 25, commerce: 0, espionage: 0 }, bornTick: -320 },
   { id: "zhu_rong", name: "祝融夫人", biography: "南蠻女將，火神祝融之後，善使飛刀，武藝高強。", avatarUrl: "/avatars/zhu_rong.svg", traits: ["brave", "loyal", "impulsive"], cityId: "guiyang_city", military: 78, intelligence: 20, charm: 50, skills: { leadership: 0, tactics: 30, commerce: 0, espionage: 0 }, bornTick: -320 },
   { id: "tao_qian", name: "陶謙", biography: "徐州牧，三讓徐州於劉備，以仁厚著稱。", avatarUrl: "/avatars/tao_qian.svg", traits: ["humble", "diplomatic", "cautious"], cityId: "beihai", military: 10, intelligence: 50, charm: 70, skills: { leadership: 25, tactics: 0, commerce: 50, espionage: 0 }, bornTick: -576 },
   { id: "lu_zhi", name: "盧植", biography: "海內大儒，劉備之師，曾討黃巾平叛亂。", avatarUrl: "/avatars/lu_zhi.svg", traits: ["wise", "loyal", "humble"], cityId: "liaodong", military: 45, intelligence: 78, charm: 55, skills: { leadership: 25, tactics: 30, commerce: 0, espionage: 0 }, bornTick: -640 },
-  { id: "cheng_yu", name: "程昱", biography: "曹操謀臣，多奇計，善斷大事，性格剛戾。", avatarUrl: "/avatars/cheng_yu.svg", traits: ["cunning", "strategic", "ambitious"], cityId: "jinan", military: 10, intelligence: 90, charm: 25, skills: { leadership: 0, tactics: 30, commerce: 0, espionage: 55 }, bornTick: -512 },
+  { id: "cheng_yu", name: "程昱", biography: "曹操謀臣，多奇計，善斷大事，性格剛戾。", avatarUrl: "/avatars/cheng_yu.svg", traits: ["cunning", "strategic", "ambitious"], cityId: "xuchang", military: 10, intelligence: 90, charm: 25, skills: { leadership: 0, tactics: 30, commerce: 0, espionage: 55 }, bornTick: -512 },
 ];
 
 const cities: PlaceNode[] = [
@@ -73,7 +73,7 @@ const cities: PlaceNode[] = [
   { id: "jianye", name: "南京", description: "六朝古都，江南門戶", lat: 32.06, lng: 118.80, status: "neutral", tier: "major", controllerId: "sun_quan", gold: 250, garrison: 4, development: 0, specialty: "harbor", food: 110 },
   { id: "xiapi", name: "徐州", description: "兵家必爭，五省通衢", lat: 34.32, lng: 117.95, status: "hostile", tier: "major", controllerId: "lu_bu", gold: 150, garrison: 3, development: 0, specialty: "market", food: 80 },
   { id: "changan", name: "西安", description: "十三朝古都", lat: 34.26, lng: 108.94, status: "hostile", tier: "major", controllerId: "cao_cao", gold: 250, garrison: 5, development: 0, specialty: "market", food: 100 },
-  { id: "xiangyang", name: "襄陽", description: "荊楚屏障，南北要衝", lat: 32.01, lng: 112.14, status: "neutral", tier: "major", gold: 100, garrison: 0, development: 0, specialty: "library", food: 90 },
+  { id: "xiangyang", name: "襄陽", description: "荊楚屏障，南北要衝", lat: 32.01, lng: 112.14, status: "neutral", tier: "major", controllerId: "liu_biao", gold: 100, garrison: 3, development: 0, specialty: "library", food: 90 },
 
   // === Minor cities ===
   // Shu-controlled
@@ -84,9 +84,9 @@ const cities: PlaceNode[] = [
 
   // Wei-controlled
   { id: "xuchang", name: "許昌", description: "魏都舊址，中原重鎮", lat: 34.02, lng: 113.85, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 100, garrison: 3, development: 0, specialty: "forge", food: 60 },
-  { id: "ye", name: "邯鄲", description: "河北重鎮，曹魏根基", lat: 36.33, lng: 114.48, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 80, garrison: 3, development: 0, specialty: "military_academy", food: 60 },
+  { id: "ye", name: "邯鄲", description: "河北重鎮，袁紹根基", lat: 36.33, lng: 114.48, status: "hostile", tier: "minor", controllerId: "yuan_shao", gold: 80, garrison: 3, development: 0, specialty: "military_academy", food: 60 },
   { id: "hefei", name: "合肥", description: "淮南要塞，吳魏必爭", lat: 31.82, lng: 117.23, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 60, garrison: 4, development: 0, specialty: "military_academy", food: 50 },
-  { id: "puyang", name: "濮陽", description: "中原糧倉，黃河要地", lat: 35.76, lng: 115.03, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 70, garrison: 2, development: 0, specialty: "granary", food: 80 },
+  { id: "puyang", name: "濮陽", description: "中原糧倉，黃河要地", lat: 35.76, lng: 115.03, status: "hostile", tier: "minor", controllerId: "yuan_shao", gold: 70, garrison: 2, development: 0, specialty: "granary", food: 80 },
   { id: "chenliu", name: "開封", description: "中原腹地，七朝古都", lat: 34.80, lng: 114.31, status: "hostile", tier: "minor", controllerId: "cao_cao", gold: 100, garrison: 2, development: 0, specialty: "market", food: 60 },
 
   // Wu-controlled
@@ -94,29 +94,29 @@ const cities: PlaceNode[] = [
   { id: "kuaiji", name: "紹興", description: "越地名城，東南水鄉", lat: 30.00, lng: 120.58, status: "neutral", tier: "minor", controllerId: "sun_quan", gold: 60, garrison: 2, development: 0, specialty: "harbor", food: 50 },
 
   // Neutral / contested
-  { id: "changsha", name: "長沙", description: "湘楚要地，魚米之鄉", lat: 28.23, lng: 112.94, status: "neutral", tier: "minor", gold: 40, garrison: 0, development: 0, specialty: "market", food: 60 },
-  { id: "jingzhou", name: "荊州", description: "荊楚重鎮，兵家必爭", lat: 30.35, lng: 112.19, status: "neutral", tier: "minor", gold: 30, garrison: 0, development: 0, specialty: "granary", food: 60 },
-  { id: "tianshui", name: "天水", description: "隴右要地，伏羲故里", lat: 34.58, lng: 105.72, status: "neutral", tier: "minor", gold: 20, garrison: 0, development: 0, specialty: "forge", food: 50 },
+  { id: "changsha", name: "長沙", description: "湘楚要地，魚米之鄉", lat: 28.23, lng: 112.94, status: "neutral", tier: "minor", controllerId: "liu_biao", gold: 40, garrison: 2, development: 0, specialty: "market", food: 60 },
+  { id: "jingzhou", name: "荊州", description: "荊楚重鎮，兵家必爭", lat: 30.35, lng: 112.19, status: "neutral", tier: "minor", controllerId: "liu_biao", gold: 30, garrison: 2, development: 0, specialty: "granary", food: 60 },
+  { id: "tianshui", name: "天水", description: "隴右要地，伏羲故里", lat: 34.58, lng: 105.72, status: "neutral", tier: "minor", controllerId: "ma_chao", gold: 20, garrison: 2, development: 0, specialty: "forge", food: 50 },
   { id: "nanman", name: "昆明", description: "西南邊陲，南中蠻地", lat: 25.04, lng: 102.71, status: "dead", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 40 },
-  { id: "beihai", name: "濰坊", description: "齊魯之地，東海通道", lat: 36.70, lng: 118.97, status: "neutral", tier: "minor", gold: 30, garrison: 0, development: 0, specialty: "harbor", food: 50 },
+  { id: "beihai", name: "濰坊", description: "齊魯之地，東海通道", lat: 36.70, lng: 118.97, status: "neutral", tier: "minor", controllerId: "gongsun_zan", gold: 30, garrison: 2, development: 0, specialty: "harbor", food: 50 },
   { id: "wan", name: "南陽", description: "南陽盆地，兵家重鎮", lat: 32.99, lng: 112.53, status: "neutral", tier: "minor", gold: 40, garrison: 0, development: 0, specialty: "forge", food: 55 },
   { id: "nanhai", name: "廣州", description: "嶺南重鎮，海上絲路", lat: 23.13, lng: 113.26, status: "neutral", tier: "minor", gold: 50, garrison: 0, development: 0, specialty: "market", food: 45 },
-  { id: "pingyuan", name: "德州", description: "華北平原，黃河之畔", lat: 37.43, lng: 116.36, status: "neutral", tier: "minor", gold: 20, garrison: 0, development: 0, specialty: "granary", food: 55 },
+  { id: "pingyuan", name: "德州", description: "華北平原，黃河之畔", lat: 37.43, lng: 116.36, status: "neutral", tier: "minor", controllerId: "yuan_shao", gold: 20, garrison: 2, development: 0, specialty: "granary", food: 55 },
   { id: "wuling", name: "常德", description: "洞庭西岸，武陵故地", lat: 29.03, lng: 111.69, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "library", food: 50 },
   { id: "lingling", name: "永州", description: "瀟湘之源，零陵故地", lat: 26.42, lng: 111.61, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 50 },
   { id: "lujiang", name: "廬江", description: "皖南水鄉，廬江舊郡", lat: 31.26, lng: 117.29, status: "neutral", tier: "minor", gold: 20, garrison: 0, development: 0, specialty: "library", food: 50 },
   { id: "shangyong", name: "十堰", description: "上庸故地，秦楚咽喉", lat: 32.63, lng: 110.80, status: "neutral", tier: "minor", gold: 15, garrison: 0, development: 0, specialty: "forge", food: 45 },
   { id: "nanchang", name: "南昌", description: "豫章故郡，贛江要衝", lat: 28.68, lng: 115.86, status: "neutral", tier: "minor", gold: 30, garrison: 0, development: 0, specialty: "granary", food: 55 },
-  { id: "wuwei", name: "武威", description: "河西走廊，絲路咽喉", lat: 37.93, lng: 102.64, status: "neutral", tier: "minor", gold: 20, garrison: 0, development: 0, specialty: "forge", food: 40 },
-  { id: "ji", name: "北京", description: "幽燕重鎮，北方門戶", lat: 39.90, lng: 116.40, status: "neutral", tier: "minor", gold: 40, garrison: 0, development: 0, specialty: "military_academy", food: 50 },
+  { id: "wuwei", name: "武威", description: "河西走廊，絲路咽喉", lat: 37.93, lng: 102.64, status: "neutral", tier: "minor", controllerId: "ma_chao", gold: 20, garrison: 2, development: 0, specialty: "forge", food: 40 },
+  { id: "ji", name: "北京", description: "幽燕重鎮，北方門戶", lat: 39.90, lng: 116.40, status: "neutral", tier: "minor", controllerId: "gongsun_zan", gold: 40, garrison: 2, development: 0, specialty: "military_academy", food: 50 },
   { id: "jinyang", name: "太原", description: "晉陽故城，表裡山河", lat: 37.87, lng: 112.55, status: "neutral", tier: "minor", gold: 30, garrison: 0, development: 0, specialty: "forge", food: 50 },
-  { id: "liaodong", name: "遼陽", description: "遼東郡治，東北要塞", lat: 41.27, lng: 123.17, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "military_academy", food: 40 },
+  { id: "liaodong", name: "遼陽", description: "遼東郡治，東北要塞", lat: 41.27, lng: 123.17, status: "neutral", tier: "minor", controllerId: "gongsun_zan", gold: 10, garrison: 2, development: 0, specialty: "military_academy", food: 40 },
 
   // === New cities (EU4 area coverage) ===
   { id: "suzhou", name: "蘇州", description: "江南水鄉，魚米富庶", lat: 31.30, lng: 120.62, status: "neutral", tier: "minor", controllerId: "sun_quan", gold: 80, garrison: 0, development: 0, specialty: "market", food: 50 },
   { id: "hangzhou", name: "杭州", description: "錢塘繁華，東南形勝", lat: 30.27, lng: 120.15, status: "neutral", tier: "minor", gold: 40, garrison: 0, development: 0, specialty: "market", food: 55 },
   { id: "fuzhou", name: "福州", description: "閩都要地，海上門戶", lat: 26.07, lng: 119.30, status: "neutral", tier: "minor", gold: 30, garrison: 0, development: 0, specialty: "harbor", food: 45 },
-  { id: "jinan", name: "濟南", description: "齊魯首府，泉城名都", lat: 36.65, lng: 116.99, status: "neutral", tier: "minor", gold: 35, garrison: 0, development: 0, specialty: "library", food: 55 },
+  { id: "jinan", name: "濟南", description: "齊魯首府，泉城名都", lat: 36.65, lng: 116.99, status: "neutral", tier: "minor", controllerId: "yuan_shao", gold: 35, garrison: 2, development: 0, specialty: "library", food: 55 },
   { id: "nanning", name: "南寧", description: "嶺南西部，百越之地", lat: 22.82, lng: 108.37, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 45 },
   { id: "guiyang_city", name: "貴陽", description: "黔中腹地，夜郎故地", lat: 26.65, lng: 106.63, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "forge", food: 40 },
   { id: "zunyi", name: "遵義", description: "黔北門戶，蜀黔要道", lat: 27.73, lng: 106.93, status: "neutral", tier: "minor", gold: 10, garrison: 0, development: 0, specialty: "granary", food: 45 },

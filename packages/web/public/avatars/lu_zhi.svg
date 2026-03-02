@@ -1,17 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
   <defs>
-    <radialGradient id="bg" cx="50%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="#a1887f"/>
-      <stop offset="100%" stop-color="#6d4c41"/>
+    <radialGradient id="bg_lu_zhi" cx="50%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#94aab8"/>
+      <stop offset="100%" stop-color="#668599"/>
     </radialGradient>
-    <radialGradient id="shadow" cx="50%" cy="50%" r="50%">
+    <radialGradient id="sh_lu_zhi" cx="50%" cy="50%" r="50%">
       <stop offset="70%" stop-color="transparent"/>
-      <stop offset="100%" stop-color="rgba(0,0,0,0.3)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.25)"/>
     </radialGradient>
+    <pattern id="pat_lu_zhi" patternUnits="userSpaceOnUse" width="20" height="10">
+      <path d="M0 5 Q5 0 10 5 Q15 10 20 5" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+    </pattern>
   </defs>
-  <circle cx="64" cy="64" r="62" fill="url(#bg)"/>
-  <circle cx="64" cy="64" r="62" fill="url(#shadow)"/>
-  <circle cx="64" cy="64" r="58" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
-  <circle cx="64" cy="64" r="52" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-  <text x="64" y="72" text-anchor="middle" fill="white" font-size="36" font-family="serif" font-weight="bold" opacity="0.95">盧植</text>
+  <circle cx="64" cy="64" r="62" fill="url(#bg_lu_zhi)"/>
+  <circle cx="64" cy="64" r="62" fill="url(#pat_lu_zhi)"/>
+  <circle cx="64" cy="64" r="62" fill="url(#sh_lu_zhi)"/>
+  <circle cx="64" cy="64" r="61.5" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="3"/>
+  <text x="64" y="70" text-anchor="middle" fill="white" font-size="34" font-family="serif" font-weight="bold" opacity="0.95">盧植</text>
+  <text x="100" y="30" text-anchor="middle" fill="white" font-size="18" opacity="0.7">⚔</text>
 </svg>

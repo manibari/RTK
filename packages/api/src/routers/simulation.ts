@@ -270,6 +270,21 @@ export const simulationRouter = router({
     return ctx.simulation.getCityVulnerability();
   }),
 
+  // Threat matrix
+  getThreatMatrix: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getThreatMatrix();
+  }),
+
+  // Truces
+  getDiplomacyTruces: publicProcedure.query(({ ctx }) => {
+    return ctx.simulation.getTruces();
+  }),
+
+  // Undo last advance
+  undoAdvance: publicProcedure.mutation(async ({ ctx }) => {
+    return ctx.simulation.undoLastAdvance();
+  }),
+
   // Reset
   reset: publicProcedure
     .input(z.object({ difficulty: z.enum(["easy", "normal", "hard"]).optional() }).optional())

@@ -99,6 +99,31 @@ function pickTactic(char: CharacterNode, defending: boolean): BattleTactic {
  * Now with faction-level strategic intent (expand/defend/develop),
  * coordinated target focus, and trait-based tactic selection.
  */
+export interface DiplomacyContext {
+  threatMatrix?: Record<string, Record<string, number>>;
+  truces?: Map<string, number>;
+  currentTick?: number;
+  warExhaustion?: Map<string, number>;
+  powerRatioMinToAttack?: number;
+  threatWarThreshold?: number;
+  warExhaustionDefendThreshold?: number;
+}
+
+/**
+ * Evaluate total faction power: sum of city garrisons + members * 3 + gold / 50.
+ */
+export function evaluateFactionPower(
+  faction: FactionDef,
+  cities: PlaceNode[],
+): number {
+  const factionCities = cities.filter(
+    (c) => c.controllerId && faction.members.includes(c.controllerId),
+  );
+  const garrisonSum = factionCities.reduce((s, c) => s + c.garrison, 0);
+  const goldSum = factionCities.reduce((s, c) => s + c.gold, 0);
+  return garrisonSum + faction.members.length * 3 + goldSum / 50;
+}
+
 export function evaluateNPCDecisions(
   factions: FactionDef[],
   characters: CharacterNode[],
@@ -109,6 +134,7 @@ export function evaluateNPCDecisions(
   adjacency?: AdjacencyMap,
   extCityMap?: Map<string, PlaceNode>,
   expansionAggression: number = 1.0,
+  diplomacy?: DiplomacyContext,
 ): AIDecision[] {
   const decisions: AIDecision[] = [];
   const charMap = new Map(characters.map((c) => [c.id, c]));
@@ -143,6 +169,12 @@ export function evaluateNPCDecisions(
       if (faction.members.includes(c.controllerId)) return false;
       const controllerFaction = charToFaction.get(c.controllerId);
       if (controllerFaction && isAllied(faction.id, controllerFaction)) return false;
+      // Filter out truce-protected factions
+      if (controllerFaction && diplomacy?.truces) {
+        const truceKey = [faction.id, controllerFaction].sort().join(":");
+        const expiry = diplomacy.truces.get(truceKey);
+        if (expiry != null && expiry > (diplomacy.currentTick ?? 0)) return false;
+      }
       return true;
     });
 
@@ -152,12 +184,50 @@ export function evaluateNPCDecisions(
     );
     const allTargetCities = [...enemyCities, ...neutralCities];
 
-    // Compute faction strategic intent
-    const intent = evaluateStrategicIntent(faction, factionCities, allTargetCities, defendersPerCity);
+    // Power evaluation: check if faction has enough power to attack
+    const myPower = evaluateFactionPower(faction, cities);
+    let intent: StrategicIntent;
+
+    // War exhaustion override: high exhaustion forces defensive posture
+    const factionExhaustion = diplomacy?.warExhaustion?.get(faction.id) ?? 0;
+    const exhaustionThreshold = diplomacy?.warExhaustionDefendThreshold ?? 70;
+    if (factionExhaustion >= exhaustionThreshold) {
+      intent = "defend";
+    } else {
+      // Normal strategic intent evaluation
+      intent = evaluateStrategicIntent(faction, factionCities, allTargetCities, defendersPerCity);
+    }
+
+    // Power ratio check: only expand if we have sufficient advantage
+    if (intent === "expand") {
+      // Find the strongest target faction
+      const targetFactions = new Set<string>();
+      for (const c of enemyCities) {
+        const cf = c.controllerId ? charToFaction.get(c.controllerId) : null;
+        if (cf) targetFactions.add(cf);
+      }
+      const minRatio = diplomacy?.powerRatioMinToAttack ?? 1.2;
+      let canAttack = false;
+      for (const tf of targetFactions) {
+        const targetFaction = factions.find((f) => f.id === tf);
+        if (!targetFaction) continue;
+        const targetPower = evaluateFactionPower(targetFaction, cities);
+        if (targetPower === 0 || myPower / targetPower >= minRatio) {
+          canAttack = true;
+          break;
+        }
+      }
+      // Also allow attack on neutral cities even without power advantage
+      if (!canAttack && neutralCities.length > 0) canAttack = true;
+      if (!canAttack) intent = "develop";
+    }
+
+    // Threat-based target priority: prefer attacking high-threat factions
+    const factionCityIds = factionCities.map((c) => c.id);
 
     // Pick a coordinated target: all attackers from this faction aim at the same city
     const focusTarget = intent === "expand"
-      ? pickBestTarget(allTargetCities, defendersPerCity, 2) // moderate caution for faction-level target
+      ? pickBestTargetWithThreat(allTargetCities, defendersPerCity, 2, factionCityIds, adjacency, faction.id, charToFaction, diplomacy)
       : null;
 
     for (const memberId of faction.members) {
@@ -253,6 +323,39 @@ export function evaluateNPCSpyDecisions(
   }
 
   return decisions;
+}
+
+/**
+ * Check if capturing targetCityId would create an exclave (disconnected territory).
+ * Returns true if the target is not adjacent to any existing faction city.
+ */
+export function wouldCreateExclave(
+  targetCityId: string,
+  factionCityIds: string[],
+  adjacency: AdjacencyMap,
+): boolean {
+  const roads = adjacency.get(targetCityId) ?? [];
+  for (const road of roads) {
+    const neighborId = road.fromCityId === targetCityId ? road.toCityId : road.fromCityId;
+    if (factionCityIds.includes(neighborId)) return false;
+  }
+  return true;
+}
+
+/**
+ * Check if capturing targetCityId would connect two disconnected faction territories.
+ */
+function wouldConnectTerritories(
+  targetCityId: string,
+  factionCityIds: string[],
+  adjacency: AdjacencyMap,
+): boolean {
+  const roads = adjacency.get(targetCityId) ?? [];
+  const factionNeighbors = roads
+    .map((r) => r.fromCityId === targetCityId ? r.toCityId : r.fromCityId)
+    .filter((id) => factionCityIds.includes(id));
+  // If target connects 2+ distinct faction-owned neighbors, it might bridge territories
+  return factionNeighbors.length >= 2;
 }
 
 function getIntimacyWith(charId: string, targetId: string, relationships: RelationshipEdge[]): number {
@@ -368,7 +471,7 @@ function decideForCharacter(
   // Priority 2: Attack any weak target if overstaffed
   const attackThreshold = Math.max(1, 2 + Math.floor(caution / 2) - Math.floor(aggression / 2));
   if (myDefenders > attackThreshold && viableEnemyCities.length > 0) {
-    const target = pickBestTarget(viableEnemyCities, defendersPerCity, caution);
+    const target = pickBestTarget(viableEnemyCities, defendersPerCity, caution, factionCities.map((c) => c.id), adjacency);
     if (target) {
       const tactic = pickTactic(char, false);
       return {
@@ -412,13 +515,62 @@ function decideForCharacter(
 }
 
 /**
+ * Pick best target with threat-based priority: prefer attacking factions that threaten us.
+ */
+function pickBestTargetWithThreat(
+  cities: PlaceNode[],
+  defendersPerCity: Map<string, string[]>,
+  caution: number,
+  factionCityIds: string[],
+  adjacency: AdjacencyMap | undefined,
+  myFactionId: string,
+  charToFaction: Map<string, string>,
+  diplomacy?: DiplomacyContext,
+): PlaceNode | null {
+  let best: PlaceNode | null = null;
+  let bestScore = -Infinity;
+  const threatThreshold = diplomacy?.threatWarThreshold ?? 40;
+
+  for (const city of cities) {
+    const defenders = defendersPerCity.get(city.id)?.length ?? 0;
+    const garrison = city.garrison;
+    let score = 10 - defenders * (1 + caution * 0.3) - garrison * 0.8;
+    if (defenders === 0) score += 5;
+    if (city.tier === "minor") score += 2;
+    if ((city.food ?? 100) < 30) score += 3;
+    // Exclave avoidance
+    if (factionCityIds.length > 0 && adjacency) {
+      if (wouldCreateExclave(city.id, factionCityIds, adjacency)) score -= 8;
+      if (wouldConnectTerritories(city.id, factionCityIds, adjacency)) score += 5;
+    }
+    // Threat-based priority: attack factions that threaten us
+    if (city.controllerId && diplomacy?.threatMatrix) {
+      const controllerFaction = charToFaction.get(city.controllerId);
+      if (controllerFaction) {
+        const theirThreatToUs = diplomacy.threatMatrix[myFactionId]?.[controllerFaction] ?? 0;
+        if (theirThreatToUs >= threatThreshold) score += 3; // prioritize threatening factions
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = city;
+    }
+  }
+
+  return best;
+}
+
+/**
  * Pick the best target city to attack.
  * Cautious chars prefer weakly defended cities; aggressive chars also consider high-value targets.
+ * Penalizes targets that would create exclaves; rewards targets that connect territories.
  */
 function pickBestTarget(
   cities: PlaceNode[],
   defendersPerCity: Map<string, string[]>,
   caution: number,
+  factionCityIds?: string[],
+  adjacency?: AdjacencyMap,
 ): PlaceNode | null {
   let best: PlaceNode | null = null;
   let bestScore = -Infinity;
@@ -434,6 +586,11 @@ function pickBestTarget(
     if (city.tier === "minor") score += 2;
     // Bonus for low food cities (starving)
     if ((city.food ?? 100) < 30) score += 3;
+    // Exclave avoidance: heavy penalty for disconnected targets
+    if (factionCityIds && adjacency) {
+      if (wouldCreateExclave(city.id, factionCityIds, adjacency)) score -= 8;
+      if (wouldConnectTerritories(city.id, factionCityIds, adjacency)) score += 5;
+    }
     if (score > bestScore) {
       bestScore = score;
       best = city;
