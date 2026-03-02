@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Delaunay } from "d3-delaunay";
@@ -82,6 +82,22 @@ const FACTION_TERRITORY_COLORS: Record<string, string> = {
   cao_cao: theme.factionWei,
   sun_quan: theme.factionWu,
   lu_bu: theme.factionLuBu,
+  yuan_shao: theme.factionYuanShao,
+  liu_biao: theme.factionLiuBiao,
+  gongsun_zan: theme.factionGongsunZan,
+  ma_chao: theme.factionMaChao,
+};
+
+// Faction leader display names for legend
+const FACTION_LEADER_NAMES: Record<string, string> = {
+  liu_bei: "劉備",
+  cao_cao: "曹操",
+  sun_quan: "孫權",
+  lu_bu: "呂布",
+  yuan_shao: "袁紹",
+  liu_biao: "劉表",
+  gongsun_zan: "公孫瓚",
+  ma_chao: "馬超",
 };
 
 const CHINA_CENTER: [number, number] = [33.0, 108.0];
@@ -208,34 +224,77 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
       const delaunay = Delaunay.from(points);
       const voronoi = delaunay.voronoi([70, 18, 140, 55]); // bounding box [xmin, ymin, xmax, ymax]
 
+      // First pass: compute clipped polygons and faction assignments
+      const clippedPolygons: ([number, number][] | null)[] = [];
+      const cellFactions: (string | null)[] = [];
+
       for (let i = 0; i < liveCities.length; i++) {
-        const city = liveCities[i];
         const cellPolygon = voronoi.cellPolygon(i);
-        if (!cellPolygon) continue;
-
-        // Convert Voronoi cell from [lng, lat] to [lat, lng] for clipping/Leaflet
+        if (!cellPolygon) {
+          clippedPolygons.push(null);
+          cellFactions.push(null);
+          continue;
+        }
         const cellLatLng: [number, number][] = cellPolygon.map(([lng, lat]) => [lat, lng]);
-
-        // Clip to China outline
         const clipped = clipPolygon(cellLatLng, CHINA_CLIP_POLYGON);
-        if (clipped.length < 3) continue;
+        clippedPolygons.push(clipped.length >= 3 ? clipped : null);
+        cellFactions.push(liveCities[i].controllerId ?? null);
+      }
 
-        // Determine territory color
-        const controllerId = city.controllerId;
+      // Second pass: draw territory polygons
+      for (let i = 0; i < liveCities.length; i++) {
+        const clipped = clippedPolygons[i];
+        if (!clipped) continue;
+
+        const controllerId = cellFactions[i];
         const territoryColor = controllerId
           ? FACTION_TERRITORY_COLORS[controllerId] ?? factionColors?.get(controllerId) ?? "transparent"
-          : "transparent";
+          : theme.textMuted; // neutral territory gets subtle gray
 
-        if (territoryColor === "transparent") continue;
+        const isNeutral = !controllerId;
+        if (!isNeutral && territoryColor === "transparent") continue;
 
         const polygon = L.polygon(clipped as L.LatLngExpression[], {
           color: territoryColor,
           fillColor: territoryColor,
-          fillOpacity: 0.2,
-          weight: 1,
-          opacity: 0.4,
+          fillOpacity: isNeutral ? 0.12 : 0.35,
+          weight: isNeutral ? 0 : 2,
+          opacity: isNeutral ? 0 : 0.6,
         });
         polygon.addTo(layers);
+      }
+
+      // Third pass: draw faction border lines between different-faction territories
+      const drawnBorders = new Set<string>();
+      for (let i = 0; i < liveCities.length; i++) {
+        for (const j of delaunay.neighbors(i)) {
+          const key = i < j ? `${i}-${j}` : `${j}-${i}`;
+          if (drawnBorders.has(key)) continue;
+          drawnBorders.add(key);
+
+          if (cellFactions[i] === cellFactions[j]) continue;
+
+          const polyI = clippedPolygons[i];
+          const polyJ = clippedPolygons[j];
+          if (!polyI || !polyJ) continue;
+
+          // Find shared vertices between adjacent cells (in polyI order)
+          const sharedVertices: [number, number][] = [];
+          for (const vI of polyI) {
+            if (polyJ.some(vJ => Math.abs(vI[0] - vJ[0]) < 0.001 && Math.abs(vI[1] - vJ[1]) < 0.001)) {
+              sharedVertices.push(vI);
+            }
+          }
+
+          if (sharedVertices.length >= 2) {
+            L.polyline(sharedVertices as L.LatLngExpression[], {
+              color: theme.textMuted,
+              weight: 3,
+              opacity: 0.7,
+              dashArray: "6 4",
+            }).addTo(layers);
+          }
+        }
       }
     }
 
@@ -485,6 +544,25 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
     }
   }, [data, viewTick, onCityClick, onCharacterClick, playerFactionMembers, factionColors, tradeRoutes, supplyStatus, droughtCities, roads, highlightCityIds]);
 
+  // Compute active factions for legend
+  const activeFactions = useMemo(() => {
+    if (!data) return [];
+    const seen = new Map<string, string>();
+    for (const city of data.cities) {
+      if (city.controllerId && !seen.has(city.controllerId)) {
+        const color = FACTION_TERRITORY_COLORS[city.controllerId] ?? factionColors?.get(city.controllerId);
+        if (color) {
+          seen.set(city.controllerId, color);
+        }
+      }
+    }
+    return Array.from(seen.entries()).map(([id, color]) => ({
+      id,
+      name: FACTION_LEADER_NAMES[id] ?? id,
+      color,
+    }));
+  }, [data, factionColors]);
+
   return (
     <>
       <style>{`
@@ -520,7 +598,19 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
           border-top-color: ${theme.bg3} !important;
         }
       `}</style>
-      <div ref={containerRef} style={styles.container} />
+      <div style={styles.wrapper}>
+        <div ref={containerRef} style={styles.mapContainer} />
+        {activeFactions.length > 0 && (
+          <div style={styles.legend}>
+            {activeFactions.map((f) => (
+              <div key={f.id} style={styles.legendItem}>
+                <span style={{ ...styles.legendSwatch, background: f.color }} />
+                <span style={styles.legendLabel}>{f.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </>
   );
 }
@@ -536,10 +626,45 @@ function statusLabel(status: string): string {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: {
+  wrapper: {
+    position: "relative",
     flex: 1,
     minHeight: 0,
+  },
+  mapContainer: {
+    width: "100%",
+    height: "100%",
     borderRadius: 8,
     overflow: "hidden",
+  },
+  legend: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    zIndex: 1000,
+    background: theme.bg1a,
+    border: `1px solid ${theme.bg3}`,
+    borderRadius: 6,
+    padding: "6px 10px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  legendItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  },
+  legendSwatch: {
+    display: "inline-block",
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    flexShrink: 0,
+  },
+  legendLabel: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    whiteSpace: "nowrap",
   },
 };

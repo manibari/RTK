@@ -29,6 +29,10 @@ export const theme = {
   factionWei: "#d45550",
   factionWu: "#6daf7d",
   factionLuBu: "#b080b0",
+  factionYuanShao: "#d4a017",
+  factionLiuBiao: "#0d9488",
+  factionGongsunZan: "#94a3b8",
+  factionMaChao: "#ea580c",
 
   // Season colors
   seasonSpring: "#6daf7d",
@@ -48,6 +52,10 @@ export const FACTION_COLORS: Record<string, string> = {
   wei: theme.factionWei,
   wu: theme.factionWu,
   lu_bu: theme.factionLuBu,
+  yuan_shao: theme.factionYuanShao,
+  liu_biao: theme.factionLiuBiao,
+  gongsun_zan: theme.factionGongsunZan,
+  ma_chao: theme.factionMaChao,
 };
 
 // Territory colors used in strategic map
@@ -56,6 +64,10 @@ export const FACTION_TERRITORY_COLORS: Record<string, string> = {
   cao_cao: theme.factionWei,
   sun_quan: theme.factionWu,
   lu_bu: theme.factionLuBu,
+  yuan_shao: theme.factionYuanShao,
+  liu_biao: theme.factionLiuBiao,
+  gongsun_zan: theme.factionGongsunZan,
+  ma_chao: theme.factionMaChao,
 };
 
 // Season info
