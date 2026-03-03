@@ -76,6 +76,7 @@ export interface BalanceConfig {
     foreignDecayPerTick: number;
     rebellionThreshold: number;
     rebellionChance: number;
+    rebellionCooldownTicks: number; // ticks of immunity after a rebellion
   };
 
   garrison: {
@@ -167,10 +168,11 @@ export const BALANCE_EASY: BalanceConfig = {
 
   loyalty: {
     initialLoyalty: 60,
-    capturedCityLoyalty: 30,
+    capturedCityLoyalty: 45,
     foreignDecayPerTick: 1,
     rebellionThreshold: 15,
     rebellionChance: 0.15,
+    rebellionCooldownTicks: 5,
   },
 
   garrison: {
@@ -262,10 +264,11 @@ export const BALANCE_NORMAL: BalanceConfig = {
 
   loyalty: {
     initialLoyalty: 50,
-    capturedCityLoyalty: 25,
+    capturedCityLoyalty: 40,
     foreignDecayPerTick: 2,
     rebellionThreshold: 20,
     rebellionChance: 0.20,
+    rebellionCooldownTicks: 4,
   },
 
   garrison: {
@@ -357,10 +360,11 @@ export const BALANCE_HARD: BalanceConfig = {
 
   loyalty: {
     initialLoyalty: 50,
-    capturedCityLoyalty: 20,
+    capturedCityLoyalty: 30,
     foreignDecayPerTick: 3,
     rebellionThreshold: 25,
     rebellionChance: 0.30,
+    rebellionCooldownTicks: 3,
   },
 
   garrison: {

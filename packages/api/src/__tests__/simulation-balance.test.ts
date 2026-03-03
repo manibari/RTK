@@ -271,10 +271,34 @@ describe("Simulation Balance Integration", () => {
 
     it("normal preset has expected loyalty values", () => {
       expect(BALANCE_NORMAL.loyalty.initialLoyalty).toBe(50);
-      expect(BALANCE_NORMAL.loyalty.capturedCityLoyalty).toBe(25);
+      expect(BALANCE_NORMAL.loyalty.capturedCityLoyalty).toBe(40);
       expect(BALANCE_NORMAL.loyalty.foreignDecayPerTick).toBe(2);
       expect(BALANCE_NORMAL.loyalty.rebellionThreshold).toBe(20);
       expect(BALANCE_NORMAL.loyalty.rebellionChance).toBe(0.20);
+      expect(BALANCE_NORMAL.loyalty.rebellionCooldownTicks).toBe(4);
+    });
+  });
+
+  describe("rebellion cooldown config", () => {
+    it("all presets have positive cooldown ticks", () => {
+      for (const preset of [BALANCE_EASY, BALANCE_NORMAL, BALANCE_HARD]) {
+        expect(preset.loyalty.rebellionCooldownTicks).toBeGreaterThan(0);
+      }
+    });
+
+    it("easier difficulties have longer cooldown (more forgiving)", () => {
+      expect(BALANCE_EASY.loyalty.rebellionCooldownTicks).toBeGreaterThanOrEqual(
+        BALANCE_NORMAL.loyalty.rebellionCooldownTicks,
+      );
+      expect(BALANCE_NORMAL.loyalty.rebellionCooldownTicks).toBeGreaterThanOrEqual(
+        BALANCE_HARD.loyalty.rebellionCooldownTicks,
+      );
+    });
+
+    it("cooldown values match expected per-difficulty", () => {
+      expect(BALANCE_EASY.loyalty.rebellionCooldownTicks).toBe(5);
+      expect(BALANCE_NORMAL.loyalty.rebellionCooldownTicks).toBe(4);
+      expect(BALANCE_HARD.loyalty.rebellionCooldownTicks).toBe(3);
     });
   });
 });

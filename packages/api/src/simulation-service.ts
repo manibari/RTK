@@ -509,6 +509,7 @@ export class SimulationService {
   private diplomaticVictoryTicks = 0; // consecutive ticks with all surviving factions allied
   private economicVictoryTicks = 0;  // consecutive ticks with >85% total gold
   private cityLoyalty = new Map<string, number>(); // cityId -> loyalty 0-100
+  private rebellionCooldown = new Map<string, number>(); // cityId -> immune until tick
   private factionTraditions = new Map<string, FactionTradition>(); // factionId -> active tradition
   private factionBattleCount = new Map<string, number>(); // factionId -> total battles
   private factionSpySuccessCount = new Map<string, number>(); // factionId -> successful spy missions
@@ -579,6 +580,7 @@ export class SimulationService {
     this.diplomaticVictoryTicks = 0;
     this.economicVictoryTicks = 0;
     this.cityLoyalty.clear();
+    this.rebellionCooldown.clear();
     this.factionTraditions.clear();
     this.factionBattleCount.clear();
     this.factionSpySuccessCount.clear();
@@ -2925,6 +2927,9 @@ export class SimulationService {
     const cities = await this.repo.getAllPlaces();
     for (const city of cities) {
       if (city.status === "dead" || !city.controllerId) continue;
+      // Skip if city is still in cooldown from a recent rebellion
+      const cooldownTick = this.rebellionCooldown.get(city.id) ?? 0;
+      if (cooldownTick > this.currentTick) continue;
       const loyalty = this.cityLoyalty.get(city.id) ?? 50;
       if (loyalty >= this.config.loyalty.rebellionThreshold) continue;
       if (Math.random() > this.config.loyalty.rebellionChance) continue;
@@ -2942,8 +2947,9 @@ export class SimulationService {
         const morale = this.factionMorale.get(factionId) ?? 50;
         this.factionMorale.set(factionId, Math.max(0, morale - 10));
       }
-      // Reset loyalty after rebellion
+      // Reset loyalty after rebellion and set cooldown
       this.cityLoyalty.set(city.id, flipped ? 50 : 30);
+      this.rebellionCooldown.set(city.id, this.currentTick + this.config.loyalty.rebellionCooldownTicks);
       events.push({
         tick: this.currentTick,
         cityId: city.id,
@@ -4161,6 +4167,7 @@ export class SimulationService {
       diplomaticVictoryTicks: this.diplomaticVictoryTicks,
       economicVictoryTicks: this.economicVictoryTicks,
       cityLoyalty: [...this.cityLoyalty.entries()],
+      rebellionCooldown: [...this.rebellionCooldown.entries()],
       factionTraditions: [...this.factionTraditions.entries()],
       factionBattleCount: [...this.factionBattleCount.entries()],
       factionSpySuccessCount: [...this.factionSpySuccessCount.entries()],
@@ -4256,6 +4263,7 @@ export class SimulationService {
     this.diplomaticVictoryTicks = data.diplomaticVictoryTicks ?? 0;
     this.economicVictoryTicks = data.economicVictoryTicks ?? 0;
     this.cityLoyalty = new Map(data.cityLoyalty ?? []);
+    this.rebellionCooldown = new Map(data.rebellionCooldown ?? []);
     this.factionTraditions = new Map(data.factionTraditions ?? []);
     this.factionBattleCount = new Map(data.factionBattleCount ?? []);
     this.factionSpySuccessCount = new Map(data.factionSpySuccessCount ?? []);
@@ -4339,6 +4347,7 @@ export class SimulationService {
       diplomaticVictoryTicks: this.diplomaticVictoryTicks,
       economicVictoryTicks: this.economicVictoryTicks,
       cityLoyalty: [...this.cityLoyalty.entries()],
+      rebellionCooldown: [...this.rebellionCooldown.entries()],
       factionTraditions: [...this.factionTraditions.entries()],
       factionBattleCount: [...this.factionBattleCount.entries()],
       factionSpySuccessCount: [...this.factionSpySuccessCount.entries()],
@@ -4404,6 +4413,7 @@ export class SimulationService {
     this.diplomaticVictoryTicks = data.diplomaticVictoryTicks ?? 0;
     this.economicVictoryTicks = data.economicVictoryTicks ?? 0;
     this.cityLoyalty = new Map(data.cityLoyalty ?? []);
+    this.rebellionCooldown = new Map(data.rebellionCooldown ?? []);
     this.factionTraditions = new Map(data.factionTraditions ?? []);
     this.factionBattleCount = new Map(data.factionBattleCount ?? []);
     this.factionSpySuccessCount = new Map(data.factionSpySuccessCount ?? []);
@@ -4590,6 +4600,7 @@ interface SaveData {
   diplomaticVictoryTicks: number;
   economicVictoryTicks: number;
   cityLoyalty: [string, number][];
+  rebellionCooldown?: [string, number][];
   factionTraditions: [string, FactionTradition][];
   factionBattleCount: [string, number][];
   factionSpySuccessCount: [string, number][];

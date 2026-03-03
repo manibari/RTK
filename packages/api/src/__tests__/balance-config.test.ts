@@ -315,6 +315,23 @@ describe("BalanceConfig", () => {
     });
   });
 
+  describe("rebellion cooldown scales with difficulty", () => {
+    it("rebellionCooldownTicks: easy >= normal >= hard", () => {
+      expect(BALANCE_EASY.loyalty.rebellionCooldownTicks).toBeGreaterThanOrEqual(
+        BALANCE_NORMAL.loyalty.rebellionCooldownTicks,
+      );
+      expect(BALANCE_NORMAL.loyalty.rebellionCooldownTicks).toBeGreaterThanOrEqual(
+        BALANCE_HARD.loyalty.rebellionCooldownTicks,
+      );
+    });
+
+    it("all presets have positive cooldown", () => {
+      for (const [, config] of configs) {
+        expect(config.loyalty.rebellionCooldownTicks).toBeGreaterThan(0);
+      }
+    });
+  });
+
   describe("all numeric values are positive and sensible", () => {
     for (const [name, config] of configs) {
       it(`${name}: economy values are positive`, () => {
