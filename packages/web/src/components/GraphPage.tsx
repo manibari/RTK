@@ -6,6 +6,7 @@ import { theme } from "../lib/theme";
 import { RadialGraph } from "./RadialGraph";
 import { Sidebar } from "./Sidebar";
 import { Timeline, type TimelineMarker } from "./Timeline";
+import { formatGameDate } from "../lib/date-utils";
 
 interface CharacterNode {
   id: string;
@@ -187,7 +188,7 @@ export function GraphPage({
         <header style={styles.header}>
           <div style={styles.headerLeft}>
             <h1 style={styles.title}>RTK - Relationship Graph</h1>
-            <span style={styles.tick}>Day {viewTick}{viewTick !== currentTick ? ` (live: ${currentTick})` : ""}</span>
+            <span style={styles.tick}>{formatGameDate(viewTick)}{viewTick !== currentTick ? ` (live: ${formatGameDate(currentTick)})` : ""}</span>
           </div>
           <div style={styles.controls}>
             <label style={styles.label}>中心角色：</label>
@@ -211,7 +212,7 @@ export function GraphPage({
                 cursor: advancing ? "not-allowed" : "pointer",
               }}
             >
-              {advancing ? "推進中..." : "推進一天"}
+              {advancing ? "推進中..." : "推進一月"}
             </button>
           </div>
         </header>

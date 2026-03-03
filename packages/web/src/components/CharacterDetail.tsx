@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { trpc } from "../lib/trpc";
 import { theme } from "../lib/theme";
+import { formatGameDate } from "../lib/date-utils";
 
 interface CharacterSkills {
   leadership: number;
@@ -168,7 +169,7 @@ export function CharacterDetail({
               {character.name}
               {character.bornTick != null && currentTick != null && (
                 <span style={{ fontSize: 13, color: theme.textSecondary, fontWeight: 400, marginLeft: 8 }}>
-                  {Math.floor((currentTick - character.bornTick) / 16)}歲
+                  {Math.floor((currentTick - character.bornTick) / 12)}歲
                 </span>
               )}
             </h2>
@@ -418,7 +419,7 @@ export function CharacterDetail({
                 );
                 return (
                   <div key={evt.id} style={styles.eventItem}>
-                    <span style={styles.eventDay}>Day {evt.tick}</span>
+                    <span style={styles.eventDay}>{formatGameDate(evt.tick)}</span>
                     <span style={styles.eventDelta}>
                       {evt.intimacyChange > 0 ? "+" : ""}{evt.intimacyChange}
                     </span>

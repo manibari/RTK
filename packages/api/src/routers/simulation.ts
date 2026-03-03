@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../trpc.js";
-import { getCombatRating } from "../simulation-service.js";
+import { getCombatRating, getGameDate } from "../simulation-service.js";
 
 export const simulationRouter = router({
   advanceDay: publicProcedure.mutation(async ({ ctx }) => {
@@ -44,7 +44,8 @@ export const simulationRouter = router({
     }),
 
   getCurrentTick: publicProcedure.query(({ ctx }) => {
-    return { tick: ctx.simulation.currentTick, season: ctx.simulation.currentSeason };
+    const { year, month } = getGameDate(ctx.simulation.currentTick);
+    return { tick: ctx.simulation.currentTick, year, month, season: ctx.simulation.currentSeason };
   }),
 
   getDifficulty: publicProcedure.query(({ ctx }) => {

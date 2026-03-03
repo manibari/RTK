@@ -3,6 +3,7 @@
 import type { PairEvent, TimelinePoint } from "./GraphPage";
 import { TrendChart } from "./TrendChart";
 import { theme } from "../lib/theme";
+import { formatGameDate } from "../lib/date-utils";
 
 interface RelationshipDetail {
   sourceId: string;
@@ -42,7 +43,7 @@ export function Sidebar({ selectedEdge, characters, pairEvents, timeline, viewTi
           <>
             <h2 style={styles.title}>今日總結</h2>
             <div style={styles.summaryBox}>
-              <span style={styles.summaryDay}>Day {currentTick}</span>
+              <span style={styles.summaryDay}>{formatGameDate(currentTick)}</span>
               <p style={styles.summaryText}>{dailySummary}</p>
             </div>
             <p style={{ ...styles.hint, marginTop: 16 }}>點擊連線查看關係詳情</p>
@@ -98,7 +99,7 @@ export function Sidebar({ selectedEdge, characters, pairEvents, timeline, viewTi
           事件紀錄 ({pairEvents.length})
         </h3>
         {pairEvents.length === 0 ? (
-          <p style={styles.noEvents}>尚無互動紀錄。點擊「推進一天」開始模擬。</p>
+          <p style={styles.noEvents}>尚無互動紀錄。點擊「推進一月」開始模擬。</p>
         ) : (
           <div style={styles.eventList}>
             {[...pairEvents].reverse().map((evt) => {
@@ -106,7 +107,7 @@ export function Sidebar({ selectedEdge, characters, pairEvents, timeline, viewTi
               return (
                 <div key={evt.id} style={styles.eventItem}>
                   <div style={styles.eventHeader}>
-                    <span style={styles.eventDay}>Day {evt.tick}</span>
+                    <span style={styles.eventDay}>{formatGameDate(evt.tick)}</span>
                     <span
                       style={{
                         ...styles.eventDelta,

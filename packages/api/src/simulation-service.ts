@@ -91,6 +91,8 @@ function computeUnitModifier(attackUnits: UnitComposition, defendUnits: UnitComp
 
 export interface AdvanceDayResult {
   tick: number;
+  year: number;
+  month: number;
   season: Season;
   events: StoredEvent[];
   dailySummary: string;
@@ -143,12 +145,24 @@ export interface SeasonalEvent {
 
 export type GameStatus = "ongoing" | "victory" | "defeat";
 
-// Season system: every 4 ticks = 1 season
+// Calendar system: 1 tick = 1 month, 12 ticks = 1 year
+const GAME_START_YEAR = 184;
+
 export type Season = "spring" | "summer" | "autumn" | "winter";
 
 export function getSeason(tick: number): Season {
-  const phase = Math.floor(tick / 4) % 4;
-  return (["spring", "summer", "autumn", "winter"] as const)[phase];
+  const month = (tick % 12) + 1;
+  if (month <= 3) return "spring";
+  if (month <= 6) return "summer";
+  if (month <= 9) return "autumn";
+  return "winter";
+}
+
+export function getGameDate(tick: number): { year: number; month: number } {
+  return {
+    year: GAME_START_YEAR + Math.floor(tick / 12),
+    month: (tick % 12) + 1,
+  };
 }
 
 export const SEASON_LABELS: Record<Season, string> = {
@@ -510,6 +524,7 @@ export class SimulationService {
   private economicVictoryTicks = 0;  // consecutive ticks with >85% total gold
   private cityLoyalty = new Map<string, number>(); // cityId -> loyalty 0-100
   private rebellionCooldown = new Map<string, number>(); // cityId -> immune until tick
+  private capturedAtTick = new Map<string, number>(); // cityId -> tick when last captured
   private factionTraditions = new Map<string, FactionTradition>(); // factionId -> active tradition
   private factionBattleCount = new Map<string, number>(); // factionId -> total battles
   private factionSpySuccessCount = new Map<string, number>(); // factionId -> successful spy missions
@@ -1031,7 +1046,7 @@ export class SimulationService {
   }
 
   private async processMentorship(): Promise<void> {
-    if (this.currentTick % 10 !== 0) return; // every 10 ticks
+    if (this.currentTick % 6 !== 0) return; // every 6 months
     const allChars = await this.repo.getAllCharacters();
     const charMap = new Map(allChars.map((c) => [c.id, c]));
 
@@ -1061,11 +1076,11 @@ export class SimulationService {
   // ── Aging ──
   getAge(charId: string, bornTick?: number): number {
     if (bornTick == null) return 30; // default age
-    return Math.floor((this.currentTick - bornTick) / 16);
+    return Math.floor((this.currentTick - bornTick) / 12);
   }
 
   private async processAging(): Promise<DeathEvent[]> {
-    if (this.currentTick % 16 !== 0) return []; // check every 16 ticks (~1 year)
+    if (this.currentTick % 12 !== 0) return []; // check every 12 months (1 year)
     const allChars = await this.repo.getAllCharacters();
     const deathEvents: DeathEvent[] = [];
 
@@ -1533,8 +1548,8 @@ export class SimulationService {
       });
       description = `${city.name} 爆發瘟疫，守備 -${garrisonLoss}，糧食 -${foodLoss}`;
     } else if (type === "drought") {
-      this.droughtCities.set(city.id, this.currentTick + 4);
-      description = `${city.name} 遭遇旱災，糧食產量減半持續 4 天`;
+      this.droughtCities.set(city.id, this.currentTick + 3);
+      description = `${city.name} 遭遇旱災，糧食產量減半持續 3 月`;
     } else {
       // bandits
       const devLoss = Math.min(city.development, 1);
@@ -1555,8 +1570,8 @@ export class SimulationService {
   }
 
   private async processSeasonalEvent(): Promise<SeasonalEvent | null> {
-    // Trigger at the start of each season (tick divisible by 4)
-    if (this.currentTick === 0 || this.currentTick % 4 !== 0) return null;
+    // Trigger at the start of each season (every 3 months)
+    if (this.currentTick === 0 || this.currentTick % 3 !== 0) return null;
 
     const season = getSeason(this.currentTick);
     const cities = await this.repo.getAllPlaces();
@@ -1645,8 +1660,11 @@ export class SimulationService {
   async advanceDay(): Promise<AdvanceDayResult> {
     // Prevent advancing after game ends
     if (this.gameState.status !== "ongoing") {
+      const { year, month } = getGameDate(this.currentTick);
       return {
         tick: this.currentTick,
+        year,
+        month,
         season: getSeason(this.currentTick),
         events: [],
         dailySummary: "",
@@ -1709,7 +1727,7 @@ export class SimulationService {
     await this.npcSpend();
 
     // NPC free garrison bonus (Hard mode: every 4 ticks)
-    if (this.config.npcAI.freeGarrisonPer4Ticks > 0 && this.currentTick % 4 === 0) {
+    if (this.config.npcAI.freeGarrisonPerSeason > 0 && this.currentTick % 3 === 0) {
       await this.applyNPCFreeGarrison();
     }
 
@@ -1861,11 +1879,13 @@ export class SimulationService {
       // Re-read events with narratives
       const updatedEvents = this.eventStore.getByTickRange(this.currentTick, this.currentTick);
       const season = getSeason(this.currentTick);
-      return { tick: this.currentTick, season, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, seasonalEvent, rebellionEvents, pendingCard, gameStatus };
+      const { year, month } = getGameDate(this.currentTick);
+      return { tick: this.currentTick, year, month, season, events: updatedEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, seasonalEvent, rebellionEvents, pendingCard, gameStatus };
     }
 
     const season = getSeason(this.currentTick);
-    return { tick: this.currentTick, season, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, seasonalEvent, rebellionEvents, pendingCard, gameStatus };
+    const { year, month } = getGameDate(this.currentTick);
+    return { tick: this.currentTick, year, month, season, events: tickEvents, dailySummary, battleResults, diplomacyEvents, recruitmentResults, betrayalEvents, spyReports, deathEvents, worldEvents, seasonalEvent, rebellionEvents, pendingCard, gameStatus };
   }
 
   getDailySummary(tick: number): string {
@@ -2591,7 +2611,7 @@ export class SimulationService {
   }
 
   private async applyNPCFreeGarrison(): Promise<void> {
-    const bonus = this.config.npcAI.freeGarrisonPer4Ticks;
+    const bonus = this.config.npcAI.freeGarrisonPerSeason;
     if (bonus <= 0) return;
     const cities = await this.repo.getAllPlaces();
     for (const faction of FACTIONS) {
@@ -2866,8 +2886,8 @@ export class SimulationService {
     const cities = await this.repo.getAllPlaces();
     for (const city of cities) {
       if (city.status === "dead" || !city.controllerId || city.path !== "cultural") continue;
-      // Cultural path: controller gets +2 prestige, faction morale +5 (every 4 ticks)
-      if (this.currentTick % 4 === 0 && this.currentTick > 0) {
+      // Cultural path: controller gets +2 prestige, faction morale +5 (every season)
+      if (this.currentTick % 3 === 0 && this.currentTick > 0) {
         this.addPrestige(city.controllerId, 2);
         const factionId = this.getFactionOf(city.controllerId);
         if (factionId) {
@@ -2896,8 +2916,9 @@ export class SimulationService {
       if (city.status === "dead" || !city.controllerId) continue;
       let loyalty = this.cityLoyalty.get(city.id) ?? this.config.loyalty.initialLoyalty;
       const controllerFaction = this.getFactionOf(city.controllerId);
-      // Foreign controller decay: city status != allied means recently captured
-      if (city.status === "hostile" || city.status === "neutral") {
+      // Time-based foreign decay: only during instability period after capture
+      const capturedAt = this.capturedAtTick.get(city.id);
+      if (capturedAt != null && (this.currentTick - capturedAt) < this.config.loyalty.foreignDecayDurationMonths) {
         loyalty -= this.config.loyalty.foreignDecayPerTick;
       }
       // Low garrison penalty
@@ -2916,8 +2937,8 @@ export class SimulationService {
       loyalty += this.tradeRoutesForCity(city.id).length;
       // Cultural path: immune to decay (loyalty stays high)
       if (city.path === "cultural" && loyalty < 60) loyalty = 60;
-      // Allied city natural recovery
-      if (city.status === "allied") loyalty += 1;
+      // All controlled cities naturally recover +1/month
+      loyalty += 1;
       this.cityLoyalty.set(city.id, Math.max(0, Math.min(100, loyalty)));
     }
   }
@@ -2964,6 +2985,7 @@ export class SimulationService {
   // Set initial loyalty for newly captured cities
   private setCapturedCityLoyalty(cityId: string): void {
     this.cityLoyalty.set(cityId, this.config.loyalty.capturedCityLoyalty);
+    this.capturedAtTick.set(cityId, this.currentTick);
   }
 
   // ── Counter-Intelligence ──
@@ -3859,7 +3881,7 @@ export class SimulationService {
     const chance = 0.4 + (trust - threshold) / 100;
     if (Math.random() > Math.min(0.9, chance)) return { success: false, reason: `${factionId} 拒絕${TREATY_LABELS[type]}條約` };
     this.treatyCounter++;
-    const duration = type === "non_aggression" ? 10 : 20;
+    const duration = type === "non_aggression" ? 12 : 24;
     this.treaties.push({
       id: `treaty-${this.treatyCounter}`,
       type,
@@ -4167,6 +4189,7 @@ export class SimulationService {
       diplomaticVictoryTicks: this.diplomaticVictoryTicks,
       economicVictoryTicks: this.economicVictoryTicks,
       cityLoyalty: [...this.cityLoyalty.entries()],
+      capturedAtTick: [...this.capturedAtTick.entries()],
       rebellionCooldown: [...this.rebellionCooldown.entries()],
       factionTraditions: [...this.factionTraditions.entries()],
       factionBattleCount: [...this.factionBattleCount.entries()],
@@ -4263,6 +4286,7 @@ export class SimulationService {
     this.diplomaticVictoryTicks = data.diplomaticVictoryTicks ?? 0;
     this.economicVictoryTicks = data.economicVictoryTicks ?? 0;
     this.cityLoyalty = new Map(data.cityLoyalty ?? []);
+    this.capturedAtTick = new Map(data.capturedAtTick ?? []);
     this.rebellionCooldown = new Map(data.rebellionCooldown ?? []);
     this.factionTraditions = new Map(data.factionTraditions ?? []);
     this.factionBattleCount = new Map(data.factionBattleCount ?? []);
@@ -4347,6 +4371,7 @@ export class SimulationService {
       diplomaticVictoryTicks: this.diplomaticVictoryTicks,
       economicVictoryTicks: this.economicVictoryTicks,
       cityLoyalty: [...this.cityLoyalty.entries()],
+      capturedAtTick: [...this.capturedAtTick.entries()],
       rebellionCooldown: [...this.rebellionCooldown.entries()],
       factionTraditions: [...this.factionTraditions.entries()],
       factionBattleCount: [...this.factionBattleCount.entries()],
@@ -4413,6 +4438,7 @@ export class SimulationService {
     this.diplomaticVictoryTicks = data.diplomaticVictoryTicks ?? 0;
     this.economicVictoryTicks = data.economicVictoryTicks ?? 0;
     this.cityLoyalty = new Map(data.cityLoyalty ?? []);
+    this.capturedAtTick = new Map(data.capturedAtTick ?? []);
     this.rebellionCooldown = new Map(data.rebellionCooldown ?? []);
     this.factionTraditions = new Map(data.factionTraditions ?? []);
     this.factionBattleCount = new Map(data.factionBattleCount ?? []);
@@ -4600,6 +4626,7 @@ interface SaveData {
   diplomaticVictoryTicks: number;
   economicVictoryTicks: number;
   cityLoyalty: [string, number][];
+  capturedAtTick?: [string, number][];
   rebellionCooldown?: [string, number][];
   factionTraditions: [string, FactionTradition][];
   factionBattleCount: [string, number][];

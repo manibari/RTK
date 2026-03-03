@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { theme } from "../lib/theme";
+import { formatGameDate } from "../lib/date-utils";
 
 interface BattleRound {
   phase: string;
@@ -108,7 +109,7 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
     <div style={styles.container}>
       <div style={styles.header}>
         <h1 style={styles.title}>RTK - Game Log</h1>
-        <span style={styles.tick}>Day {currentTick}</span>
+        <span style={styles.tick}>{formatGameDate(currentTick)}</span>
         <div style={styles.filterBar}>
           {(["battle", "diplomacy", "summary"] as LogFilter[]).map((f) => (
             <button
@@ -139,7 +140,7 @@ export function GameLog({ battles, diplomacy, summaries, currentTick }: GameLogP
               onClick={() => entry.rounds && setExpandedIdx(expandedIdx === i ? null : i)}
             >
               <div style={styles.entryHeader}>
-                <span style={styles.entryDay}>Day {entry.tick}</span>
+                <span style={styles.entryDay}>{formatGameDate(entry.tick)}</span>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   {entry.tactic && (
                     <span style={{ fontSize: 10, color: theme.special, fontWeight: 600 }}>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { trpc } from "../lib/trpc";
 import { theme } from "../lib/theme";
+import { formatGameDate } from "../lib/date-utils";
 
 interface FactionStat {
   id: string;
@@ -172,7 +173,7 @@ export function StatsPanel({ currentTick, onMessage, onViewCharacter }: StatsPan
         <div style={styles.playerSection}>
           <div style={styles.playerHeader}>
             <h2 style={{ ...styles.sectionTitle, color: playerStat.color }}>己方勢力 — {playerStat.name}</h2>
-            <span style={styles.tickBadge}>Day {currentTick}</span>
+            <span style={styles.tickBadge}>{formatGameDate(currentTick)}</span>
           </div>
 
           {/* Overview bar */}

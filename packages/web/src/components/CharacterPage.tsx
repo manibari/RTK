@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { trpc } from "../lib/trpc";
 import { theme } from "../lib/theme";
+import { formatGameDate } from "../lib/date-utils";
 
 // --- Types ---
 
@@ -187,7 +188,7 @@ export function CharacterPage({ characterId, onBack, onViewCharacter, currentTic
       .slice(0, 8);
   }, [relationships]);
 
-  const age = character?.bornTick != null ? Math.floor((currentTick - character.bornTick) / 16) : null;
+  const age = character?.bornTick != null ? Math.floor((currentTick - character.bornTick) / 12) : null;
 
   if (loading) {
     return (
@@ -377,7 +378,7 @@ export function CharacterPage({ characterId, onBack, onViewCharacter, currentTic
                         <div style={styles.deedDot} />
                         <div style={styles.deedContent}>
                           <div style={styles.deedHeader}>
-                            <span style={styles.deedDay}>Day {evt.tick}</span>
+                            <span style={styles.deedDay}>{formatGameDate(evt.tick)}</span>
                             <span style={{ ...styles.deedDelta, color: isPositive ? "#7db88a" : "#c47171" }}>
                               {isPositive ? "+" : ""}{evt.intimacyChange}
                             </span>

@@ -1,6 +1,7 @@
 "use client";
 
 import { theme } from "../lib/theme";
+import { formatGameDate } from "../lib/date-utils";
 
 export interface TimelineMarker {
   tick: number;
@@ -33,7 +34,7 @@ export function Timeline({ currentTick, viewTick, onTickChange, playing, onPlayT
       >
         {playing ? "||" : "\u25B6"}
       </button>
-      <span style={styles.label}>Day {viewTick}</span>
+      <span style={styles.label}>{formatGameDate(viewTick)}</span>
       <div style={styles.sliderWrap}>
         {/* Event markers */}
         {currentTick > 0 && markers.map((m, i) => (

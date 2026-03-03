@@ -28,7 +28,7 @@ const STEPS: TutorialStep[] = [
   {
     target: "[data-tutorial='advance-btn']",
     title: "推進時間",
-    description: "按下此按鈕或按 Space 鍵推進一天，執行所有待命令。",
+    description: "按下此按鈕或按 Space 鍵推進一月，執行所有待命令。",
     position: "bottom",
   },
   {

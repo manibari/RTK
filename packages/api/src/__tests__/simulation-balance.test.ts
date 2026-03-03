@@ -84,7 +84,7 @@ describe("Simulation Balance Integration", () => {
       const config = getBalanceConfig("hard");
       expect(config.npcAI.npcIncomeMultiplier).toBe(1.25);
       expect(config.npcAI.npcCostMultiplier).toBe(0.8);
-      expect(config.npcAI.freeGarrisonPer4Ticks).toBe(1);
+      expect(config.npcAI.freeGarrisonPerSeason).toBe(1);
     });
 
     it("easy config has easier victory thresholds", () => {
@@ -245,6 +245,7 @@ describe("Simulation Balance Integration", () => {
         expect(preset.loyalty.capturedCityLoyalty).toBeGreaterThan(0);
         expect(preset.loyalty.capturedCityLoyalty).toBeLessThan(preset.loyalty.initialLoyalty);
         expect(preset.loyalty.foreignDecayPerTick).toBeGreaterThan(0);
+        expect(preset.loyalty.foreignDecayDurationMonths).toBeGreaterThan(0);
         expect(preset.loyalty.rebellionThreshold).toBeGreaterThan(0);
         expect(preset.loyalty.rebellionChance).toBeGreaterThan(0);
         expect(preset.loyalty.rebellionChance).toBeLessThanOrEqual(1);
@@ -272,10 +273,20 @@ describe("Simulation Balance Integration", () => {
     it("normal preset has expected loyalty values", () => {
       expect(BALANCE_NORMAL.loyalty.initialLoyalty).toBe(50);
       expect(BALANCE_NORMAL.loyalty.capturedCityLoyalty).toBe(40);
-      expect(BALANCE_NORMAL.loyalty.foreignDecayPerTick).toBe(2);
+      expect(BALANCE_NORMAL.loyalty.foreignDecayPerTick).toBe(3);
+      expect(BALANCE_NORMAL.loyalty.foreignDecayDurationMonths).toBe(9);
       expect(BALANCE_NORMAL.loyalty.rebellionThreshold).toBe(20);
       expect(BALANCE_NORMAL.loyalty.rebellionChance).toBe(0.20);
       expect(BALANCE_NORMAL.loyalty.rebellionCooldownTicks).toBe(4);
+    });
+
+    it("easier difficulties have longer decay duration (more forgiving)", () => {
+      expect(BALANCE_EASY.loyalty.foreignDecayDurationMonths).toBeGreaterThanOrEqual(
+        BALANCE_NORMAL.loyalty.foreignDecayDurationMonths,
+      );
+      expect(BALANCE_NORMAL.loyalty.foreignDecayDurationMonths).toBeGreaterThanOrEqual(
+        BALANCE_HARD.loyalty.foreignDecayDurationMonths,
+      );
     });
   });
 

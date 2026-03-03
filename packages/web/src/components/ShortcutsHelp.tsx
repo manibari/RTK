@@ -5,7 +5,7 @@ interface ShortcutsHelpProps {
 }
 
 const SHORTCUTS = [
-  { key: "Space", desc: "推進一天" },
+  { key: "Space", desc: "推進一月" },
   { key: "A", desc: "切換自動模擬" },
   { key: "1-5", desc: "切換分頁（關係圖/地圖/日誌/勢力/英雄堂）" },
   { key: "Ctrl+Z", desc: "撤銷上一步" },

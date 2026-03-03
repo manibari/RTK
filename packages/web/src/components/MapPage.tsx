@@ -7,6 +7,7 @@ import { theme } from "../lib/theme";
 import { Timeline, type TimelineMarker } from "./Timeline";
 import { CharacterDetail } from "./CharacterDetail";
 import { CITY_TO_REGION, REGION_BY_ID } from "../data/state-regions";
+import { formatGameDate } from "../lib/date-utils";
 
 const StrategicMap = dynamic(
   () => import("./StrategicMap").then((m) => ({ default: m.StrategicMap })),
@@ -460,7 +461,7 @@ export function MapPage({
       {/* Floating header */}
       <div style={styles.headerOverlay}>
         <h1 style={styles.title}>RTK</h1>
-        <span style={styles.tick}>Day {viewTick}{viewTick !== currentTick ? ` (live: ${currentTick})` : ""}</span>
+        <span style={styles.tick}>{formatGameDate(viewTick)}{viewTick !== currentTick ? ` (live: ${formatGameDate(currentTick)})` : ""}</span>
         {commandCount > 0 && (
           <span style={styles.cmdBadge}>{commandCount} 指令待執行</span>
         )}
@@ -473,7 +474,7 @@ export function MapPage({
             cursor: advancing ? "not-allowed" : "pointer",
           }}
         >
-          {advancing ? "推進中..." : "推進一天"}
+          {advancing ? "推進中..." : "推進一月"}
         </button>
       </div>
 
@@ -965,7 +966,7 @@ export function MapPage({
                       onClick={() => b.rounds && setExpandedBattle(expandedBattle === i ? null : i)}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={styles.battleDay}>Day {b.tick}</span>
+                        <span style={styles.battleDay}>{formatGameDate(b.tick)}</span>
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                           {b.tactic && (
                             <span style={{ fontSize: 10, color: theme.special, fontWeight: 600 }}>

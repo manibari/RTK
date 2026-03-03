@@ -60,7 +60,7 @@ export interface BalanceConfig {
     npcCostMultiplier: number;
     spyChancePerTick: number;
     npcExpansionAggression: number;
-    freeGarrisonPer4Ticks: number;
+    freeGarrisonPerSeason: number;
     underdogCityThreshold: number;        // factions with <= N cities get protection
     underdogFreeGarrisonPerTick: number;  // free garrison per tick for underdog cities
   };
@@ -74,6 +74,7 @@ export interface BalanceConfig {
     initialLoyalty: number;
     capturedCityLoyalty: number;
     foreignDecayPerTick: number;
+    foreignDecayDurationMonths: number; // months of instability after capture
     rebellionThreshold: number;
     rebellionChance: number;
     rebellionCooldownTicks: number; // ticks of immunity after a rebellion
@@ -156,7 +157,7 @@ export const BALANCE_EASY: BalanceConfig = {
     npcCostMultiplier: 1.15,
     spyChancePerTick: 0.10,
     npcExpansionAggression: 0.5,
-    freeGarrisonPer4Ticks: 0,
+    freeGarrisonPerSeason: 0,
     underdogCityThreshold: 2,
     underdogFreeGarrisonPerTick: 2,
   },
@@ -170,6 +171,7 @@ export const BALANCE_EASY: BalanceConfig = {
     initialLoyalty: 60,
     capturedCityLoyalty: 45,
     foreignDecayPerTick: 1,
+    foreignDecayDurationMonths: 12,
     rebellionThreshold: 15,
     rebellionChance: 0.15,
     rebellionCooldownTicks: 5,
@@ -252,7 +254,7 @@ export const BALANCE_NORMAL: BalanceConfig = {
     npcCostMultiplier: 1.0,
     spyChancePerTick: 0.15,
     npcExpansionAggression: 0.7,
-    freeGarrisonPer4Ticks: 0,
+    freeGarrisonPerSeason: 0,
     underdogCityThreshold: 2,
     underdogFreeGarrisonPerTick: 1,
   },
@@ -265,7 +267,8 @@ export const BALANCE_NORMAL: BalanceConfig = {
   loyalty: {
     initialLoyalty: 50,
     capturedCityLoyalty: 40,
-    foreignDecayPerTick: 2,
+    foreignDecayPerTick: 3,
+    foreignDecayDurationMonths: 9,
     rebellionThreshold: 20,
     rebellionChance: 0.20,
     rebellionCooldownTicks: 4,
@@ -348,7 +351,7 @@ export const BALANCE_HARD: BalanceConfig = {
     npcCostMultiplier: 0.8,
     spyChancePerTick: 0.20,
     npcExpansionAggression: 1.0,
-    freeGarrisonPer4Ticks: 1,
+    freeGarrisonPerSeason: 1,
     underdogCityThreshold: 1,
     underdogFreeGarrisonPerTick: 1,
   },
@@ -361,7 +364,8 @@ export const BALANCE_HARD: BalanceConfig = {
   loyalty: {
     initialLoyalty: 50,
     capturedCityLoyalty: 30,
-    foreignDecayPerTick: 3,
+    foreignDecayPerTick: 5,
+    foreignDecayDurationMonths: 6,
     rebellionThreshold: 25,
     rebellionChance: 0.30,
     rebellionCooldownTicks: 3,

@@ -182,9 +182,9 @@ describe("BalanceConfig", () => {
     });
 
     it("free garrison only on hard", () => {
-      expect(BALANCE_EASY.npcAI.freeGarrisonPer4Ticks).toBe(0);
-      expect(BALANCE_NORMAL.npcAI.freeGarrisonPer4Ticks).toBe(0);
-      expect(BALANCE_HARD.npcAI.freeGarrisonPer4Ticks).toBeGreaterThan(0);
+      expect(BALANCE_EASY.npcAI.freeGarrisonPerSeason).toBe(0);
+      expect(BALANCE_NORMAL.npcAI.freeGarrisonPerSeason).toBe(0);
+      expect(BALANCE_HARD.npcAI.freeGarrisonPerSeason).toBeGreaterThan(0);
     });
 
     it("underdog threshold: easy >= normal >= hard", () => {

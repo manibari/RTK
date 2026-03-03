@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { trpc } from "../lib/trpc";
 import { theme, SEASON_INFO } from "../lib/theme";
+import { formatGameDate } from "../lib/date-utils";
 import { GraphPage } from "./GraphPage";
 import { MapPage } from "./MapPage";
 import { GameLog } from "./GameLog";
@@ -340,7 +341,7 @@ export function AppShell() {
       if (result.success) {
         setCurrentTick(result.tick);
         setViewTick(result.tick);
-        addToast(`已撤銷，回到 Day ${result.tick}`, theme.info);
+        addToast(`已撤銷，回到 ${formatGameDate(result.tick)}`, theme.info);
       } else {
         addToast("無法撤銷（無快照）", theme.textMuted);
       }
@@ -359,7 +360,7 @@ export function AppShell() {
   const handleSave = useCallback(async (slot: number) => {
     try {
       const result = await trpc.simulation.saveGame.mutate({ slot });
-      addToast(`已存檔至 Slot ${slot}（Day ${result.tick}）`, theme.info);
+      addToast(`已存檔至 Slot ${slot}（${formatGameDate(result.tick)}）`, theme.info);
     } catch {
       addToast("存檔失敗", theme.danger);
     }
@@ -376,7 +377,7 @@ export function AppShell() {
       setAllBattles([]);
       setAllDiplomacy([]);
       setSummaries(new Map());
-      addToast(`已讀取 Slot ${slot}（Day ${result.tick}）`, theme.info);
+      addToast(`已讀取 Slot ${slot}（${formatGameDate(result.tick)}）`, theme.info);
     } catch {
       addToast("讀取失敗", theme.danger);
     }
@@ -581,7 +582,7 @@ export function AppShell() {
       {pendingCard && (
         <div style={styles.cardOverlay}>
           <div style={styles.cardPanel}>
-            <div style={styles.cardTick}>Day {pendingCard.tick}</div>
+            <div style={styles.cardTick}>{formatGameDate(pendingCard.tick)}</div>
             <h2 style={styles.cardTitle}>{pendingCard.card.title}</h2>
             <p style={styles.cardDesc}>{pendingCard.card.description}</p>
             <div style={styles.cardChoices}>
