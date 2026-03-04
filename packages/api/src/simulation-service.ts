@@ -595,6 +595,7 @@ export class SimulationService {
     this.diplomaticVictoryTicks = 0;
     this.economicVictoryTicks = 0;
     this.cityLoyalty.clear();
+    this.capturedAtTick.clear();
     this.rebellionCooldown.clear();
     this.factionTraditions.clear();
     this.factionBattleCount.clear();
