@@ -243,7 +243,7 @@ describe("Simulation Balance Integration", () => {
         expect(preset.loyalty.initialLoyalty).toBeGreaterThan(0);
         expect(preset.loyalty.initialLoyalty).toBeLessThanOrEqual(100);
         expect(preset.loyalty.capturedCityLoyalty).toBeGreaterThan(0);
-        expect(preset.loyalty.capturedCityLoyalty).toBeLessThan(preset.loyalty.initialLoyalty);
+        expect(preset.loyalty.capturedCityLoyalty).toBeLessThanOrEqual(preset.loyalty.initialLoyalty);
         expect(preset.loyalty.foreignDecayPerTick).toBeGreaterThan(0);
         expect(preset.loyalty.foreignDecayDurationMonths).toBeGreaterThan(0);
         expect(preset.loyalty.rebellionThreshold).toBeGreaterThan(0);
@@ -272,8 +272,8 @@ describe("Simulation Balance Integration", () => {
 
     it("normal preset has expected loyalty values", () => {
       expect(BALANCE_NORMAL.loyalty.initialLoyalty).toBe(50);
-      expect(BALANCE_NORMAL.loyalty.capturedCityLoyalty).toBe(40);
-      expect(BALANCE_NORMAL.loyalty.foreignDecayPerTick).toBe(3);
+      expect(BALANCE_NORMAL.loyalty.capturedCityLoyalty).toBe(50);
+      expect(BALANCE_NORMAL.loyalty.foreignDecayPerTick).toBe(2);
       expect(BALANCE_NORMAL.loyalty.foreignDecayDurationMonths).toBe(9);
       expect(BALANCE_NORMAL.loyalty.rebellionThreshold).toBe(20);
       expect(BALANCE_NORMAL.loyalty.rebellionChance).toBe(0.20);

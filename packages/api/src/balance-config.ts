@@ -169,7 +169,7 @@ export const BALANCE_EASY: BalanceConfig = {
 
   loyalty: {
     initialLoyalty: 60,
-    capturedCityLoyalty: 45,
+    capturedCityLoyalty: 50,
     foreignDecayPerTick: 1,
     foreignDecayDurationMonths: 12,
     rebellionThreshold: 15,
@@ -266,8 +266,8 @@ export const BALANCE_NORMAL: BalanceConfig = {
 
   loyalty: {
     initialLoyalty: 50,
-    capturedCityLoyalty: 40,
-    foreignDecayPerTick: 3,
+    capturedCityLoyalty: 50,
+    foreignDecayPerTick: 2,
     foreignDecayDurationMonths: 9,
     rebellionThreshold: 20,
     rebellionChance: 0.20,
@@ -363,8 +363,8 @@ export const BALANCE_HARD: BalanceConfig = {
 
   loyalty: {
     initialLoyalty: 50,
-    capturedCityLoyalty: 30,
-    foreignDecayPerTick: 5,
+    capturedCityLoyalty: 40,
+    foreignDecayPerTick: 3,
     foreignDecayDurationMonths: 6,
     rebellionThreshold: 25,
     rebellionChance: 0.30,
