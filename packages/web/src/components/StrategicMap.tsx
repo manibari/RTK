@@ -276,42 +276,7 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
         }).addTo(layers);
       }
 
-      // Shared: extract Delaunay circumcenters and half-edges for border passes
-      const circumcenters = (voronoi as unknown as { circumcenters: Float64Array }).circumcenters;
-      const { halfedges, triangles } = delaunay;
-
-      // Build city → region lookup for live cities
-      const cellRegions: (string | null)[] = liveCities.map((c) => CITY_TO_REGION[c.id] ?? null);
-
-      // 3.5 pass: state (zhou) border lines — dashed, between province and faction borders
-      for (let e = 0; e < halfedges.length; e++) {
-        const opposite = halfedges[e];
-        if (opposite < e) continue;
-
-        const siteA = triangles[e];
-        const nextE = e % 3 === 2 ? e - 2 : e + 1;
-        const siteB = triangles[nextE];
-
-        const rA = cellRegions[siteA];
-        const rB = cellRegions[siteB];
-        if (!rA || !rB || rA === rB) continue;
-
-        const triA = Math.floor(e / 3);
-        const triB = Math.floor(opposite / 3);
-        const lat1 = circumcenters[triA * 2 + 1];
-        const lng1 = circumcenters[triA * 2];
-        const lat2 = circumcenters[triB * 2 + 1];
-        const lng2 = circumcenters[triB * 2];
-
-        L.polyline([[lat1, lng1], [lat2, lng2]] as L.LatLngExpression[], {
-          color: "#d4c4a0",
-          weight: 3,
-          opacity: 0.6,
-          dashArray: "8 4",
-        }).addTo(layers);
-      }
-
-      // 3.7 pass: state name labels (EU4-style large translucent text)
+      // State name labels (EU4-style large translucent text)
       for (const region of STATE_REGIONS) {
         // Only show label if at least one city in this region is alive on the map
         const hasCity = region.cityIds.some((cid) => liveCities.some((c) => c.id === cid));
@@ -327,33 +292,6 @@ export function StrategicMap({ data, viewTick, factionColors, tradeRoutes, suppl
           }),
         });
         labelMarker.addTo(layers);
-      }
-
-      // Fourth pass: thick nation borders via Delaunay half-edge → Voronoi circumcenters
-      for (let e = 0; e < halfedges.length; e++) {
-        const opposite = halfedges[e];
-        if (opposite < e) continue;
-
-        const siteA = triangles[e];
-        const nextE = e % 3 === 2 ? e - 2 : e + 1;
-        const siteB = triangles[nextE];
-
-        const fA = cellFactions[siteA];
-        const fB = cellFactions[siteB];
-        if (fA === fB || !fA || !fB) continue;
-
-        const triA = Math.floor(e / 3);
-        const triB = Math.floor(opposite / 3);
-        const lat1 = circumcenters[triA * 2 + 1];
-        const lng1 = circumcenters[triA * 2];
-        const lat2 = circumcenters[triB * 2 + 1];
-        const lng2 = circumcenters[triB * 2];
-
-        L.polyline([[lat1, lng1], [lat2, lng2]] as L.LatLngExpression[], {
-          color: theme.textPrimary,
-          weight: 4,
-          opacity: 0.9,
-        }).addTo(layers);
       }
     }
 
